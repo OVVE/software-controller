@@ -13,8 +13,12 @@
 #define CONTROL_BEGIN_EXHALATION  5
 #define CONTROL_EXHALATION        6
 
+struct control {
+  int state;
+};
+
 // Public Variables
-extern int controlState;
+extern struct control control;
 
 // TODO: Doc
 int controlModuleInit(void);
