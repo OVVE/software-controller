@@ -7,6 +7,7 @@
 #include "../hal/serial.h"
 
 // Private Variables
+struct link comm;
 static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
