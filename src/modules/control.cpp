@@ -73,6 +73,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // TODO: Error, unknown control state!!!
       control.state = CONTROL_IDLE;
     }
+    
+    PT_YIELD(pt);
   }
   
   // Should never reach here
