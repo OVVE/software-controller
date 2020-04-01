@@ -13,7 +13,7 @@
 
 // Public Variables
 struct control control = {
-  .state = CONTROL_IDLE
+  control.state = CONTROL_IDLE
 };
 
 // Private Variables
@@ -67,7 +67,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // In order to time exhalation, set a timer to time the exhalation cycle
       // TODO: consider if patient takes breathe before motor has completely moved back
       motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION, motorCompressionDistance, motorCompressionDuration);
-      timerHalBegin(&controlTimer, 1 * SEC); // TODO: calculate this value from the breathe parameters
+      timerHalBegin(&controlTimer, 1  SEC); // TODO: calculate this value from the breathe parameters
       control.state = CONTROL_EXHALATION;
       
     } else if (control.state == CONTROL_EXHALATION) {
