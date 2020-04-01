@@ -20,6 +20,9 @@ struct control control = {
 static struct pt controlThread;
 static struct timer controlTimer;
 
+static unsigned int motorCompressionDistance;
+static unsigned int motorCompressionDuration;
+
 static PT_THREAD(controlThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -33,9 +36,9 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
       if (!parameters.assist) {
-        // TODO: Calculate motor
-        unsigned int motorCompressionDistance = 0;
-        unsigned int motorCompressionDuration = 0;
+        // TODO: Calculate breathe parameters and motor control
+        motorCompressionDistance = 0;
+        motorCompressionDuration = 0;
         // TODO: Error check
         motorHalBegin(MOTOR_HAL_DIRECTION_INHALATION, motorCompressionDistance, motorCompressionDuration);
       } else {
@@ -60,13 +63,16 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_BEGIN_EXHALATION;
       
     } else if (control.state == CONTROL_BEGIN_EXHALATION) {
-      unsigned int motorDecompressionDistance = 0;
-      unsigned int motorDecompressionDuration = 0;
-      motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION, motorDecompressionDistance, motorDecompressionDuration);
+      // Since exhalation is not dependent on the bag, allow the bag to decompress with the same parameters as compression
+      // In order to time exhalation, set a timer to time the exhalation cycle
+      // TODO: consider if patient takes breathe before motor has completely moved back
+      motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION, motorCompressionDistance, motorCompressionDuration);
+      timerHalBegin(&controlTimer, 1 * SEC); // TODO: calculate this value from the breathe parameters
       control.state = CONTROL_EXHALATION;
       
     } else if (control.state == CONTROL_EXHALATION) {
-      PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+      // TODO: Fix this condition for assisted modes
+      PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS && timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       control.state = (parameters.run) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
       
     } else {
