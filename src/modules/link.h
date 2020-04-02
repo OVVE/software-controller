@@ -2,14 +2,20 @@
 #ifndef __LINK_MODULE_H__
 #define __LINK_MODULE_H__
 
-#include <stdbool.h>
+#include <stdint.h>
 
 struct link {
-  bool update;
-  bool assist;
-  unsigned int volumeRequested;
-  unsigned int respirationRateRequested;
-  unsigned int ieRatioRequested;
+  // Variables
+  uint8_t  startVentilation;
+  uint8_t  ventilationMode;
+  uint32_t volumeRequested;
+  uint32_t respirationRateRequested;
+  uint32_t ieRatioRequested;
+  
+  // Alarms
+  int8_t   droppedPacketAlarm;
+  int8_t   crcErrorAlarm;
+  int8_t   unsupportedPacketVersionAlarm;
 };
 
 // Public Variables

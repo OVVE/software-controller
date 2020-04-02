@@ -12,9 +12,7 @@
 #include "../modules/sensors.h"
 
 // Public variables
-int currentPressure;
-int peakPressure;
-int plateauPressure; 
+struct sensors sensors;
 
 // Private Variables
 static struct pt sensorsThread;
@@ -32,11 +30,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   pressureSensorHalGetValue(&rawPressure);
   
   // TODO: Process pressure reading, store in public variable
-  currentPressure = 0;
-  peakPressure = 0;
-  plateauPressure = 0;
   
-  // TODO: add sampling rate delay
 
   PT_RESTART(pt);
   PT_END(pt);
