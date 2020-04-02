@@ -2,6 +2,8 @@
 #ifndef __CONTROL_MODULE_H__
 #define __CONTROL_MODULE_H__
 
+#include <stdint.h>
+
 // Control States
 // TODO: Consider different encoding?
 // TODO: Hold out states? error state?
@@ -14,7 +16,15 @@
 #define CONTROL_EXHALATION        6
 
 struct control {
-  int state;
+  // Variables
+  uint8_t  state;
+  uint32_t respirationRateRequested;
+  uint32_t ieRatioMeasured;
+  uint32_t breathCount;
+  
+  // Alarms
+  int8_t   breathTimeoutAlarm;
+  int8_t   unknownStateAlarm;
 };
 
 // Public Variables

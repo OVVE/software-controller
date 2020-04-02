@@ -33,6 +33,15 @@ static bool checkParameters(struct parameters* params)
   return true;
 }
 
+static bool differentLinkAndParameters(void)
+{
+  return ((comm.startVentilation != parameters.startVentilation) ||
+          (comm.ventilationMode != parameters.ventilationMode) ||
+          (comm.volumeRequested != parameters.volumeRequested) ||
+          (comm.respirationRateRequested != parameters.respirationRateRequested) ||
+          (comm.ieRatioRequested != parameters.ieRatioRequested));
+}
+
 static PT_THREAD(parametersThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -54,17 +63,17 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
   parameters = tmpParameters[0];
  
   while (1) {
-    // TODO: Determine all the conditions that update the parameters
-    PT_WAIT_UNTIL(pt, comm.update);
+    // TODO: Determine all the conditions that update the parameters; placeholder for now
+    PT_WAIT_UNTIL(pt, differentLinkAndParameters());
     
     tmpParameters[0] = parameters;
-    if (comm.update) {
+    if (differentLinkAndParameters()) {
       // Copy over the paramaters from the comm module
-      tmpParameters[0].assist = comm.assist;
+      tmpParameters[0].startVentilation = comm.startVentilation;
+      tmpParameters[0].ventilationMode = comm.ventilationMode;
       tmpParameters[0].volumeRequested = comm.volumeRequested;
       tmpParameters[0].respirationRateRequested = comm.respirationRateRequested;
       tmpParameters[0].ieRatioRequested = comm.ieRatioRequested;
-      comm.update = false;
     }
     
     if (!checkParameters(&tmpParameters[0])) {
