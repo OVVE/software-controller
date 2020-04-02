@@ -4,13 +4,32 @@
 #include "../hal/hal.h"
 #include "../hal/serial.h"
 
-#define MaxLength 200
+#define PACKET_VERSION 1
 
 uint32_t last_send_ms = 0;  // this is used for send interval
 uint32_t current_send_ms = 0;
 uint32_t send_interval_ms = 1000;
 uint16_t bytesSent;
 uint16_t inByte;
+
+#define ALARM_ECU_POWER_LOSS              0x01
+#define ALARM_ECU_LOW_BATTERY             0x02 
+#define ALARM_ECU_LOSS_BREATH_INTEGRITY   0x04
+#define ALARM_ECU_HIGH_AIRWAY_PRESSURE    0x08
+#define ALARM_ECU_LOW_AIRWAY_PRESSURE     0x10
+#define ALARM_ECU_LOW_TIDAL_VOL_DELIVERED 0x20
+#define ALARM_ECU_APNEA                   0x40
+// bits 7 - 15 --
+#define ALARM_CRC_ERROR                   0x00010000
+#define ALARM_DROPPED_PACKET              0x00020000
+#define ALARM_SERIAL_COMM                 0x00040000
+#define ALARM_PACKET_VERSION              0x00080000
+// bits 20 - 23 --
+#define ALARM_UI_MODE_MISMATCH            0x01000000
+#define ALARM_UI_RESP_RATE_MISMATCH       0x02000000
+#define ALARM_UI_TIDAL_MISMATCH           0x04000000
+#define ALARM_UI_IE_RATIO_MISMATCH        0x08000000
+// bits 28 - 31 --
 
 typedef struct data_packet_def {
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
@@ -64,8 +83,10 @@ incoming_packet_u incoming_packet;
 int incoming_index = 0;
 //incoming_packet_u shared_command_packet; // this should be an extern in other modules that need to read this
 //incoming_packet_u command_packet_reference; // this is saved in case other modules overwrite the shared copy
-command_packet_def public_command_packet;
 command_packet_def command_packet_reference;
+
+command_packet_def public_command_packet;
+data_packet_def public_data_packet;
 
 #define POLY 0x8408
 /*
@@ -130,7 +151,7 @@ int serialHalGetData(void)
         // set alarm bit
         
         // do not increment incoming_index and return
-        return (HAL_OK);
+        //return (HAL_OK);
       }
     }
 
@@ -141,8 +162,8 @@ int serialHalGetData(void)
         // set alarm bit
         
         // reset incoming_index and return
-        incoming_index = 0;
-        return (HAL_OK);
+        //incoming_index = 0;
+        //return (HAL_OK);
         
       }      
     }
@@ -151,8 +172,8 @@ int serialHalGetData(void)
     if (incoming_index >= sizeof(incoming_packet.command_bytes))
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
-      memcpy(public_command_packet, incoming_packet.command_packet, sizeof(public_command_packet));
-      memcpy(command_packet_reference, incoming_packet.command_packet, sizeof(command_packet_reference));
+      memcpy((void *)&public_command_packet, (void *)&incoming_packet.command_packet, sizeof(public_command_packet));
+      memcpy((void *)&command_packet_reference, (void *)&incoming_packet.command_packet, sizeof(command_packet_reference));
       incoming_index = 0;
       return HAL_OK;
     } 
@@ -167,8 +188,10 @@ int serialHalSendData()
   {
     //data_packet.packet_version = '1';
     //unsigned short crc16(char *data_p, unsigned short length) 
+    data_packet.packet_version = PACKET_VERSION;
     data_packet.crc = crc16((uint8_t *)&data_packet, sizeof(data_packet) - 2);
     memcpy((void *)&data_packet_last_sent, (void *)&data_packet, sizeof(data_packet_last_sent));
+    memcpy((void *)&public_data_packet, (void *)&data_packet, sizeof(public_data_packet));
     bytesSent = Serial.write((byte *)&data_packet, sizeof(data_packet));
     if (bytesSent != sizeof(data_packet)) {
       // handle error
