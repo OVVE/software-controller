@@ -23,6 +23,9 @@
 #define ALARM_UI_IE_RATIO_MISMATCH        0x08000000
 // bits 28 - 31 --
 
+
+#define PACKET_VERSION 1
+
 /*
 typedef struct data_packet_def {
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
@@ -81,7 +84,7 @@ typedef struct data_packet_def {
   unsigned long volume_rate_measured;      // bytes 56 - 59
   unsigned char control_state;              // byte 60       - rpi unsigned char
   unsigned char battery_level;              // byte 61
-  unsigned long reserved;                  // bytes 62 - 63 - rpi unsigned int
+  unsigned int reserved;                  // bytes 62 - 63 - rpi unsigned int
   unsigned long alarm_bits;                // bytes 64 - 67
   unsigned int crc;                       // bytes 68 - 69 - rpi unsigned short int
 }__attribute__((packed));
@@ -111,6 +114,16 @@ struct link {
 extern struct link comm;
 extern unsigned int sequence_count;
 extern unsigned int last_sequence_count;
+extern data_packet_def public_data_packet;
+extern command_packet_def public_command_packet;
+extern command_packet_def command_packet;
+extern command_packet_def command_packet_reference;
+extern command_packet_def command_packet;
+extern unsigned char *pcommand_packet;
+extern bool watchdog_exceeded;
+extern bool watchdog_active;
+extern bool clear_input; // if there is a problem with data then clear the remaining bytes
+extern bool ready_to_send;
 
 // TODO: Doc
 int linkModuleInit(void);
