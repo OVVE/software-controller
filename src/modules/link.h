@@ -29,6 +29,7 @@
 #define PACKET_VERSION 1
 
 typedef struct data_packet_def {
+  uint8_t start_byte; // it could become difficult for Rpi to sync up so this was added
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
   uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
@@ -54,6 +55,7 @@ typedef struct data_packet_def {
 }__attribute__((packed));
 
 typedef struct command_packet_def {
+  uint8_t start_byte;
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
   uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
