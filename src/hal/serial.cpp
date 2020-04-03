@@ -7,38 +7,48 @@
 
 #define BAUD_RATE 115200
 
-unsigned long last_send_ms = 0;  // this is used for send interval
-unsigned long current_send_ms = 0;
-unsigned long send_interval_ms = 1000;
-unsigned int bytesSent;
-unsigned int inByte;    // store each byte
+uint32_t last_send_ms = 0;  // this is used for send interval
+uint32_t current_send_ms = 0;
+uint32_t send_interval_ms = 100;
+uint16_t bytesSent;
+uint8_t inByte;    // store each byte
 int incoming_index = 0; // index for array of bytes
 
-unsigned long watchdog_max_ms = 50;
-unsigned long watchdog_start_ms;
+uint32_t watchdog_max_ms = 50;
+uint32_t watchdog_start_ms;
 bool watchdog_active = false;
 bool watchdog_exceeded = false;
 bool clear_input = false;
 
 // this will be used by module/link to send packets
-unsigned int sequence_count = 0;
-unsigned int last_sequence_count = 0;
+uint16_t sequence_count = 0;
+uint16_t last_sequence_count = 0;
 
 bool response_received = true; // do not send data until response received. start with true no response needed.
+
+typedef union command_packet_union{
+command_packet_def command_packet;
+uint8_t command_bytes[sizeof(command_packet_def)];
+};
+
+command_packet_union command_packet_u;
 
 int serialHalInit(void)
 {
   Serial.begin(BAUD_RATE);  // this function does not return anything
   // not sure how we can do something like while (!serial)
   // return MODULE_FAIL;
+  do
+  { Serial.read();
+  } while (Serial.available() > 0);
   return HAL_OK;
 }
 
 int serialHalGetData(void)
 {
-  while (Serial.available())
+  if (Serial.available())
   {       
-    inByte = Serial.read();
+    Serial.readBytes(&inByte, 1);
     
     // verify that the command is responding to the correct data packet by checking the sequence number and rev
     /*
@@ -66,16 +76,24 @@ int serialHalGetData(void)
       }      
     }
     */
-    pcommand_packet[incoming_index] = inByte;
+    //pcommand_packet[incoming_index] = inByte;
+    command_packet_u.command_bytes[incoming_index] = inByte;
     
     //incoming_packet.command_bytes[incoming_index] = inByte;
     incoming_index++;
+
     if (incoming_index >= sizeof(public_command_packet))
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
       incoming_index = 0;
       ready_to_send = true;
       watchdog_active = false;
+
+      memcpy((void *)&public_command_packet, (void *)&command_packet_u.command_packet, sizeof(public_command_packet));
+      //Serial.println("count: " + incoming_index);
+      // clear alarm bits
+      public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
+      public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
       return HAL_OK;
     } 
     if (watchdog_active == true)
@@ -85,6 +103,7 @@ int serialHalGetData(void)
         watchdog_active = false; 
         watchdog_exceeded = true; 
         ready_to_send = true;
+        //incoming_index = 0;
         return HAL_OK;        
       }
     }
@@ -103,13 +122,14 @@ int serialHalSendData()
     {
       clear_input = false;
       do
-      { unsigned int t = Serial.read();
+      { Serial.read();
       } while (Serial.available() > 0);
     }
     bytesSent = Serial.write((byte *)&public_data_packet, sizeof(public_data_packet));
     if (bytesSent != sizeof(public_data_packet)) {
       // handle error
     }
+       
     last_sequence_count = sequence_count;
     sequence_count++;
     last_send_ms = current_send_ms;
