@@ -86,7 +86,6 @@ int serialHalGetData(void)
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
       incoming_index = 0;
-      ready_to_send = true;
       watchdog_active = false;
 
       memcpy((void *)&public_command_packet, (void *)&command_packet_u.command_packet, sizeof(public_command_packet));
@@ -94,6 +93,7 @@ int serialHalGetData(void)
       // clear alarm bits
       public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
       public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
+      ready_to_send = true;
       return HAL_OK;
     } 
     if (watchdog_active == true)
@@ -103,7 +103,7 @@ int serialHalGetData(void)
         watchdog_active = false; 
         watchdog_exceeded = true; 
         ready_to_send = true;
-        //incoming_index = 0;
+        incoming_index = 0;
         return HAL_OK;        
       }
     }
