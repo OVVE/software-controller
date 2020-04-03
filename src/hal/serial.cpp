@@ -7,6 +7,12 @@
 
 #define BAUD_RATE 115200
 
+//#define SERIAL_DEBUG
+#ifdef SERIAL_DEBUG
+uint8_t debug_byte;
+uint16_t debug_index;
+#endif
+
 uint32_t last_send_ms = 0;  // this is used for send interval
 uint32_t current_send_ms = 0;
 uint32_t send_interval_ms = 100;
@@ -41,6 +47,10 @@ int serialHalInit(void)
   do
   { Serial.read();
   } while (Serial.available() > 0);
+  
+#ifdef SERIAL_DEBUG
+  Serial1.begin(BAUD_RATE);
+#endif  
   return HAL_OK;
 }
 
@@ -49,7 +59,9 @@ int serialHalGetData(void)
   if (Serial.available())
   {       
     Serial.readBytes(&inByte, 1);
-    
+#ifdef SERIAL_DEBUG
+    Serial1.write(inByte);
+#endif    
     // verify that the command is responding to the correct data packet by checking the sequence number and rev
     /*
     if (incoming_index == 0)
@@ -94,6 +106,11 @@ int serialHalGetData(void)
       public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
       public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
       ready_to_send = true;
+#ifdef SERIAL_DEBUG
+      Serial1.print(" Read sequence number: ");
+      Serial1.write(public_command_packet.sequence_count);
+      Serial1.println("return from read");
+#endif      
       return HAL_OK;
     } 
     if (watchdog_active == true)
@@ -125,6 +142,11 @@ int serialHalSendData()
       { Serial.read();
       } while (Serial.available() > 0);
     }
+#ifdef SERIAL_DEBUG
+    Serial1.print("Write sequence count: ");
+    Serial1.write(public_data_packet.sequence_count);
+    Serial1.println("start write");
+#endif    
     bytesSent = Serial.write((byte *)&public_data_packet, sizeof(public_data_packet));
     if (bytesSent != sizeof(public_data_packet)) {
       // handle error
