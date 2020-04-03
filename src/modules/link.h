@@ -3,6 +3,7 @@
 #define __LINK_MODULE_H__
 
 #include <stdbool.h>
+#include <Arduino.h>
 
 #define ALARM_ECU_POWER_LOSS              0x01
 #define ALARM_ECU_LOW_BATTERY             0x02 
@@ -26,7 +27,6 @@
 
 #define PACKET_VERSION 1
 
-/*
 typedef struct data_packet_def {
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
   uint8_t packet_version;             // byte 2      - rpi unsigned char
@@ -62,45 +62,6 @@ typedef struct command_packet_def {
   uint32_t alarm_bits;                // bytes 16 - 19
   uint16_t crc;                       // bytes 20 - 21 - rpi unsigned short int  
 }__attribute__((packed));
-*/
-
-typedef struct data_packet_def {
-  unsigned int sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  unsigned char packet_version;             // byte 2      - rpi unsigned char
-  unsigned char mode_value;                 // byte 3      - rpi unsigned char
-  unsigned long respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
-  unsigned long respiratory_rate_set;      // bytes 8 - 11
-  unsigned long tidal_volume_measured;     // bytes 12 - 15
-  unsigned long tidal_volume_set;          // bytes 16 - 19
-  unsigned long ie_ratio_measured;         // bytes 20 - 23
-  unsigned long ie_ratio_set;              // bytes 24 - 27
-  unsigned long peep_value_measured;       // bytes 28 - 31
-  unsigned long peak_pressure_measured;    // bytes 32 - 35
-  unsigned long plateau_value_measurement; // bytes 36 - 39
-  unsigned long pressure_measured;         // bytes 40 - 43
-  unsigned long flow_measured;             // bytes 44 - 47
-  unsigned long volume_in_measured;        // bytes 48 - 51
-  unsigned long volume_out_measured;       // bytes 52 - 55
-  unsigned long volume_rate_measured;      // bytes 56 - 59
-  unsigned char control_state;              // byte 60       - rpi unsigned char
-  unsigned char battery_level;              // byte 61
-  unsigned int reserved;                  // bytes 62 - 63 - rpi unsigned int
-  unsigned long alarm_bits;                // bytes 64 - 67
-  unsigned int crc;                       // bytes 68 - 69 - rpi unsigned short int
-}__attribute__((packed));
-
-typedef struct command_packet_def {
-  unsigned int sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  unsigned char packet_version;             // byte 2      - rpi unsigned char
-  unsigned char mode_value;                 // byte 3      - rpi unsigned char
-  unsigned long respiratory_rate_set;      // bytes 4 - 7 - rpi unsigned int
-  unsigned long tidal_volume_set;          // bytes 8 - 11
-  unsigned long ie_ratio_set;              // bytes 12 - 15
-  unsigned long alarm_bits;                // bytes 16 - 19
-  unsigned int crc;                       // bytes 20 - 21 - rpi unsigned short int  
-}__attribute__((packed));
-
-
 
 struct link {
   bool update;
@@ -112,18 +73,18 @@ struct link {
 
 // Public Variables
 extern struct link comm;
-extern unsigned int sequence_count;
-extern unsigned int last_sequence_count;
-extern data_packet_def public_data_packet;
-extern command_packet_def public_command_packet;
+extern uint16_t sequence_count;
+extern uint16_t last_sequence_count;
 extern command_packet_def command_packet;
 extern command_packet_def command_packet_reference;
 extern command_packet_def command_packet;
-extern unsigned char *pcommand_packet;
 extern bool watchdog_exceeded;
 extern bool watchdog_active;
 extern bool clear_input; // if there is a problem with data then clear the remaining bytes
 extern bool ready_to_send;
+
+extern data_packet_def public_data_packet;
+extern command_packet_def public_command_packet;
 
 // TODO: Doc
 int linkModuleInit(void);
