@@ -1,3 +1,7 @@
+import serial
+import sys
+ser = 0
+
 class vent_monitor():
 
     # Implement access and throughput
@@ -128,4 +132,52 @@ class vent_monitor():
     def send_command_to_arduino(command):
         # HOW DO WE PUSH THIS COMMAND ACK TO THE ARDUINO?
         pass
+    
+    #CRC implmentation
+
+    def crc_check_in(in_packet)
+        # NOEL: to implement CCIT CRC16
+        pass
+    
+    def crc_create_out(out_packet)
+        # NOEL: to implement CCIT CRC16
+        pass
+    
+    def init_serial():
+    
+    global ser          #Must be declared in Each Function
+    ser = serial.Serial()
+    ser.baudrate = 115200
+    ser.port = "/dev/ttyACM0" 
+    #a little less than polling speed from arduino
+    ser.timeout = 0.9
+    ser.open()          #Opens SerialPort
+
+    # print port open or closed
+    if ser.isOpen():
+        print ('Open: ' + ser.portstr)
+    #Function Ends Here
+        
+
+    #Call the Serial Initilization Function
+    #init_serial()
+
+
+
+    def read_all(port, chunk_size=200):
+        """Read all characters on the serial port and return them."""
+        if not port.timeout:
+            raise TypeError('Port needs to have a timeout set!')
+
+        read_buffer = b''
+
+        while True:
+            # Read in chunks. Each chunk will wait as long as specified by
+            # timeout. Increase chunk_size to fail quicker
+            byte_chunk = port.read(size=chunk_size)
+            read_buffer += byte_chunk
+            if not len(byte_chunk) == chunk_size:
+                break
+
+        return read_buffer
 
