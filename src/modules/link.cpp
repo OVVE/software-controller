@@ -18,15 +18,6 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
 
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
 
-  //int rawPressure;
-  //pressureSensorHalGetValue(&rawPressure);
-  
-  // TODO: Process pressure reading, store in public variable
-  //currentPressure = 0;
-  //peakPressure = 0;
-  //plateauPressure = 0;
-  
-  // TODO: add sampling rate delay
 
   PT_RESTART(pt);
   PT_END(pt);
@@ -38,16 +29,9 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
 
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
 
-  //int rawPressure;
-  //pressureSensorHalGetValue(&rawPressure);
-  
-  // TODO: Process pressure reading, store in public variable
-  //currentPressure = 0;
-  //peakPressure = 0;
-  //plateauPressure = 0;
-  
-  // TODO: add sampling rate delay
-
+  if (sequence_count != last_sequence_count) {
+      //if (sequence_count == 123) sequence_count = 97;
+  }    
   PT_RESTART(pt);
   PT_END(pt);
 }
