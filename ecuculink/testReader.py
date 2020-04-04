@@ -1,6 +1,10 @@
 import serial
 import sys
 from time import sleep
+import binascii
+import crc16
+import codecs
+
 BAUD = 38400
 PORT = "/dev/ttyACM0"
 SER_TIMEOUT = 0.055
@@ -31,7 +35,10 @@ def init_serial():
 #Call the Serial Initilization Function, Main Program Starts from here
 init_serial()
 
-
+def crccitt(hex_string):
+    byte_seq = binascii.unhexlify(hex_string)
+    crc = crc16.crc16xmodem(byte_seq, 0xffff)
+    return '{:04X}'.format(crc & 0xffff)
 
 def read_all(port, chunk_size=200):
     """Read all characters on the serial port and return them."""
@@ -109,8 +116,10 @@ def process_in_serial():
             in_pkt['ie_ratio_set']=int.from_bytes(byteData[9:13], byteorder='little')
             in_pkt['crc']=int.from_bytes(byteData[69:71], byteorder='little')
             
-            print ('Received SEQ:')
+            print ('Received SEQ and CRC:')
             print (in_pkt['sequence_count'])
+            print (in_pkt['crc'])
+
             cmd_pkt['sequence_count'] = in_pkt['sequence_count']
             
         else:
@@ -122,6 +131,8 @@ def process_in_serial():
         cmd_byteData = b""
         start_byte = 0xFF
         packet_version = 1
+
+        
         
         cmd_byteData += bytes(start_byte.to_bytes(1, endian))
         cmd_byteData += bytes(in_pkt['sequence_count'].to_bytes(2, endian))
@@ -131,12 +142,22 @@ def process_in_serial():
         cmd_byteData += bytes(cmd_pkt['tidal_volume_set'].to_bytes(4, endian))
         cmd_byteData += bytes(cmd_pkt['ie_ratio_set'].to_bytes(4, endian))
         cmd_byteData += bytes(cmd_pkt['alarm_bits'].to_bytes(4, endian))
-        cmd_byteData += bytes(cmd_pkt['crc'].to_bytes(2, endian))
+        calcCRC = crccitt(cmd_byteData.hex())
+        print ('CALC CRC HEX and int: ')
+        print(calcCRC)
+        print(int(calcCRC, 16))
+        cmd_pkt['crc']  = bytes.fromhex(calcCRC)
+
+        #cmd_byteData += bytes(cmd_pkt['crc'].to_bytes(2, endian))
+        cmd_byteData += cmd_pkt['crc']
 
         ser.write(cmd_byteData)
-        print("Sent back: ")
-        print (int.from_bytes(cmd_byteData[1:3], byteorder='little'))
         
+        print("Sent back SEQ and CRC: ")
+        
+        print (int.from_bytes(cmd_byteData[1:3], byteorder='little'))
+        print (int.from_bytes(cmd_byteData[21:], byteorder='big'))
+
 process_in_serial()
 
 
