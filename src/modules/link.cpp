@@ -78,7 +78,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
     public_data_packet.start_byte = 0xFF;
     public_data_packet.sequence_count = sequence_count;
     public_data_packet.packet_version = PACKET_VERSION;
-    public_data_packet.crc = ((int8_t *)&public_data_packet, sizeof(public_data_packet) - 2);
+    public_data_packet.crc = sum((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);
     //memcpy((void *)&data_packet_last_sent, (void *)&public_data_packet, sizeof(data_packet_last_sent));
     //public_data_packet.crc = crc16((unsigned int *)&public_data_packet, sizeof(public_data_packet) - 2);    
   }    
