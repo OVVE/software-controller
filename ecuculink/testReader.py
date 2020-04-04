@@ -109,6 +109,7 @@ def process_in_serial():
             in_pkt['ie_ratio_set']=int.from_bytes(byteData[9:13], byteorder='little')
             in_pkt['crc']=int.from_bytes(byteData[69:71], byteorder='little')
             
+            print ('Received SEQ:')
             print (in_pkt['sequence_count'])
             cmd_pkt['sequence_count'] = in_pkt['sequence_count']
             
@@ -133,7 +134,8 @@ def process_in_serial():
         cmd_byteData += bytes(cmd_pkt['crc'].to_bytes(2, endian))
 
         ser.write(cmd_byteData)
-        print (cmd_byteData)
+        print("Sent back: ")
+        print (int.from_bytes(cmd_byteData[1:3], byteorder='little'))
         
 process_in_serial()
 
