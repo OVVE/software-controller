@@ -5,7 +5,7 @@
 #include "../hal/serial.h"
 #include "../modules/link.h"
 
-#define BAUD_RATE 115200
+#define BAUD_RATE 38400
 
 //#define SERIAL_DEBUG
 #ifdef SERIAL_DEBUG
@@ -146,7 +146,8 @@ int serialHalSendData()
     Serial1.print("Write sequence count: ");
     Serial1.write(public_data_packet.sequence_count);
     Serial1.println("start write");
-#endif    
+#endif 
+       
     bytesSent = Serial.write((byte *)&public_data_packet, sizeof(public_data_packet));
     if (bytesSent != sizeof(public_data_packet)) {
       // handle error
