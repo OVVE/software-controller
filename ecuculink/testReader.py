@@ -3,7 +3,7 @@ import sys
 from time import sleep
 BAUD = 38400
 PORT = "/dev/ttyACM0"
-SER_TIMEOUT = 0.06
+SER_TIMEOUT = 0.055
 
 
 #Global Variables
@@ -77,15 +77,15 @@ def process_in_serial():
             'alarm_bits': 0,                # bytes 65 - 68
             'crc': 0 }                      # bytes 69 - 70 
 
-    cmd_pkt = {'start_byte':b'\xff',
-                'sequence_count': b'\x00\x00',               # bytes 1 - 2 - rpi unsigned short int
-                'packet_version': b'\x01',                         # byte 3      - rpi unsigned char
-                'mode_value': b'\x00',                             # byte 4      - rpi unsigned char
-                'respiratory_rate_set': b'\x00\x00\x00\x00', # bytes 5 - 8 - rpi unsigned int
-                'tidal_volume_set':  b'\x00\x00\x00\x00',         # bytes 9 - 12
-                'ie_ratio_set':  b'\x00\x00\x00\x00',             # bytes 13 - 16
-                'alarm_bits':   b'\x00\x00\x00\x00',              # bytes 17 - 20
-                'crc':   b'\x00\x00' }                    # bytes 21 - 22 - rpi unsigned short int  
+    cmd_pkt = {'start_byte':255,
+                'sequence_count': 0,               # bytes 1 - 2 - rpi unsigned short int
+                'packet_version': 0,                         # byte 3      - rpi unsigned char
+                'mode_value': 0,                             # byte 4      - rpi unsigned char
+                'respiratory_rate_set': 0, # bytes 5 - 8 - rpi unsigned int
+                'tidal_volume_set':  0,         # bytes 9 - 12
+                'ie_ratio_set':  0,             # bytes 13 - 16
+                'alarm_bits':   0,              # bytes 17 - 20
+                'crc':   0 }                    # bytes 21 - 22 - rpi unsigned short int  
     
            
     ser.reset_input_buffer()
@@ -115,18 +115,22 @@ def process_in_serial():
         else:
             error_count = error_count + 1
             print ('drop packets count ' + str(error_count))
-        cmd_byteData = b""
 
+
+        endian = "little"
+        cmd_byteData = b""
+        start_byte = 0xFF
+        packet_version = 1
         
-        # cmd_byteData.append(255)
-        # cmd_byteData.append(cmd_pkt['sequence_count'])
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['packet_version'], byteorder='little'))
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['mode_value'], byteorder='little'))
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['respiratory_rate_set'], byteorder='little'))
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['tidal_volume_set'], byteorder='big'))
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['ie_ratio_set'], byteorder='big'))
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['alarm_bits'], byteorder='big'))
-        # cmd_byteData.append(int.from_bytes(cmd_pkt['crc'], byteorder='big'))
+        cmd_byteData += bytes(start_byte.to_bytes(1, endian))
+        cmd_byteData += bytes(in_pkt['sequence_count'].to_bytes(2, endian))
+        cmd_byteData += bytes(in_pkt['packet_version'].to_bytes(1, endian))
+        cmd_byteData += bytes(cmd_pkt['mode_value'].to_bytes(1, endian))
+        cmd_byteData += bytes(cmd_pkt['respiratory_rate_set'].to_bytes(4, endian))
+        cmd_byteData += bytes(cmd_pkt['tidal_volume_set'].to_bytes(4, endian))
+        cmd_byteData += bytes(cmd_pkt['ie_ratio_set'].to_bytes(4, endian))
+        cmd_byteData += bytes(cmd_pkt['alarm_bits'].to_bytes(4, endian))
+        cmd_byteData += bytes(cmd_pkt['crc'].to_bytes(2, endian))
 
         ser.write(cmd_byteData)
         print (cmd_byteData)
