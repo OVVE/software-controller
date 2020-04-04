@@ -57,6 +57,10 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   {
     public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
   }
+  else if (public_command_packet.crc != sum((uint8_t *)&public_command_packet, sizeof(public_command_packet) - 2))
+  {
+    //public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
+  }    
   //memcpy((void *)&command_packet_reference, (void *)pcommand_packet, sizeof(command_packet_reference)); 
   
   ready_to_send = true;
