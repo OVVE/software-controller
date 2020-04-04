@@ -94,21 +94,21 @@ int serialHalGetData(void)
     //incoming_packet.command_bytes[incoming_index] = inByte;
     incoming_index++;
 
-    if (incoming_index >= sizeof(public_command_packet))
+    if (incoming_index >= sizeof(comm.public_command_packet))
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
       incoming_index = 0;
       watchdog_active = false;
 
-      memcpy((void *)&public_command_packet, (void *)&command_packet_u.command_packet, sizeof(public_command_packet));
+      memcpy((void *)&comm.public_command_packet, (void *)&command_packet_u.command_packet, sizeof(comm.public_command_packet));
       //Serial.println("count: " + incoming_index);
       // clear alarm bits
-      public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
-      public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
+      comm.public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
+      comm.public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
       ready_to_send = true;
 #ifdef SERIAL_DEBUG
       Serial1.print(" Read sequence number: ");
-      Serial1.write(public_command_packet.sequence_count);
+      Serial1.write(comm.public_command_packet.sequence_count);
       Serial1.println("return from read");
 #endif      
       return HAL_OK;
@@ -144,12 +144,13 @@ int serialHalSendData()
     }
 #ifdef SERIAL_DEBUG
     Serial1.print("Write sequence count: ");
-    Serial1.write(public_data_packet.sequence_count);
+    Serial1.write(comm.public_data_packet.sequence_count);
     Serial1.println("start write");
 #endif 
        
-    bytesSent = Serial.write((byte *)&public_data_packet, sizeof(public_data_packet));
-    if (bytesSent != sizeof(public_data_packet)) {
+    bytesSent = Serial.write((byte *)&comm.public_data_packet, sizeof(comm.public_data_packet));
+
+    if (bytesSent != sizeof(comm.public_data_packet)) {
       // handle error
     }
        
