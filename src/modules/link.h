@@ -78,10 +78,14 @@ struct link {
   int8_t   droppedPacketAlarm;
   int8_t   crcErrorAlarm;
   int8_t   unsupportedPacketVersionAlarm;
+
+  data_packet_def public_data_packet;
+  command_packet_def public_command_packet;  
 };
 
 // Public Variables
 extern struct link comm;
+
 extern uint16_t sequence_count;
 extern uint16_t last_sequence_count;
 extern command_packet_def command_packet;
@@ -91,9 +95,6 @@ extern bool watchdog_exceeded;
 extern bool watchdog_active;
 extern bool clear_input; // if there is a problem with data then clear the remaining bytes
 extern bool ready_to_send;
-
-extern data_packet_def public_data_packet;
-extern command_packet_def public_command_packet;
 
 // TODO: Doc
 int linkModuleInit(void);
