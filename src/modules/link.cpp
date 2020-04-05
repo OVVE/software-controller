@@ -47,7 +47,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     ready_to_send = true;
   }
   //pcommand_packet = (unsigned char *)&command_packet;
-  else if ((comm.public_command_packet.sequence_count != last_sequence_count) || (comm.public_command_packet.start_byte != 0xFF))
+  else if ((comm.public_command_packet.sequence_count != last_sequence_count))
   {
     comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
   }
@@ -68,7 +68,6 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
 
   if (sequence_count != last_sequence_count) {
-    comm.public_data_packet.start_byte = 0xFF;
     comm.public_data_packet.sequence_count = sequence_count;
     comm.public_data_packet.packet_version = PACKET_VERSION;
     comm.public_data_packet.crc = sum((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
