@@ -1,50 +1,52 @@
 import serial
 import sys
 from time import sleep
-ser = 0
+
+
 BAUD = 115200
 PORT = "/dev/ttyACM0"
 SER_TIMEOUT = .9
 
-class vent_monitor():
 
-    # Implement access and throughput
-    #   between Arduino controller for the ventilator
-    #   and the UI to the monitor.
-
-    
+class VentMonitor():
+    """
+    Implement access and throughput between Arduino controller for the
+    ventilator and the UI to the monitor.
+    """
     def __init__(self, init_setting):
-        setting_curr = init_setting
-        setting_new = None
-        prev_seq_no = None
-        init_serial()
+        self.setting_curr = init_setting
+        self.setting_new = None
+        self.prev_seq_no = None
+        self.serial: serial.Serial = None
+        self.init_serial()
 
-    def process_in_serial():
-        global ser
-        in_pkt={'sequence_count': 0,            # bytes 0 - 1 - rpi unsigned short
-                'packet_version': 0,             # byte 2      - rpi unsigned char
-                'mode_value': 0,                 # byte 3      - rpi unsigned char
-                'respiratory_rate_measured': 0, # bytes 4 - 7 - rpi unsigned int
-                'respiratory_rate_set': 0,      # bytes 8 - 11
-                'tidal_volume_measured': 0,     # bytes 12 - 15
-                'tidal_volume_set': 0,          # bytes 16 - 19
-                'ie_ratio_measured': 0,         # bytes 20 - 23
-                'ie_ratio_set': 0,              # bytes 24 - 27
-                'peep_value_measured': 0,       # bytes 28 - 31
-                'peak_pressure_measured': 0,    # bytes 32 - 35
-                'plateau_value_measurement': 0, # bytes 36 - 39
-                'pressure_measured': 0,         # bytes 40 - 43
-                'flow_measured': 0,             # bytes 44 - 47
-                'volume_in_measured': 0,        # bytes 48 - 51
-                'volume_out_measured': 0,       # bytes 52 - 55
-                'volume_rate_measured': 0,      # bytes 56 - 59
-                'control_state': 0,              # byte 60       - rpi unsigned ch
-                'battery_level': 0,              # byte 61
-                'reserved': 0,                  # bytes 62 - 63 - rpi unsigned int
-                'alarm_bits': 0,                # bytes 64 - 67
-                'crc': 0 } 
+    def process_in_serial(self):
+        in_pkt = {
+            'sequence_count': 0,             # bytes 0 - 1 - rpi unsigned short
+            'packet_version': 0,             # byte 2      - rpi unsigned char
+            'mode_value': 0,                 # byte 3      - rpi unsigned char
+            'respiratory_rate_measured': 0,  # bytes 4 - 7 - rpi unsigned int
+            'respiratory_rate_set': 0,       # bytes 8 - 11
+            'tidal_volume_measured': 0,      # bytes 12 - 15
+            'tidal_volume_set': 0,           # bytes 16 - 19
+            'ie_ratio_measured': 0,          # bytes 20 - 23
+            'ie_ratio_set': 0,               # bytes 24 - 27
+            'peep_value_measured': 0,        # bytes 28 - 31
+            'peak_pressure_measured': 0,     # bytes 32 - 35
+            'plateau_value_measurement': 0,  # bytes 36 - 39
+            'pressure_measured': 0,          # bytes 40 - 43
+            'flow_measured': 0,              # bytes 44 - 47
+            'volume_in_measured': 0,         # bytes 48 - 51
+            'volume_out_measured': 0,        # bytes 52 - 55
+            'volume_rate_measured': 0,       # bytes 56 - 59
+            'control_state': 0,              # byte 60       - rpi unsigned ch
+            'battery_level': 0,              # byte 61
+            'reserved': 0,                   # bytes 62 - 63 - rpi unsigned int
+            'alarm_bits': 0,                 # bytes 64 - 67
+            'crc': 0
+        } 
         while 1:
-            byteData = read_all(ser, 70)
+            byteData = self.read_all(ser, 70)
             #byteData = ser.read(70)
             #2 ways to print
             #print (byteData)  #raw will show ascii if can be decoded
@@ -52,17 +54,17 @@ class vent_monitor():
             #print(''.join(r'\x'+hex(letter)[2:] for letter in byteData))
             # Workaround
             try:
-                in_pkt['ver']=byteData[4]
+                in_pkt['ver'] = byteData[4]
             except:
                 pass
             finally:
                 pass
-            #
-            in_pkt['seq']=int.from_bytes(byteData[0:2], byteorder='little')
+
+            in_pkt['seq'] = int.from_bytes(byteData[0:2], byteorder='little')
             end = None
-            in_pkt['crc']=int.from_bytes(byteData[72:None], byteorder='little')
-            in_pkt['mode']=byteData[3]
-            print (in_pkt)
+            in_pkt['crc'] = int.from_bytes(byteData[72:None], byteorder='little')
+            in_pkt['mode'] = byteData[3]
+            print(in_pkt)
 
     def recv_arduino_packet(self, arduino_packet):
         """
@@ -132,29 +134,28 @@ class vent_monitor():
 
         # Check sequence number; update previous
         curr_seq_no = command["seq_no"]
-        if prev_seq_no is not None and \
-           curr_seq_no != prev_seq_no + 1:
+        if self.prev_seq_no is not None and \
+           curr_seq_no != self.prev_seq_no + 1:
             # Raise alarm for lost packet(s)
             # THIS FUNCTION IS NOT YET IMPLEMENTED
-            report_missing_packets(prev_seq_no, curr_seq_no)
-        prev_seq_no = curr_seq_no
+            self.report_missing_packets(self.prev_seq_no, curr_seq_no)
+        self.prev_seq_no = curr_seq_no
 
         # Send command data to UI monitor
         # THIS FUNCTION IS NOT YET IMPLEMENTED
-        send_command_to_UI(command)
-        
+        self.send_command_to_UI(command)
+
         # Check for settings updates;
         #   if found, update command structure.
         # Send command structure back to arduino
-        if setting_new is not None:
-            command.update(setting_new)
+        if self.setting_new is not None:
+            command.update(self.setting_new)
             # Race condition (see comment above)
-            setting_new = None
+            self.setting_new = None
         # THIS FUNCTION IS NOT YET IMPLEMENTED
-        send_command_to_arduino(command)
-        
+        self.send_command_to_arduino(command)
 
-    def update_setting(resp_rate, tidal_vol, IE_ratio):
+    def update_setting(self, resp_rate, tidal_vol, IE_ratio):
         """
         Save the given settings into the "drop box" variable.
         If, by some chance, there is already data in the settings,
@@ -164,7 +165,7 @@ class vent_monitor():
         setting_new = locals()
 
 
-    def report_missing_packets(seq1, seq2):
+    def report_missing_packets(self, seq1, seq2):
         msg = "Missing packets between %d and %d, exclusive." % (seq1, seq2)
         # HOW DO WE PUSH THIS ALERT TO THE PROPER PLACE?
         pass
@@ -172,50 +173,40 @@ class vent_monitor():
 
     # NOEL: These are better moved to a class that deals with the
     # data and command packets.
-    
-    def send_command_to_UI(command):
+
+    def send_command_to_UI(self, command):
         # HOW DO WE PUSH THIS COMMAND TO THE UI MONITOR?
-        pass
+        raise NotImplementedError
 
-
-    def send_command_to_arduino(command):
+    def send_command_to_arduino(self, command):
         # HOW DO WE PUSH THIS COMMAND ACK TO THE ARDUINO?
-        pass
-    
+        raise NotImplementedError
+
     #CRC implmentation
-
-    def crc_check_in(in_packet)
+    def crc_check_in(self, in_packet):
         # NOEL: to implement CCIT CRC16
-        pass
-    
-    def crc_create_out(out_packet)
+        raise NotImplementedError
+
+    def crc_create_out(self, out_packet):
         # NOEL: to implement CCIT CRC16
-        pass
-    
-    def init_serial():
-    
-    global ser          #Must be declared in Each Function
-    ser = serial.Serial()
-    ser.baudrate = BAUD
-    ser.port = PORT 
-    #a little less than polling speed from arduino
-    ser.timeout = SER_TIMEOUT
-    ser.open()          #Opens SerialPort
+        raise NotImplementedError
 
-    # print port open or closed
-    if ser.isOpen():
-        print ('Open: ' + ser.portstr)
-    sleep(1)
-    #Function Ends Here
-        
+    def init_serial(self) -> None:
+        self.ser = serial.Serial()
+        self.ser.baudrate = BAUD
+        self.ser.port = PORT 
+        # a little less than polling speed from arduino
+        self.ser.timeout = SER_TIMEOUT
+        self.ser.open()          #Opens SerialPort
 
-    #Call the Serial Initilization Function
-    #init_serial()
+        # print port open or closed
+        if self.ser.isOpen():
+            print('Open: ' + self.ser.portstr)
 
+        sleep(1)
 
-
-    def read_all(port, chunk_size=200):
-        """Read all characters on the serial port and return them."""
+    def read_all(self, port, chunk_size: int = 200) -> bytes:
+        """ Read all characters on the serial port and return them. """
         if not port.timeout:
             raise TypeError('Port needs to have a timeout set!')
 
@@ -230,4 +221,3 @@ class vent_monitor():
                 break
 
         return read_buffer
-
