@@ -33,11 +33,19 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   }
   else if ((comm.public_command_packet.sequence_count != last_sequence_count))
   {
+#ifdef SERIAL_DEBUG
+    Serial1.print("unexpected sequence count: ");
+    Serial1.println(comm.public_command_packet.sequence_count, DEC);
+#endif    
     comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
   }
   else if (comm.public_command_packet.crc != CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2))
   {
     comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
+#ifdef SERIAL_DEBUG
+    Serial1.print("bad CRC 0x ");
+    Serial1.println(comm.public_command_packet.crc, HEX);
+#endif     
   }    
   ready_to_send = true; // serial.cpp will wait for time interval, but go ahead and set this to ready
   PT_RESTART(pt);
