@@ -2,10 +2,13 @@
 // Link Module
 //
 #include <Arduino.h>
+#include <FastCRC.h>
 #include "../pt/pt.h"
 #include "../modules/link.h"
 #include "../modules/module.h"
 #include "../hal/serial.h"
+
+FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
 
 // Private Variables
 struct link comm;
@@ -13,25 +16,7 @@ static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
 
-//data_packet_def data_packet_last_sent;
-
-//incoming_packet_u shared_command_packet; // this should be an extern in other modules that need to read this
-command_packet_def command_packet;
 bool ready_to_send = true;
-
-
-int16_t sum_return;
-int16_t sum_index;
-
-int16_t sum(uint8_t datap[], uint16_t data_length)
-{
-  sum_return = 0;
-  for (sum_index = 0; sum_index < data_length; sum_index++)
-  {
-    sum_return += datap[sum_index];
-  }
-  return (sum_return);
-}
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
 {
@@ -46,17 +31,15 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     clear_input = true;
     ready_to_send = true;
   }
-  //pcommand_packet = (unsigned char *)&command_packet;
   else if ((comm.public_command_packet.sequence_count != last_sequence_count))
   {
     comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
   }
-  else if (comm.public_command_packet.crc != sum((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2))
+  else if (comm.public_command_packet.crc != CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2))
   {
-    //public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
+    comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
   }    
-  
-  ready_to_send = true;
+  ready_to_send = true; // serial.cpp will wait for time interval, but go ahead and set this to ready
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -70,7 +53,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   if (sequence_count != last_sequence_count) {
     comm.public_data_packet.sequence_count = sequence_count;
     comm.public_data_packet.packet_version = PACKET_VERSION;
-    comm.public_data_packet.crc = sum((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
+    comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
   }    
   PT_RESTART(pt);
   PT_END(pt);
