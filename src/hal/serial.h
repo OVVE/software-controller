@@ -4,6 +4,8 @@
 
 #include "../hal/hal.h"
 
+//#define SERIAL_DEBUG
+
 // TODO: Doc
 int serialHalInit(void);
 
