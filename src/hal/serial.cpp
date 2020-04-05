@@ -7,7 +7,7 @@
 
 #define BAUD_RATE 38400
 
-//#define SERIAL_DEBUG
+//#define SERIAL_DEBUG found in serial.h - debug Serial1.print() in serial.cpp and link.cpp
 #ifdef SERIAL_DEBUG
 uint8_t debug_byte;
 uint16_t debug_index;
@@ -59,39 +59,9 @@ int serialHalGetData(void)
   if (Serial.available())
   {       
     Serial.readBytes(&inByte, 1);
-#ifdef SERIAL_DEBUG
-    Serial1.write(inByte);
-#endif    
-    // verify that the command is responding to the correct data packet by checking the sequence number and rev
-    /*
-    if (incoming_index == 0)
-    {
-      if (incoming_packet.command_packet.sequence_count != data_packet_last_sent.sequence_count)
-      {
-        // set alarm bit
-        
-        // do not increment incoming_index and return
-        //return (HAL_OK);
-      }
-    }
-
-    if (incoming_index == 1)
-    {
-      if (incoming_packet.command_packet.packet_version != data_packet_last_sent.packet_version)
-      {
-        // set alarm bit
-        
-        // reset incoming_index and return
-        //incoming_index = 0;
-        //return (HAL_OK);
-        
-      }      
-    }
-    */
-    //pcommand_packet[incoming_index] = inByte;
+    
     command_packet_u.command_bytes[incoming_index] = inByte;
     
-    //incoming_packet.command_bytes[incoming_index] = inByte;
     incoming_index++;
 
     if (incoming_index >= sizeof(comm.public_command_packet))
@@ -107,9 +77,11 @@ int serialHalGetData(void)
       comm.public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
       ready_to_send = true;
 #ifdef SERIAL_DEBUG
-      Serial1.print(" Read sequence number: ");
-      Serial1.write(comm.public_command_packet.sequence_count);
-      Serial1.println("return from read");
+      Serial1.print("Received from Rpi: 0x");
+      Serial1.print(comm.public_command_packet.sequence_count, HEX);
+      Serial1.print(" 0x");
+      Serial1.println(comm.public_command_packet.crc, HEX);
+      Serial1.println(" ");
 #endif      
       return HAL_OK;
     } 
@@ -117,6 +89,9 @@ int serialHalGetData(void)
     {
       if ((millis() - watchdog_start_ms) > watchdog_max_ms)
       {
+#ifdef SERIAL_DEBUG
+        Serial1.println("!!!Watchdog timeout");
+#endif        
         watchdog_active = false; 
         watchdog_exceeded = true; 
         ready_to_send = true;
@@ -143,9 +118,11 @@ int serialHalSendData()
       } while (Serial.available() > 0);
     }
 #ifdef SERIAL_DEBUG
-    Serial1.print("Write sequence count: ");
-    Serial1.write(comm.public_data_packet.sequence_count);
-    Serial1.println("start write");
+      Serial1.print("Sent to Rpi: ");
+      Serial1.print(comm.public_data_packet.sequence_count, HEX);
+      Serial1.print(" ");
+      Serial1.println(comm.public_data_packet.crc, HEX);
+      Serial1.println(" ");
 #endif 
        
     bytesSent = Serial.write((byte *)&comm.public_data_packet, sizeof(comm.public_data_packet));
