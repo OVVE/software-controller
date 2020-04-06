@@ -14,6 +14,7 @@
 // Public Variables
 struct control control = {
   control.state = CONTROL_IDLE
+  //.state = CONTROL_IDLE
 };
 
 // Private Variables
@@ -30,12 +31,12 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
   while (1) {
     if (control.state == CONTROL_IDLE) {
       // Wait for the parameters to enter the run state before
-      if (parameters.run) {
+      if (parameters.startVentilation) {
         control.state = CONTROL_BEGIN_INHALATION;
       }
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
-      if (!parameters.assist) {
+      if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
         // TODO: Calculate breathe parameters and motor control
         motorCompressionDistance = 0;
         motorCompressionDuration = 0;
@@ -47,7 +48,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_INHALATION;
       
     } else if (control.state == CONTROL_INHALATION) {
-      if (!parameters.assist) {
+      if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
         PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
       } else {
         // TODO: Implement Assist mode run
@@ -67,13 +68,13 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // In order to time exhalation, set a timer to time the exhalation cycle
       // TODO: consider if patient takes breathe before motor has completely moved back
       motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION, motorCompressionDistance, motorCompressionDuration);
-      timerHalBegin(&controlTimer, 1  SEC); // TODO: calculate this value from the breathe parameters
+      timerHalBegin(&controlTimer, 1 MSEC); // TODO: calculate this value from the breathe parameters
       control.state = CONTROL_EXHALATION;
       
     } else if (control.state == CONTROL_EXHALATION) {
       // TODO: Fix this condition for assisted modes
       PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS && timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
-      control.state = (parameters.run) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
+      control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
       
     } else {
       // TODO: Error, unknown control state!!!

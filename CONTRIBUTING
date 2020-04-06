@@ -1,0 +1,28 @@
+OVVE Development Process
+
+This process is based on GitFlow and GitHubFlow
+
+https://guides.github.com/introduction/flow/
+https://nvie.com/posts/a-successful-git-branching-model/
+
+Basic tenets:
+- ‘master’ branch is always deployable.
+- ‘develop’ branch is the shared branch used for work in progress.  
+- Features are developed on branches from ‘develop’
+- When a feature is completed, a developer creates a pull request to pull from the feature branch back to ‘develop’.
+- Code is reviewed through the pull request.  Reviewers can pull the feature branch to test the code under review.  Comments can be entered in github.
+- There could be further check-ins to the feature branch to resolve issues found during review.
+- Once reviewers approve the review, the feature branch is merged to ‘develop’
+- After merging to ‘develop’, the feature branch can be deleted
+- When the team agrees that ‘develop’ is deployable, issue a pull request from ‘develop’ to ‘master’.   Review the changes and merge ‘develop’ to ‘master’.  Main releases will be tagged with the relevant version.
+
+
+Merging and conflict
+- Since there could be many features in flight at the same time, ‘develop’ can get updated after a feature branch is created.
+- Developers should rebase their feature branch onto the ‘develop’ often to keep up with the current development stream.
+- Developers must resolve conflicts in their branch before initiating a pull request to pull their feature branch back to ‘develop’.
+
+Bug fixes
+- Urgent bug fixes may be done from ‘master’ while development has continued on ‘develop’
+- In this case, check out a bug fix branch from ‘master’
+- Merge the fix back into ‘master’ AND ‘develop’

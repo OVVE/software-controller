@@ -4,6 +4,7 @@
 
 #include <stdbool.h>
 #include <Arduino.h>
+#include <stdint.h>
 
 #define ALARM_ECU_POWER_LOSS              0x01
 #define ALARM_ECU_LOW_BATTERY             0x02 
@@ -66,11 +67,18 @@ typedef struct command_packet_def {
 struct link {
   bool update;
   bool assist;
-  unsigned int volumeRequested;
-  unsigned int respirationRateRequested;
-  unsigned int ieRatioRequested;
   data_packet_def public_data_packet;
   command_packet_def public_command_packet;  
+  uint8_t  startVentilation;
+  uint8_t  ventilationMode;
+  uint32_t volumeRequested;
+  uint32_t respirationRateRequested;
+  uint32_t ieRatioRequested;
+  
+  // Alarms
+  int8_t   droppedPacketAlarm;
+  int8_t   crcErrorAlarm;
+  int8_t   unsupportedPacketVersionAlarm;
 };
 
 // Public Variables
