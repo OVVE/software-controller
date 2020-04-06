@@ -18,6 +18,10 @@ static struct pt serialSendThread;
 
 uint16_t calc_crc;
 
+// copy the public data packet to this buffer because there might be changes
+// by other modules while serial.cpp is waiting to send this
+data_packet_def update_crc_data_packet;
+
 #ifdef SERIAL_DEBUG
 extern HardwareSerial &serial_debug;
 #endif
@@ -82,10 +86,10 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
-
-    comm.public_data_packet.sequence_count = sequence_count;
-    comm.public_data_packet.packet_version = PACKET_VERSION;
-    comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
+    memcpy((void *)&update_crc_data_packet, (void *)&comm.public_data_packet, sizeof(update_crc_data_packet));
+    update_crc_data_packet.sequence_count = sequence_count;
+    update_crc_data_packet.packet_version = PACKET_VERSION;
+    update_crc_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
   //}    
   PT_RESTART(pt);
   PT_END(pt);
