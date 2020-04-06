@@ -113,15 +113,15 @@ int serialHalSendData()
     }
 #ifdef SERIAL_DEBUG
     serial_debug.print("Sent to Rpi: ");
-    serial_debug.print(comm.public_data_packet.sequence_count, HEX);
+    serial_debug.print(update_crc_data_packet.sequence_count, HEX);
     serial_debug.print(" ");
-    serial_debug.print(comm.public_data_packet.sequence_count, HEX);
+    serial_debug.print(update_crc_data_packet.sequence_count, HEX);
     serial_debug.println(" ");
 #endif 
        
-    bytesSent = serial_ui.write((byte *)&comm.public_data_packet, sizeof(comm.public_data_packet));
+    bytesSent = serial_ui.write((byte *)&update_crc_data_packet, sizeof(update_crc_data_packet));
     
-    if (bytesSent != sizeof(comm.public_data_packet)) {
+    if (bytesSent != sizeof(update_crc_data_packet)) {
       // handle error
     }
        
