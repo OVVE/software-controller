@@ -3,17 +3,21 @@
 #define __PARAMETERS_MODULE_H__
 
 #include <stdbool.h>
+#define VENTILATOR_MODE_VC   0x01
+#define VENTILATOR_MODE_SIMV 0x03
 
 struct parameters {
-  // TODO; fill in parameters
-  bool run;
-  bool assist;
-  unsigned int volumeRequested;
-  unsigned int respirationRateRequested;
-  unsigned int ieRatioRequested;
+  // Variables
+  uint8_t  startVentilation;
+  uint8_t  ventilationMode;
+  uint32_t volumeRequested;
+  uint32_t respirationRateRequested;
+  uint32_t ieRatioRequested;
+  
+  // Alarms
+  int8_t   parametersInvalidAlarm;
 };
 
-// Public Variables
 extern struct parameters parameters;
 
 // TODO: Doc

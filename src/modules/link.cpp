@@ -95,7 +95,6 @@ int linkModuleInit(void)
   if (serialHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
-  return MODULE_OK;
 }
 
 int linkModuleRun(void)
