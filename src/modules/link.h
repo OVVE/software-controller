@@ -86,9 +86,6 @@ extern struct link comm;
 
 extern uint16_t sequence_count;
 extern uint16_t last_sequence_count;
-extern command_packet_def command_packet;
-extern command_packet_def command_packet_reference;
-extern command_packet_def command_packet;
 extern bool watchdog_exceeded;
 extern bool watchdog_active;
 extern bool clear_input; // if there is a problem with data then clear the remaining bytes
