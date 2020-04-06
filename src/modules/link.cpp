@@ -16,9 +16,11 @@ static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
 
-bool ready_to_send = true;
-
 uint16_t calc_crc;
+
+#ifdef SERIAL_DEBUG
+extern HardwareSerial &serial_debug;
+#endif
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
 {
@@ -31,15 +33,14 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     comm.public_command_packet.alarm_bits |= 1 << ALARM_DROPPED_PACKET;
     watchdog_exceeded = false;
     clear_input = true;
-    ready_to_send = true;
   }
   else
   {
-    if ((comm.public_command_packet.sequence_count != last_sequence_count))
+    if ((comm.public_command_packet.sequence_count != sequence_count))
     {
 #ifdef SERIAL_DEBUG
-      //Serial1.print("unexpected sequence count: ");
-      //Serial1.println(comm.public_command_packet.sequence_count, DEC);
+      serial_debug.print("unexpected sequence count: ");
+      serial_debug.println(comm.public_command_packet.sequence_count, DEC);
 #endif    
       comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
       clear_input = true;
@@ -48,28 +49,27 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     {
       calc_crc = CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2);
 #ifdef SERIAL_DEBUG
-      //Serial1.print("CRC calculated from command packet: ");
-      //Serial1.println(calc_crc, DEC);
+      serial_debug.print("CRC calculated from command packet: ");
+      serial_debug.println(calc_crc, DEC);
 #endif      
       if (comm.public_command_packet.crc != calc_crc)
       {
         comm.public_command_packet.alarm_bits |= 1 << ALARM_CRC_ERROR;
 #ifdef SERIAL_DEBUG
-        //Serial1.print("bad CRC 0x ");
-        //Serial1.println(comm.public_command_packet.crc, HEX);
+        serial_debug.print("bad CRC 0x ");
+        serial_debug.println(comm.public_command_packet.crc, HEX);
 #endif  
         clear_input = true;
       }        
     }
   }  
 #ifdef SERIAL_DEBUG
-  //Serial1.print("CRC from data packet: ");
-  //Serial1.println(comm.public_command_packet.crc, DEC);
-  //Serial1.print("CRC calculated from data packet: ");
-  //Serial1.println(CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2));
+  serial_debug.print("CRC from data packet: ");
+  serial_debug.println(comm.public_command_packet.crc, DEC);
+  serial_debug.print("CRC calculated from data packet: ");
+  serial_debug.println(CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2));
 #endif 
   comm.public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR); 
-  ready_to_send = true; // serial.cpp will wait for time interval, but go ahead and set this to ready
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -80,11 +80,10 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
 
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
 
-  if (sequence_count != last_sequence_count) {
     comm.public_data_packet.sequence_count = sequence_count;
     comm.public_data_packet.packet_version = PACKET_VERSION;
     comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
-  }    
+  //}    
   PT_RESTART(pt);
   PT_END(pt);
 }
