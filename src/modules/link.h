@@ -90,6 +90,7 @@ extern bool watchdog_exceeded;
 extern bool watchdog_active;
 extern bool clear_input; // if there is a problem with data then clear the remaining bytes
 extern bool ready_to_send;
+extern data_packet_def update_crc_data_packet; // this is the data structure that the public data structure is copied to so the crc can be updated and no data fields changed while sending.
 
 // TODO: Doc
 int linkModuleInit(void);
