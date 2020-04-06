@@ -2,17 +2,12 @@
 #ifndef __SERIAL_HAL_H__
 #define __SERIAL_HAL_H__
 
+//#define SERIAL_DEBUG
+
 #include "../hal/hal.h"
 
-#define SERIAL_DEBUG
-
-// TODO: Doc
 int serialHalInit(void);
-
-// TODO: Doc
 int serialHalGetData(void);
-
-// TODO: Doc
 int serialHalSendData();
 
 #endif /* __SERIAL_HAL_H__ */
