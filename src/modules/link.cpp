@@ -60,7 +60,11 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
         serial_debug.println(comm.public_command_packet.crc, HEX);
 #endif  
         clear_input = true;
-      }        
+      }
+      else
+      {
+          comm.public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR); 
+      }          
     }
   }  
 #ifdef SERIAL_DEBUG
@@ -69,7 +73,6 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   serial_debug.print("CRC calculated from data packet: ");
   serial_debug.println(CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2));
 #endif 
-  comm.public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR); 
   PT_RESTART(pt);
   PT_END(pt);
 }
