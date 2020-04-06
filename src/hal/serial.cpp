@@ -56,6 +56,7 @@ int serialHalInit(void)
 
 int serialHalGetData(void)
 {
+  // change to while if reading all the bytes currently available
   if (Serial.available())
   {       
     Serial.readBytes(&inByte, 1);
@@ -74,7 +75,6 @@ int serialHalGetData(void)
       //Serial.println("count: " + incoming_index);
       // clear alarm bits
       comm.public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
-      comm.public_command_packet.alarm_bits &= ~(1 << ALARM_CRC_ERROR);
       ready_to_send = true;
 #ifdef SERIAL_DEBUG
       Serial1.print("Received from Rpi: 0x");
@@ -85,22 +85,21 @@ int serialHalGetData(void)
 #endif      
       return HAL_OK;
     } 
-    if (watchdog_active == true)
+  }
+  if (watchdog_active == true)
+  {
+    if ((millis() - watchdog_start_ms) > watchdog_max_ms)
     {
-      if ((millis() - watchdog_start_ms) > watchdog_max_ms)
-      {
 #ifdef SERIAL_DEBUG
-        Serial1.println("!!!Watchdog timeout");
+      Serial1.println("!!!Watchdog timeout");
 #endif        
-        watchdog_active = false; 
-        watchdog_exceeded = true; 
-        ready_to_send = true;
-        incoming_index = 0;
-        return HAL_OK;        
-      }
+      watchdog_active = false; 
+      watchdog_exceeded = true; 
+      ready_to_send = true;
+      incoming_index = 0;
+      return HAL_OK;        
     }
-    
-  } // while serial.available
+  } // if serial.available
   ready_to_send = false;
   return HAL_IN_PROGRESS;
 }
