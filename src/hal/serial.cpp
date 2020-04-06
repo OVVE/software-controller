@@ -7,31 +7,30 @@
 
 #define BAUD_RATE 38400
 
-//#define SERIAL_DEBUG found in serial.h - debug Serial1.print() in serial.cpp and link.cpp
 #ifdef SERIAL_DEBUG
-uint8_t debug_byte;
-uint16_t debug_index;
+HardwareSerial &serial_debug = Serial1;
 #endif
 
-uint32_t last_send_ms = 0;  // this is used for send interval
-uint32_t current_send_ms = 0;
-uint32_t send_interval_ms = 100;
-uint16_t bytesSent;
-uint8_t inByte;    // store each byte
-int incoming_index = 0; // index for array of bytes
+HardwareSerial &serial_ui = Serial;
 
-uint32_t watchdog_max_ms = 50;
-uint32_t watchdog_start_ms;
-bool watchdog_active = false;
-bool watchdog_exceeded = false;
-bool clear_input = false;
+uint32_t last_send_ms = 0;        // this is used for send interval
+uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
+uint32_t send_interval_ms = 100;  // delay between sending data packets. Could extend by 50msec watchdog timeout though, just do not send faster than this pace
+uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
+uint8_t inByte;                   // store each byte read
+int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
+
+uint32_t watchdog_max_ms = 50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
+uint32_t watchdog_start_ms;       // save the watchdog start time
+bool watchdog_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
+bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
+bool clear_input = false;         // if we get a bad packet (wrong sequence id or crc) set this to true and trash input buffer just before sending next data packet
 
 // this will be used by module/link to send packets
-uint16_t sequence_count = 0;
-uint16_t last_sequence_count = 0;
+uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
 
-bool response_received = true; // do not send data until response received. start with true no response needed.
-
+// this is the storage for getting bytes Serial.readBytes(1), reading bytes one at a time. probably could use pointer, but used union command bytes to get one byte per call
+// when the full packet is received this is put copied to the public command data structure.
 typedef union command_packet_union{
 command_packet_def command_packet;
 uint8_t command_bytes[sizeof(command_packet_def)];
@@ -41,15 +40,15 @@ command_packet_union command_packet_u;
 
 int serialHalInit(void)
 {
-  Serial.begin(BAUD_RATE);  // this function does not return anything
+  serial_ui.begin(BAUD_RATE);  // this function does not return anything
   // not sure how we can do something like while (!serial)
   // return MODULE_FAIL;
   do
-  { Serial.read();
-  } while (Serial.available() > 0);
+  { serial_ui.read();
+  } while (serial_ui.available() > 0);
   
 #ifdef SERIAL_DEBUG
-  Serial1.begin(BAUD_RATE);
+  serial_debug.begin(BAUD_RATE);
 #endif  
   return HAL_OK;
 }
@@ -57,9 +56,9 @@ int serialHalInit(void)
 int serialHalGetData(void)
 {
   // change to while if reading all the bytes currently available
-  if (Serial.available())
+  if (serial_ui.available())
   {       
-    Serial.readBytes(&inByte, 1);
+    serial_ui.readBytes(&inByte, 1);
     
     command_packet_u.command_bytes[incoming_index] = inByte;
     
@@ -72,16 +71,14 @@ int serialHalGetData(void)
       watchdog_active = false;
 
       memcpy((void *)&comm.public_command_packet, (void *)&command_packet_u.command_packet, sizeof(comm.public_command_packet));
-      //Serial.println("count: " + incoming_index);
       // clear alarm bits
       comm.public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
-      ready_to_send = true;
 #ifdef SERIAL_DEBUG
-      Serial1.print("Received from Rpi: 0x");
-      Serial1.print(comm.public_command_packet.sequence_count, HEX);
-      Serial1.print(" 0x");
-      Serial1.println(comm.public_command_packet.crc, HEX);
-      Serial1.println(" ");
+      serial_debug.print("Received from Rpi: 0x");
+      serial_debug.print(comm.public_command_packet.sequence_count, HEX);
+      serial_debug.print(" 0x");
+      serial_debug.println(comm.public_command_packet.crc, HEX);
+      serial_debug.println(" ");
 #endif      
       return HAL_OK;
     } 
@@ -91,16 +88,14 @@ int serialHalGetData(void)
     if ((millis() - watchdog_start_ms) > watchdog_max_ms)
     {
 #ifdef SERIAL_DEBUG
-      Serial1.println("!!!Watchdog timeout");
+      serial_debug.println("!!!Watchdog timeout");
 #endif        
       watchdog_active = false; 
       watchdog_exceeded = true; 
-      ready_to_send = true;
       incoming_index = 0;
       return HAL_OK;        
     }
   } // if serial.available
-  ready_to_send = false;
   return HAL_IN_PROGRESS;
 }
 
@@ -113,28 +108,29 @@ int serialHalSendData()
     {
       clear_input = false;
       do
-      { Serial.read();
-      } while (Serial.available() > 0);
+      { serial_ui.read();
+      } while (serial_ui.available() > 0);
     }
 #ifdef SERIAL_DEBUG
-      Serial1.print("Sent to Rpi: ");
-      Serial1.print(comm.public_data_packet.sequence_count, HEX);
-      Serial1.print(" ");
-      Serial1.println(comm.public_data_packet.crc, HEX);
-      Serial1.println(" ");
+    serial_debug.print("Sent to Rpi: ");
+    serial_debug.print(comm.public_data_packet.sequence_count, HEX);
+    serial_debug.print(" ");
+    serial_debug.print(comm.public_data_packet.sequence_count, HEX);
+    serial_debug.println(" ");
 #endif 
        
-    bytesSent = Serial.write((byte *)&comm.public_data_packet, sizeof(comm.public_data_packet));
-
+    bytesSent = serial_ui.write((byte *)&comm.public_data_packet, sizeof(comm.public_data_packet));
+    
     if (bytesSent != sizeof(comm.public_data_packet)) {
       // handle error
     }
        
-    last_sequence_count = sequence_count;
+    //last_sequence_count = sequence_count;
     sequence_count++;
     last_send_ms = current_send_ms;
     watchdog_start_ms = millis();
     watchdog_active = true;
+    return HAL_IN_PROGRESS;
   }
   return HAL_OK;
 }
