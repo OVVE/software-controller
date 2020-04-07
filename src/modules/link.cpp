@@ -40,7 +40,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   }
   else
   {
-    if ((comm.public_command_packet.sequence_count != sequence_count))
+    if ((comm.public_command_packet.sequence_count != last_sequence_count))
     {
 #ifdef SERIAL_DEBUG
       serial_debug.print("unexpected sequence count: ");
