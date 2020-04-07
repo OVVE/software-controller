@@ -28,6 +28,7 @@ bool clear_input = false;         // if we get a bad packet (wrong sequence id o
 
 // this will be used by module/link to send packets
 uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
+uint16_t last_sequence_count; // what to expect
 
 // this is the storage for getting bytes Serial.readBytes(1), reading bytes one at a time. probably could use pointer, but used union command bytes to get one byte per call
 // when the full packet is received this is put copied to the public command data structure.
@@ -125,7 +126,7 @@ int serialHalSendData()
       // handle error
     }
        
-    //last_sequence_count = sequence_count;
+    last_sequence_count = sequence_count;
     sequence_count++;
     last_send_ms = current_send_ms;
     watchdog_start_ms = millis();
