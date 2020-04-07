@@ -72,10 +72,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     }
   }  
 #ifdef SERIAL_DEBUG
-  serial_debug.print("CRC from data packet: ");
+  serial_debug.print("CRC from command packet: ");
   serial_debug.println(comm.public_command_packet.crc, DEC);
-  serial_debug.print("CRC calculated from data packet: ");
-  serial_debug.println(CRC16.ccitt((uint8_t *)&comm.public_command_packet, sizeof(comm.public_command_packet) - 2));
 #endif 
   PT_RESTART(pt);
   PT_END(pt);
@@ -86,10 +84,14 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
+    comm.public_data_packet.sequence_count = sequence_count;
+    comm.public_data_packet.packet_version = PACKET_VERSION;
+    comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
+#ifdef SERIAL_DEBUG
+    serial_debug.print("CRC calculated and will be sent with next data packet: ");
+    serial_debug.println(comm.public_data_packet.crc, DEC);
+#endif    
     memcpy((void *)&update_crc_data_packet, (void *)&comm.public_data_packet, sizeof(update_crc_data_packet));
-    update_crc_data_packet.sequence_count = sequence_count;
-    update_crc_data_packet.packet_version = PACKET_VERSION;
-    update_crc_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
   //}    
   PT_RESTART(pt);
   PT_END(pt);
