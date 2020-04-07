@@ -34,13 +34,70 @@ static uint16_t targetVolume;
 static uint32_t totalBreathTime;
 static uint32_t targetInhalationTime;
 
+// Added
+static uint32_t targetExhalationTime;
+
+// Added
+static uint16_t targetPressure;
+
 static uint32_t measuredInhalationTime;
 static uint32_t measuredExhalationTime;
+
+// Control variables
+static uint16_t motorCommandPosition;		// Commands to low-level controller
+static uint16_t motorCommandVelocity;
+
+static uint16_t desiredVolume;				// Where we set desired volume to reach
+static uint16_t desiredPressire;			// " " ...
+static uint16_t desiredFlow;
+static uint16_t currentVolume;				// Need to update volume measurement here from sensors
+static uint16_t currentPressure;			// " " ...
+static uint16_t currentFlow;
 
 // Mid-level volume control function
 static void updateVolumeControl(uint16_t* distance, uint16_t* duration)
 {
-  // TODO: fill-in this function
+	// Control parameters
+	uint16_t volumeToPosition = 1;				// Relationship between volume and motor position
+	uint16_t pressureToVelocity = 1;		// Relationship between pressure and motor velocity
+	uint16_t pressureDerivGain = 1;			// Derivative gain that controls pressure tracking smoothness
+
+	// Check control mode
+	if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+		// Check state
+		if (control.state == CONTROL_INHALATION) {
+			// Check if reached volume set point
+			desiredVolume = targetVolume;
+			if (abs(currentVolume - desiredVolume) > 0) {
+				// Actuate motor based on relationship between volume and motor state
+				// If we assume that the ventilator + patient pulmonary system is a closed pneumatic circuit,
+				// There will be a direct relationship between motor state and tidal volume
+				motorCommandPosition = volumeToPosition * desiredVolume;
+				motorCommandVelocity = targetVolume / (targetInhalationTime);
+			}
+		}
+		else if (control.state == CONTROL_EXHALATION) {
+			// Check if reached volume set point
+			desiredVolume = 0;
+			if (abs(currentVolume - desiredVolume) > 0) {
+				// " "
+				motorCommandPosition = volumeToPosition * desiredVolume;
+				motorCommandVelocity = targetVolume / (targetExhalationTime);
+			}
+		}
+	}
+	else if (parameters.ventilationMode == VENTILATOR_MODE_AC) {
+		// Check state
+		if (control.state == CONTROL_INHALATION) {
+			// Track pressure set point
+			motorCommandVelocity = pressureToVelocity * targetPressure;
+			desiredPressure = targetPressure;
+			if (abs(currentPressure - desiredPressure) > 0) {
+				// Actuate motor based on error between current and desired pressure with D control
+				motorCommandVelocity += pressureDerivGain * (currentPressure - desiredPressure);
+			}
+		}
+	}
 }
 
 static PT_THREAD(controlThreadMain(struct pt* pt))
