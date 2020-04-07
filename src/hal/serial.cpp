@@ -113,10 +113,10 @@ int serialHalSendData()
       } while (serial_ui.available() > 0);
     }
 #ifdef SERIAL_DEBUG
-    serial_debug.print("Sent to Rpi: ");
+    serial_debug.print("Sent to Rpi sequence: ");
     serial_debug.print(update_crc_data_packet.sequence_count, HEX);
-    serial_debug.print(" ");
-    serial_debug.print(update_crc_data_packet.sequence_count, HEX);
+    serial_debug.print(" CRC: ");
+    serial_debug.print(update_crc_data_packet.crc, DEC);
     serial_debug.println(" ");
 #endif 
        
@@ -131,8 +131,8 @@ int serialHalSendData()
     last_send_ms = current_send_ms;
     watchdog_start_ms = millis();
     watchdog_active = true;
-    return HAL_IN_PROGRESS;
+    return HAL_OK;
   }
-  return HAL_OK;
+  return HAL_IN_PROGRESS;
 }
 
