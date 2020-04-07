@@ -118,15 +118,12 @@ void updateDataPacket()
   //
   public_data_packet.tidal_volume_set = parameters.volumeRequested;
   public_data_packet.tidal_volume_measured = sensors.currentVolume;
-  public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
+  public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;
   public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
   
   public_data_packet.control_state = control.state;
-  // should we use the one from parameters or this one
-  public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one
-  
   public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
-  //public_data_packet.respiratory_rate_measured = control.  // could not find the field for this
+  public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
   
   // readings from sensor module
   public_data_packet.plateau_value_measurement = sensors.plateauPressure;
