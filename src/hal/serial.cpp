@@ -15,12 +15,12 @@ HardwareSerial &serial_ui = Serial;
 
 uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
-uint32_t send_interval_ms = 1000;  // delay between sending data packets. Could extend by 50msec watchdog timeout though, just do not send faster than this pace
+uint32_t send_interval_ms = 100;  // delay between sending data packets. Could extend by 50msec watchdog timeout though, just do not send faster than this pace
 uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
 uint8_t inByte;                   // store each byte read
 int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 
-uint32_t watchdog_max_ms = 2000; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
+uint32_t watchdog_max_ms = 50; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool watchdog_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
@@ -72,6 +72,7 @@ int serialHalGetData(void)
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
       incoming_index = 0;
       watchdog_active = false;
+      watchdog_exceeded = false;
 
       memcpy((void *)&command_packet_from_serial, (void *)&command_packet_u.command_packet, sizeof(command_packet_from_serial));
 #ifdef SERIAL_DEBUG
