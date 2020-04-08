@@ -38,7 +38,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
-#ifdef SERIAL_DEBUG
+#if 0 //def SERIAL_DEBUG
 if ((packet_count % 100) == 0)
 {  
   serial_debug.print("packet count: ");
