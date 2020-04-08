@@ -40,24 +40,12 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
  
 #ifdef SERIAL_DEBUG
-if ((packet_count % 100) == 0)
-{  
   serial_debug.print("packet count: ");
   serial_debug.println(packet_count, DEC);
   serial_debug.print("dropped packet count: ");
   serial_debug.println(dropped_packet_count, DEC);
   serial_debug.print("timeout count: ");
   serial_debug.println(watchdog_count);
-  
-  uint8_t databytes[sizeof(update_crc_data_packet)];
-  memcpy((void *)&databytes, (void *)&update_crc_data_packet, sizeof(update_crc_data_packet));
-  for (debug_index = 0; debug_index < sizeof(update_crc_data_packet); debug_index++)
-  {
-    serial_debug.print(" ");
-    serial_debug.print(databytes[debug_index], HEX);
-  }
-  serial_debug.println("  done with bytes");
-}
 #endif
   if (watchdog_exceeded == true)
   {
