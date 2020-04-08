@@ -15,12 +15,12 @@ HardwareSerial &serial_ui = Serial;
 
 uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
-uint32_t send_interval_ms = 100;  // delay between sending data packets. Could extend by 50msec watchdog timeout though, just do not send faster than this pace
+uint32_t send_interval_ms = 1000;  // delay between sending data packets. Could extend by 50msec watchdog timeout though, just do not send faster than this pace
 uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
 uint8_t inByte;                   // store each byte read
 int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 
-uint32_t watchdog_max_ms = 50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
+uint32_t watchdog_max_ms = 2000; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool watchdog_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
@@ -38,6 +38,8 @@ uint8_t command_bytes[sizeof(command_packet_def)];
 };
 
 command_packet_union command_packet_u;
+
+extern command_packet_def command_packet_from_serial;
 
 int serialHalInit(void)
 {
@@ -71,14 +73,12 @@ int serialHalGetData(void)
       incoming_index = 0;
       watchdog_active = false;
 
-      memcpy((void *)&comm.public_command_packet, (void *)&command_packet_u.command_packet, sizeof(comm.public_command_packet));
-      // clear alarm bits
-      comm.public_command_packet.alarm_bits &= ~(1 << ALARM_DROPPED_PACKET);
+      memcpy((void *)&command_packet_from_serial, (void *)&command_packet_u.command_packet, sizeof(command_packet_from_serial));
 #ifdef SERIAL_DEBUG
       serial_debug.print("Received from Rpi: 0x");
-      serial_debug.print(comm.public_command_packet.sequence_count, HEX);
+      serial_debug.print(command_packet_from_serial.sequence_count, HEX);
       serial_debug.print(" 0x");
-      serial_debug.println(comm.public_command_packet.crc, HEX);
+      serial_debug.println(command_packet_from_serial.crc, HEX);
       serial_debug.println(" ");
 #endif      
       return HAL_OK;
