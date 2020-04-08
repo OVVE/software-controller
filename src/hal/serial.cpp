@@ -20,9 +20,9 @@ uint16_t bytesSent;               // Serial.write() returns this - we should inc
 uint8_t inByte;                   // store each byte read
 int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 
-uint32_t watchdog_max_ms = 70; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
+uint32_t watchdog_max_ms = 2000; //70; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
 uint32_t watchdog_start_ms;       // save the watchdog start time
-bool watchdog_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
+bool read_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
 bool clear_input = false;         // if we get a bad packet (wrong sequence id or crc) set this to true and trash input buffer just before sending next data packet
 
@@ -58,6 +58,10 @@ int serialHalInit(void)
 
 int serialHalGetData(void)
 {
+  if (read_active != true)
+  {
+    return HAL_IN_PROGRESS;
+  }
   // change to while if reading all the bytes currently available
   if (serial_ui.available())
   {       
@@ -71,7 +75,7 @@ int serialHalGetData(void)
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
       incoming_index = 0;
-      watchdog_active = false;
+      read_active = false;
       watchdog_exceeded = false;
 
       memcpy((void *)&command_packet_from_serial, (void *)&command_packet_u.command_packet, sizeof(command_packet_from_serial));
@@ -85,7 +89,7 @@ int serialHalGetData(void)
       return HAL_OK;
     } 
   }
-  if (watchdog_active == true)
+  if (read_active == true)
   {
     if ((millis() - watchdog_start_ms) > watchdog_max_ms)
     {
@@ -95,7 +99,7 @@ int serialHalGetData(void)
       serial_debug.print("first byte: 0x");
       serial_debug.println(command_packet_u.command_packet.sequence_count, HEX);
 #endif        
-      watchdog_active = false; 
+      read_active = false; 
       watchdog_exceeded = true; 
       incoming_index = 0;
       return HAL_OK;        
@@ -107,7 +111,7 @@ int serialHalGetData(void)
 int serialHalSendData()
 {
   current_send_ms = millis();
-  if ((current_send_ms - last_send_ms) >= send_interval_ms && watchdog_active != true)
+  if ((current_send_ms - last_send_ms) >= send_interval_ms && read_active != true)
   {
     if (clear_input == true)
     {
@@ -139,7 +143,7 @@ int serialHalSendData()
     serial_debug.print("watchdog_start_ms initialized: ");
     serial_debug.println(watchdog_start_ms, DEC);
 #endif    
-    watchdog_active = true;
+    read_active = true;
     return HAL_OK;
   }
   return HAL_IN_PROGRESS;
