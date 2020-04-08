@@ -1,7 +1,7 @@
 //
 // Link Module
 //
-#include <Arduino.h>
+#include <stdint.h>
 #include <FastCRC.h>
 #include "../pt/pt.h"
 #include "../modules/link.h"
