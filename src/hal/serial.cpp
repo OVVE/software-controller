@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include <stdint.h>
 
 #include "../pt/pt.h"
 #include "../hal/hal.h"
