@@ -38,7 +38,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
-#if 0 //def SERIAL_DEBUG
+ 
+#ifdef SERIAL_DEBUG
 if ((packet_count % 100) == 0)
 {  
   serial_debug.print("packet count: ");
@@ -117,7 +118,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   serial_debug.println(comm.public_data_packet.crc, DEC);
 #endif    
   memcpy((void *)&update_crc_data_packet, (void *)&comm.public_data_packet, sizeof(update_crc_data_packet));
-  packet_count++;
+  packet_count++;    
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
   //}    
   PT_RESTART(pt);
