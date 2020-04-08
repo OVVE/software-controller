@@ -7,7 +7,7 @@
 
 #define BAUD_RATE 38400
 
-//#ifdef SERIAL_DEBUG
+#ifdef SERIAL_DEBUG
 HardwareSerial &serial_debug = Serial1;
 #endif
 
@@ -20,7 +20,7 @@ uint16_t bytesSent;               // Serial.write() returns this - we should inc
 uint8_t inByte;                   // store each byte read
 int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 
-uint32_t watchdog_max_ms = 50; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
+uint32_t watchdog_max_ms = 70; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool watchdog_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
@@ -91,7 +91,7 @@ int serialHalGetData(void)
     {
 #ifdef SERIAL_DEBUG
       serial_debug.print("!!!Watchdog timeout, bytes received count: ");
-      serial_debug.println(incoming_index + 1, DEC);
+      serial_debug.println(incoming_index, DEC);
       serial_debug.print("first byte: 0x");
       serial_debug.println(command_packet_u.command_packet.sequence_count, HEX);
 #endif        
@@ -107,7 +107,7 @@ int serialHalGetData(void)
 int serialHalSendData()
 {
   current_send_ms = millis();
-  if ((current_send_ms - last_send_ms) >= send_interval_ms)
+  if ((current_send_ms - last_send_ms) >= send_interval_ms && watchdog_active != true)
   {
     if (clear_input == true)
     {
@@ -134,6 +134,11 @@ int serialHalSendData()
     sequence_count++;
     last_send_ms = current_send_ms;
     watchdog_start_ms = millis();
+    incoming_index = 0; // set this for incoming bytes
+#ifdef SERIAL_DEBUG
+    serial_debug.print("watchdog_start_ms initialized: ");
+    serial_debug.println(watchdog_start_ms, DEC);
+#endif    
     watchdog_active = true;
     return HAL_OK;
   }
