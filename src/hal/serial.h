@@ -2,7 +2,7 @@
 #ifndef __SERIAL_HAL_H__
 #define __SERIAL_HAL_H__
 
-#define SERIAL_DEBUG
+//#define SERIAL_DEBUG
 
 #include "../hal/hal.h"
 
