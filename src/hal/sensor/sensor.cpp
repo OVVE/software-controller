@@ -8,7 +8,7 @@
 
 
 // The following function initializes Timer 5 to do pressure and flow sensor data collection
-int sensorHalInit(void)
+int16_t sensorHalInit(void)
 {
   // Sensor timer
   TCCR5A=0; // set timer control registers
@@ -22,31 +22,34 @@ int sensorHalInit(void)
 
 
 //--------------------------------------------------------------------------------------------------
-int pSum; // pressure data accumulator
+int16_t pSum; // pressure data accumulator
 // This routine reads the pressure value as a voltage off the analog pin and inserts it into the filter
 void pressureSensorHalFetch(){
-  int pIn;  // pressure value from sensor.
+  int16_t pIn;  // pressure value from sensor.
   pIn=analogRead(PRESSURE_SENSE_PIN);
   pSum = pSum-(pSum>>4)+pIn; // filter
 }
 
 // This routine returns the pressure value out of the filter
-int pressureSensorHalGetValue(int *value){
-  *value = pSum>>4;
+int16_t pressureSensorHalGetValue(int16_t *value){
+  int32_t temp = pSum>>4;
+  int32_t pascals = ((temp * 217L) - 110995L)>>2;	// convert to Pascals
+  int32_t u100umH2O = (pascals * 4177L)>>12;		// convert Pascals to 0.1mmH2O
+  *value = (int16_t)u100umH2O;						// return as 16 bit signed int
   return HAL_OK;
 }
 
 
 //--------------------------------------------------------------------------------------------------
-int fSum; // flow sensor data accumulator
+int16_t fSum; // flow sensor data accumulator
 // This routine reads the flow sensor value as a voltage off the analog pin and inserts it into the filter
 void airflowSensorHalFetch(){
-  int fIn;  // pressure value from sensor.
+  int16_t fIn;  // pressure value from sensor.
   fIn=analogRead(FLOW_SENSE_PIN);
   fSum = fSum-(fSum>>3)+fIn; // filter
 }
 // This routine returns the flow sensor value out of the filter
-int airflowSensorHalGetValue(int *value){
+int16_t airflowSensorHalGetValue(int16_t *value){
   *value = fSum>>3;
   return HAL_OK;
 }
@@ -61,7 +64,7 @@ int airflowSensorHalGetValue(int *value){
 //  The Posifa PMF4103V flow sensor has a response time of 5ms. Currently sampling every 10ms and
 //    running through a /8 filter
 //  For now, I have the serial print triggering every second.
-int timer5Count=0;
+int16_t timer5Count=0;
 ISR(TIMER5_COMPA_vect){
   timer5Count++;
   if((timer5Count%10)==1){
@@ -70,4 +73,8 @@ ISR(TIMER5_COMPA_vect){
   if((timer5Count%20)==2){
     airflowSensorHalFetch();
   }
+  if(timer5Count==20){
+	  timer5Count=0;
+  }
+
 }
