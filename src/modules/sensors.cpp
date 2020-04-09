@@ -19,23 +19,14 @@ static struct pt sensorsPressureThread;
 static struct pt sensorsAirFlowThread;
 static struct pt sensorsBatteryThread;
 
-unsigned long last_debug_time;
+uint32_t last_debug_time;
 
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-
-  int rawPressure;
-  pressureSensorHalGetValue(&rawPressure);
-  long temp = rawPressure;
-
-  long pascals = ((temp * 217L) - 110995L)>>2;	// convert to Pascals
-  long u100umH2O = (pascals * 4177L)>>12;				// convert Pascals to 0.1mmH2O
-  sensors.currentPressure = u100umH2O;					// set in public sensor structure
-
-//  sensors.currentPressure = pascals;					// set in public sensor structure
-
-
+  int16_t rwPressure;						// pressure in real world units (tenths of mms of H2O)
+  pressureSensorHalGetValue(&rwPressure);	// get pressure
+  sensors.currentPressure = rwPressure;		// store in public sensor structure
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -43,11 +34,9 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-  
-  int rawAirflow;
-  airflowSensorHalGetValue(&rawAirflow);
-  sensors.currentFlow = rawAirflow;
-
+  int16_t rwAirflow;						// airflow in real world units 
+  airflowSensorHalGetValue(&rwAirflow);		// TODO: right now, not returning real world units, just ADC value
+  sensors.currentFlow = rwAirflow;			// store in public sensor structure
   PT_RESTART(pt);
   PT_END(pt);
 }
