@@ -64,6 +64,7 @@ if ((packet_count % 100) == 0)
     watchdog_count++;    
     watchdog_exceeded = false;
     clear_input = true;
+    comm.public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
   }
   else
   {
@@ -75,6 +76,7 @@ if ((packet_count % 100) == 0)
       serial_debug.println(command_packet_from_serial.sequence_count, DEC);
 #endif    
       clear_input = true;
+      comm.public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
     }
     else
     {
@@ -86,6 +88,7 @@ if ((packet_count % 100) == 0)
       if (command_packet_from_serial.crc != calc_crc)
       {
         dropped_packet_count++;
+        comm.public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
 #ifdef SERIAL_DEBUG
         serial_debug.print("bad CRC 0x ");
         serial_debug.println(command_packet_from_serial.crc, HEX);
@@ -94,6 +97,8 @@ if ((packet_count % 100) == 0)
       }
       else
       {
+        comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
+        comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
         memcpy((void *)&comm.public_command_packet, (void *)&command_packet_from_serial, sizeof(comm.public_command_packet));
 #ifdef SERIAL_DEBUG
         serial_debug.print("Successful packet received CRC from command packet: ");
