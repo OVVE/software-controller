@@ -26,7 +26,7 @@ jobs:
       
     # Add Arduino CLI Path
     - name: Add Arduino CLI to PATH
-      run: export PATH=$PATH:/home/runner/work/software-controller/software-controller/bin
+      run: export PATH=$PATH:/home/runner/work/software-controller/software-controller/bin && $PATH
     
     # Print Current Path
     - name: Print current path and contents
