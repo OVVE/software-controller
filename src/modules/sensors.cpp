@@ -3,9 +3,11 @@
 //
 
 #include "../pt/pt.h"
+#include <arduino.h>
 
 #include "../hal/sensor/battery.h"
 #include "../hal/sensor/sensor.h"
+#include "../hal/timer.h"
 
 #include "../modules/module.h"
 #include "../modules/sensors.h"
@@ -18,12 +20,17 @@ static struct pt sensorsThread;
 static struct pt sensorsPressureThread;
 static struct pt sensorsAirFlowThread;
 static struct pt sensorsBatteryThread;
+static struct timer pressureTimer;
+static struct timer airflowTimer;
 
 uint32_t last_debug_time;
 
+#define PRESSURE_SAMPLING_RATE 50000
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
+  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
+  PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer)!=HAL_IN_PROGRESS);
   int16_t rwPressure;						// pressure in real world units (tenths of mms of H2O)
   pressureSensorHalGetValue(&rwPressure);	// get pressure
   sensors.currentPressure = rwPressure;		// store in public sensor structure
@@ -31,9 +38,12 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   PT_END(pt);
 }
 
+#define AIRFLOW_SAMPLING_RATE 50000
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
+  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
+  PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer)!=HAL_IN_PROGRESS);
   int16_t rwAirflow;						// airflow in real world units 
   airflowSensorHalGetValue(&rwAirflow);		// TODO: right now, not returning real world units, just ADC value
   sensors.currentFlow = rwAirflow;			// store in public sensor structure

@@ -32,9 +32,9 @@ struct sensors {
 extern struct sensors sensors;
 
 // TODO: Doc
-int sensorsModuleInit(void);
+int16_t sensorsModuleInit(void);
 
 // TODO: Doc
-int sensorsModuleRun(void);
+int16_t sensorsModuleRun(void);
 
 #endif /* __SENSORS_MODULE_H__ */

@@ -1,6 +1,8 @@
 
 #include "../../hal/hal.h"
 #include "../../hal/sensor/sensor.h"
+#include <arduino.h>
+#include <util/atomic.h>
 
 // Sensor pin defines
 #define FLOW_SENSE_PIN     A0
@@ -8,7 +10,7 @@
 
 
 // The following function initializes Timer 5 to do pressure and flow sensor data collection
-int16_t sensorHalInit(void)
+int sensorHalInit(void)
 {
   // Sensor timer
   TCCR5A=0; // set timer control registers
@@ -31,8 +33,11 @@ void pressureSensorHalFetch(){
 }
 
 // This routine returns the pressure value out of the filter
-int16_t pressureSensorHalGetValue(int16_t *value){
-  int32_t temp = pSum>>4;
+int pressureSensorHalGetValue(int16_t *value){
+  int32_t temp;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+	temp = pSum>>4;
+  }
   int32_t pascals = ((temp * 217L) - 110995L)>>2;	// convert to Pascals
   int32_t u100umH2O = (pascals * 4177L)>>12;		// convert Pascals to 0.1mmH2O
   *value = (int16_t)u100umH2O;						// return as 16 bit signed int
@@ -49,8 +54,10 @@ void airflowSensorHalFetch(){
   fSum = fSum-(fSum>>3)+fIn; // filter
 }
 // This routine returns the flow sensor value out of the filter
-int16_t airflowSensorHalGetValue(int16_t *value){
-  *value = fSum>>3;
+int airflowSensorHalGetValue(int16_t *value){
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+    *value = fSum>>3;
+  }
   return HAL_OK;
 }
 
