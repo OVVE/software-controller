@@ -8,10 +8,10 @@
 #define BAUD_RATE 38400
 
 #ifdef SERIAL_DEBUG
-HardwareSerial &serial_debug = Serial1;
+HardwareSerial &serial_debug = Serial;
 #endif
 
-HardwareSerial &serial_ui = Serial;
+HardwareSerial &serial_ui = Serial1;
 
 uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
@@ -51,7 +51,7 @@ int serialHalInit(void)
   } while (serial_ui.available() > 0);
   
 #ifdef SERIAL_DEBUG
-  serial_debug.begin(BAUD_RATE);
+  serial_debug.begin(115200);
 #endif  
   return HAL_OK;
 }

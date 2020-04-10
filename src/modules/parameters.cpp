@@ -14,6 +14,10 @@
 #include "../modules/control.h"
 #include "../modules/parameters.h"
 
+#define DEBUG
+#define DEBUG_MODULE "parameters"
+#include "../util/debug.h"
+
 #define PARAMETERS_BANK_ADDRESS 0
 #define PARAMETERS_BANK(b) (STORAGE_HAL_PAGE_SIZE * \
                             (1 + (sizeof(struct parameters) + \
@@ -65,6 +69,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
   while (1) {
     // TODO: Determine all the conditions that update the parameters; placeholder for now
     PT_WAIT_UNTIL(pt, differentLinkAndParameters());
+    DEBUG_PRINT("different parameters found!");
     
     tmpParameters[0] = parameters;
     if (differentLinkAndParameters()) {
@@ -87,9 +92,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       PT_WAIT_UNTIL(pt, storageHalRead(PARAMETERS_BANK(!parametersAddress),
                                        &tmpParameters[1],
                                        sizeof(tmpParameters[1])) != HAL_IN_PROGRESS);
-      if (!memcmp(&tmpParameters[0], &tmpParameters[1], sizeof(tmpParameters[0]))) {
-        // TODO: Error on parameter mismatch after read-back
-      } else {
+
         // Write back new parameters address to get the data from the new bank next time
         parametersAddress = !parametersAddress;
         PT_WAIT_UNTIL(pt, storageHalWrite(PARAMETERS_BANK_ADDRESS,
@@ -97,7 +100,8 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
                                           sizeof(parametersAddress)) != HAL_IN_PROGRESS);
         // Finally, update current operating parameters
         parameters = tmpParameters[0];
-      }
+        DEBUG_PRINT("parameters updated!");
+
     }
   }
   
