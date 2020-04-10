@@ -1,0 +1,49 @@
+name: CI for Microcontroller
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but for the `master` and `develop` branch
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    # Install Arduino CLI for uploading Code data to Arduino MEGA
+    - name: Install Arduino CLI
+      run: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+      
+    # Add Arduino CLI Path
+    - name: Add Arduino CLI to PATH
+      run: export PATH=$PATH:/home/runner/work/software-controller/software-controller/bin && echo $PATH
+    
+    # Print Current Path
+    - name: Print current path and contents
+      run: pwd && ls
+    
+    # Print Contents of Arduino CLI installation path
+    - name: Print Arduino CLI install Path
+      run: ls /home/runner/work/software-controller/software-controller/bin
+    
+    # Update Arduino Core information
+    - name: Update Arduino Core information
+      run: ./bin/arduino-cli core update-index
+    
+    # Install tools for the Arduino MEGA board
+    - name: Install Arduino Board tools
+      run: ./bin/arduino-cli core install arduino:avr
+    
+    # Compile the Arduino code and make sure it runs ok
+    - name: Compile Arduino code
+      run: ./bin/arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 software-controller.ino -v
