@@ -46,4 +46,4 @@ jobs:
     
     # Compile the Arduino code and make sure it runs ok
     - name: Compile Arduino code
-      run: ./bin/arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 software-controller.ino
+      run: ./bin/arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 software-controller.ino -v
