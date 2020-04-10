@@ -5,8 +5,17 @@
 #include "modules/control.h"
 #include "modules/parameters.h"
 
+#define DEBUG
+#define DEBUG_MODULE "main"
+#include "util/debug.h"
+
 void mainSetup(void)
 {
+  DEBUG_BEGIN;
+  
+  // TODO: cleanup prints
+  DEBUG_PRINT("setup");
+
   // TODO: Handle failure conditions
   controlModuleInit();
   sensorsModuleInit();
@@ -16,6 +25,8 @@ void mainSetup(void)
 
 void mainLoop(void)
 {
+  // TODO: Clean up prints
+  DEBUG_PRINT_EVERY(10000, "in main loop");
   // Run all modules in RR; take specified actions in the event of failure
   
   if (controlModuleRun() != MODULE_OK) {
