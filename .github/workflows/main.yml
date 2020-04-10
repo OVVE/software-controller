@@ -42,7 +42,7 @@ jobs:
     
     # Install tools for the Arduino MEGA board
     - name: Install Arduino Board tools
-      run: ./bin/arduino-cli core install arduino:avr:mega:cpu=atmega2560
+      run: ./bin/arduino-cli core install arduino:avr:mega
     
     # Compile the Arduino code and make sure it runs ok
     - name: Compile Arduino code
