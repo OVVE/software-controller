@@ -6,6 +6,7 @@
 #include "../pt/pt.h"
 #include "../modules/link.h"
 #include "../modules/module.h"
+#include "../modules/parameters.h"
 #include "../hal/serial.h"
 #include <Arduino.h>
 
@@ -39,7 +40,7 @@ void updateFromCommandPacket()
   comm.startVentilation = (comm.public_command_packet.mode_value & MODE_START_STOP) != 0x00;
 
   // check for a conflict - more than one mode - not the best logic going forward
-  if (comm.ventilationMode = (MODE_NON_ASSIST | MODE_ASSIST | MODE_SIM))
+  if (comm.ventilationMode != (MODE_ASSIST)&0x7f || comm.ventilationMode != (MODE_NON_ASSIST)&0x7f || comm.ventilationMode != (MODE_SIM)&0x7f)
   {
     comm.public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
   }
@@ -61,7 +62,29 @@ void updateFromCommandPacket()
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
 void updateDataPacket()
 {
+/*
+ struct parameters {
+  // Variables
+  uint8_t  startVentilation;
+  uint8_t  ventilationMode;
+  uint32_t volumeRequested;
+  uint32_t respirationRateRequested;
+  uint32_t ieRatioRequested;
   
+  // Alarms
+  int8_t   parametersInvalidAlarm;
+};
+
+extern struct parameters parameters; 
+*/
+  if (comm.startVentilation)
+  {
+    comm.public_data_packet.mode_value |= MODE_START_STOP;
+  }
+  else
+  {
+    comm.public_data_packet.mode_value = comm.public_data_packet.mode_value & ~MODE_START_STOP;
+  }  
 }
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
