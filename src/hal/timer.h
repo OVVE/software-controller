@@ -7,9 +7,9 @@
 #include "../hal/hal.h"
 
 // Time units
-#define SEC   * 1000000
-#define MSEC  * 1000
-#define USEC  * 1
+#define SEC   * 1000000UL
+#define MSEC  * 1000UL
+#define USEC  * 1UL
 
 struct timer {
   uint32_t start;
