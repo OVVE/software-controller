@@ -12,6 +12,10 @@
 #include "../modules/module.h"
 #include "../modules/sensors.h"
 
+//#define DEBUG
+//#define DEBUG_MODULE "sensor"
+//#include "util/debug.h"
+
 // Public variables
 struct sensors sensors;
 
@@ -32,10 +36,10 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
   timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
-  PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer)!=HAL_IN_PROGRESS);
   int16_t rwPressure;						// pressure in real world units (tenths of mms of H2O)
   pressureSensorHalGetValue(&rwPressure);	// get pressure
   sensors.currentPressure = rwPressure;		// store in public sensor structure
+  PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -45,10 +49,10 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
   timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
-  PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer)!=HAL_IN_PROGRESS);
   int16_t rwAirflow;						// airflow in real world units (0.01 SLM) 
   airflowSensorHalGetValue(&rwAirflow);		// get airflow
   sensors.currentFlow = rwAirflow;			// store in public sensor structure
+  PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -58,10 +62,10 @@ static PT_THREAD(sensorsAirVolumeThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
   timerHalBegin(&airVolumeTimer, AIRVOLUME_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
-  PT_WAIT_UNTIL(pt, timerHalRun(&airVolumeTimer)!=HAL_IN_PROGRESS);
   int16_t rwAirVolume;						// air volume in real world units (ml)
   airVolumeSensorHalGetValue(&rwAirVolume);	// get air volume
   sensors.currentVolume = rwAirVolume;		// store in public sensor structure
+  PT_WAIT_UNTIL(pt, timerHalRun(&airVolumeTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
 }
