@@ -19,13 +19,15 @@ struct sensors sensors;
 static struct pt sensorsThread;
 static struct pt sensorsPressureThread;
 static struct pt sensorsAirFlowThread;
+static struct pt sensorsAirVolumeThread;
 static struct pt sensorsBatteryThread;
 static struct timer pressureTimer;
 static struct timer airflowTimer;
+static struct timer airVolumeTimer;
 
 uint32_t last_debug_time;
 
-#define PRESSURE_SAMPLING_RATE 50000
+#define PRESSURE_SAMPLING_RATE 20000
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -38,15 +40,28 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   PT_END(pt);
 }
 
-#define AIRFLOW_SAMPLING_RATE 50000
+#define AIRFLOW_SAMPLING_RATE 20000
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
   timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
   PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer)!=HAL_IN_PROGRESS);
-  int16_t rwAirflow;						// airflow in real world units 
-  airflowSensorHalGetValue(&rwAirflow);		// TODO: right now, not returning real world units, just ADC value
+  int16_t rwAirflow;						// airflow in real world units (0.01 SLM) 
+  airflowSensorHalGetValue(&rwAirflow);		// get airflow
   sensors.currentFlow = rwAirflow;			// store in public sensor structure
+  PT_RESTART(pt);
+  PT_END(pt);
+}
+
+#define AIRVOLUME_SAMPLING_RATE 20000
+static PT_THREAD(sensorsAirVolumeThreadMain(struct pt* pt))
+{
+  PT_BEGIN(pt);
+  timerHalBegin(&airVolumeTimer, AIRVOLUME_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
+  PT_WAIT_UNTIL(pt, timerHalRun(&airVolumeTimer)!=HAL_IN_PROGRESS);
+  int16_t rwAirVolume;						// air volume in real world units (ml)
+  airVolumeSensorHalGetValue(&rwAirVolume);	// get air volume
+  sensors.currentVolume = rwAirVolume;		// store in public sensor structure
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -65,7 +80,7 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
 
-  PT_WAIT_UNTIL(pt, (millis()-last_debug_time)>250);
+  PT_WAIT_UNTIL(pt, (millis()-last_debug_time)>100);
 
   last_debug_time=millis();
 
@@ -77,6 +92,10 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
 
+  if (!PT_SCHEDULE(sensorsAirVolumeThreadMain(&sensorsAirVolumeThread))) {
+    PT_EXIT(pt);
+  }
+
   if (!PT_SCHEDULE(sensorsBatteryThreadMain(&sensorsBatteryThread))) {
     PT_EXIT(pt);
   }
@@ -85,6 +104,8 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
   Serial.print(sensors.currentPressure);
   Serial.print("    ");
   Serial.print(sensors.currentFlow);
+  Serial.print("    ");
+  Serial.print(sensors.currentVolume);
   Serial.println();
 
 

@@ -46,20 +46,45 @@ int pressureSensorHalGetValue(int16_t *value){
 
 
 //--------------------------------------------------------------------------------------------------
-int16_t fSum; // flow sensor data accumulator
+#define ADC_1V_OFFSET  204     // 1V offset removed
+#define FLOW_SENSOR_SCALING 27 // should have been 24.42 if the sensor and ADC were 100% to the spec
+int16_t fSum;    // flow sensor data accumulator
+int16_t fVolSum; // volume accumulator (1 unit is 1/12ml), max stored value >2.7L
 // This routine reads the flow sensor value as a voltage off the analog pin and inserts it into the filter
+// The flow gets integrated into the Volume accumulator
 void airflowSensorHalFetch(){
   int16_t fIn;  // pressure value from sensor.
-  fIn=analogRead(FLOW_SENSE_PIN);
+  fIn=analogRead(FLOW_SENSE_PIN) - ADC_1V_OFFSET; // 1V offset removed
   fSum = fSum-(fSum>>3)+fIn; // filter
+  // get precise volume : integrate flow at every sample
+  int16_t f = (fSum>>3)*FLOW_SENSOR_SCALING; // flow in 0.01 SLM
+  fVolSum += f/50; // /60*1000/1000/100*10 = /600 = /(50*12)
+    // /60 --> convert SLM to liters per second
+    // *1000 --> convert liters to cubic centimeters
+    // /1000 --> we count time in milliseconds
+    // /100  --> convert 0.01 mlps to 1 mlps
+    // *mt_delta --> current measurement time delta in milliseconds
+
 }
 // This routine returns the flow sensor value out of the filter
 int airflowSensorHalGetValue(int16_t *value){
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-    *value = fSum>>3;
-  }
+    *value = (fSum>>3)*FLOW_SENSOR_SCALING; // flow in 0.01 SLM
+  }  
   return HAL_OK;
 }
+
+// This routine returns the integrated volume value
+int airVolumeSensorHalGetValue(int16_t *value){
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+    *value = fVolSum/12; // volume in ml
+  }
+}
+
+void resetVolume() {
+  fVolSum = 0;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 // This interrupt service routine is called every 0.5ms in order to handle timed
