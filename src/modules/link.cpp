@@ -34,24 +34,37 @@ uint32_t packet_count = 0;
 
 uint16_t debug_index;
 
+uint8_t tmpMode;
+
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
 {
   comm.startVentilation = (comm.public_command_packet.mode_value & MODE_START_STOP) != 0x00;
 
+  tmpMode = 0x7f & comm.public_command_packet.mode_value;
+  
   // check for a conflict - more than one mode - not the best logic going forward
-  if (comm.ventilationMode != (MODE_ASSIST)&0x7f || comm.ventilationMode != (MODE_NON_ASSIST)&0x7f || comm.ventilationMode != (MODE_SIM)&0x7f)
+  if (tmpMode != MODE_ASSIST || tmpMode != MODE_NON_ASSIST || tmpMode != MODE_SIM)
   {
     comm.public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
   }
   else
   {    
-    comm.ventilationMode = comm.public_command_packet.mode_value;
+    comm.ventilationMode = tmpMode;
     comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
   }
   comm.volumeRequested = comm.public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= comm.public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = comm.public_command_packet.ie_ratio_set;
+#define SET_VALUES
+#ifdef SET_VALUES
+  comm.public_data_packet.tidal_volume_set = comm.public_command_packet.tidal_volume_set;
+  comm.public_data_packet.respiratory_rate_set = comm.public_command_packet.respiratory_rate_set;
+  comm.public_data_packet.ie_ratio_set = comm.public_command_packet.ie_ratio_set;
+  comm.public_data_packet.tidal_volume_measured = 100;
+  comm.public_data_packet.respiratory_rate_measured = 200;
+  comm.public_data_packet.ie_ratio_set = 300; 
+#endif  
   
   // Alarms
   comm.droppedPacketAlarm = (comm.public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
