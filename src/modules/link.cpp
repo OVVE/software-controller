@@ -33,6 +33,37 @@ uint32_t packet_count = 0;
 
 uint16_t debug_index;
 
+// update variables for modules to read after good sequence and crc from command packet
+void updateFromCommandPacket()
+{
+  comm.startVentilation = (comm.public_command_packet.mode_value & MODE_START_STOP) != 0x00;
+
+  // check for a conflict - more than one mode - not the best logic going forward
+  if (comm.ventilationMode = (MODE_NON_ASSIST | MODE_ASSIST | MODE_SIM))
+  {
+    comm.public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
+  }
+  else
+  {    
+    comm.ventilationMode = comm.public_command_packet.mode_value;
+    comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
+  }
+  comm.volumeRequested = comm.public_command_packet.tidal_volume_set;
+  comm.respirationRateRequested= comm.public_command_packet.respiratory_rate_set;
+  comm.ieRatioRequested = comm.public_command_packet.ie_ratio_set;
+  
+  // Alarms
+  comm.droppedPacketAlarm = (comm.public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
+  comm.crcErrorAlarm = (comm.public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
+  comm.unsupportedPacketVersionAlarm = (comm.public_command_packet.alarm_bits & ALARM_PACKET_VERSION) != 0x00;
+}
+
+// get data from modules to be sent back to ui. this is called just before sequence count update and crc set
+void updateDataPacket()
+{
+  
+}
+
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -100,6 +131,7 @@ if ((packet_count % 100) == 0)
         comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
         comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
         memcpy((void *)&comm.public_command_packet, (void *)&command_packet_from_serial, sizeof(comm.public_command_packet));
+        updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
         serial_debug.print("Successful packet received CRC from command packet: ");
         serial_debug.println(comm.public_command_packet.crc, DEC);
