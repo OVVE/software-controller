@@ -1,7 +1,7 @@
 
 #include "../../hal/hal.h"
 #include "../../hal/sensor/sensor.h"
-#include <arduino.h>
+#include <Arduino.h>
 #include <util/atomic.h>
 
 // Sensor pin defines
@@ -16,7 +16,7 @@ int sensorHalInit(void)
   TCCR5A=0; // set timer control registers
   TCCR5B=0x0A;  // set timer to clear timer on compare (CTC), and prescaler to divide by 8
   TCNT5=0;  // initialize counter to 0
-  OCR5A= 1000;  // Set interrupt to 2khz
+  OCR5A= 10000;  // Set interrupt to 2khz
   TIMSK5 |= 0x02; // enable timer compare interrupt
 
   return HAL_OK;
@@ -95,18 +95,12 @@ void resetVolume() {
 //    Currently sampling every 5ms and running through a /16 filter.
 //  The Posifa PMF4103V flow sensor has a response time of 5ms. Currently sampling every 10ms and
 //    running through a /8 filter
-//  For now, I have the serial print triggering every second.
 int16_t timer5Count=0;
 ISR(TIMER5_COMPA_vect){
   timer5Count++;
-  if((timer5Count%10)==1){
-    pressureSensorHalFetch();
-  }
-  if((timer5Count%20)==2){
+  pressureSensorHalFetch();
+  if(timer5Count==2){
     airflowSensorHalFetch();
+	timer5Count=0;
   }
-  if(timer5Count==20){
-	  timer5Count=0;
-  }
-
 }

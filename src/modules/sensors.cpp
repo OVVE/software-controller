@@ -3,7 +3,7 @@
 //
 
 #include "../pt/pt.h"
-#include <arduino.h>
+#include <Arduino.h>
 
 #include "../hal/sensor/battery.h"
 #include "../hal/sensor/sensor.h"
