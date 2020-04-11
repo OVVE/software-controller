@@ -25,8 +25,16 @@
 #define ALARM_UI_IE_RATIO_MISMATCH        0x08000000
 // bits 28 - 31 --
 
+// bit mask
+#define MODE_NON_ASSIST  0x00
+#define MODE_ASSIST      0x01
+#define MODE_SIM         0x02
 
-#define PACKET_VERSION 1
+// toggle bit for start stop
+#define MODE_START_STOP  0x80
+
+
+#define PACKET_VERSION 2
 
 typedef struct data_packet_def {
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
