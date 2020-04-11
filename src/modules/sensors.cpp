@@ -12,9 +12,9 @@
 #include "../modules/module.h"
 #include "../modules/sensors.h"
 
-//#define DEBUG
-//#define DEBUG_MODULE "sensor"
-//#include "util/debug.h"
+#define DEBUG
+#define DEBUG_MODULE "sensor"
+#include "../util/debug.h"
 
 // Public variables
 struct sensors sensors;
@@ -39,6 +39,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   int16_t rwPressure;						// pressure in real world units (tenths of mms of H2O)
   pressureSensorHalGetValue(&rwPressure);	// get pressure
   sensors.currentPressure = rwPressure;		// store in public sensor structure
+  DEBUG_PRINT_EVERY(20, "Pressure= %d mm H2O", rwPressure);
   PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
@@ -52,6 +53,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   int16_t rwAirflow;						// airflow in real world units (0.01 SLM) 
   airflowSensorHalGetValue(&rwAirflow);		// get airflow
   sensors.currentFlow = rwAirflow;			// store in public sensor structure
+  DEBUG_PRINT_EVERY(20, "Airflow= %d.%d SLM", rwAirflow/100, rwAirflow%100);
   PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
@@ -65,6 +67,7 @@ static PT_THREAD(sensorsAirVolumeThreadMain(struct pt* pt))
   int16_t rwAirVolume;						// air volume in real world units (ml)
   airVolumeSensorHalGetValue(&rwAirVolume);	// get air volume
   sensors.currentVolume = rwAirVolume;		// store in public sensor structure
+  DEBUG_PRINT_EVERY(20, "AirVolume= %d ml", rwAirVolume);
   PT_WAIT_UNTIL(pt, timerHalRun(&airVolumeTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
@@ -84,10 +87,6 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
 
-  PT_WAIT_UNTIL(pt, (millis()-last_debug_time)>100);
-
-  last_debug_time=millis();
-
   if (!PT_SCHEDULE(sensorsPressureThreadMain(&sensorsPressureThread))) {
     PT_EXIT(pt);
   }
@@ -104,15 +103,6 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
 
-  digitalWrite(LED_BUILTIN, digitalRead(LED_BUILTIN)^1);
-  Serial.print(sensors.currentPressure);
-  Serial.print("    ");
-  Serial.print(sensors.currentFlow);
-  Serial.print("    ");
-  Serial.print(sensors.currentVolume);
-  Serial.println();
-
-
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -126,14 +116,6 @@ int sensorsModuleInit(void)
   if (batterySensorHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
-
-  // Built-in LED initialization
-  pinMode(LED_BUILTIN, OUTPUT);
-  // Serial debug port
-  Serial.begin(38400);
-  Serial.print("Start");
-
-  last_debug_time = millis();
 
   PT_INIT(&sensorsThread);
   PT_INIT(&sensorsPressureThread);
