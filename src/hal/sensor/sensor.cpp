@@ -64,8 +64,8 @@ void airflowSensorHalFetch(){
     // /1000 --> we count time in milliseconds
     // /100  --> convert 0.01 mlps to 1 mlps
     // *mt_delta --> current measurement time delta in milliseconds
-
 }
+
 // This routine returns the flow sensor value out of the filter
 int airflowSensorHalGetValue(int16_t *value){
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
