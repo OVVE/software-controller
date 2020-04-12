@@ -19,13 +19,13 @@ static struct pt serialSendThread;
 
 uint16_t calc_crc;
 
-// copy the public data packet to this buffer because there might be changes
-// by other modules while serial.cpp is waiting to send this
-//data_packet_def update_crc_data_packet;
+// create an array of bytes for the transport mechanism (serial, sockets, etc.)
 uint8_t data_bytes[sizeof(data_packet_def)];
 uint16_t sizeof_data_bytes = sizeof(data_bytes);
+uint8_t command_bytes[sizeof(command_packet_def)];
+uint16_t sizeof_command_bytes = sizeof(command_bytes);
 
-command_packet_def command_packet_from_serial;
+command_packet_def command_packet;
 
 uint32_t watchdog_count = 0;
 uint32_t dropped_packet_count = 0;
@@ -110,7 +110,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
- 
+  
   if (watchdog_exceeded == true)
   {
     watchdog_count++;    
@@ -120,30 +120,31 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   }
   else
   {
-    if ((command_packet_from_serial.sequence_count != last_sequence_count))
+    memcpy((void *)&command_packet, (void *)command_bytes, sizeof(command_packet));
+    if ((command_packet.sequence_count != last_sequence_count))
     {
       dropped_packet_count++;
 #ifdef SERIAL_DEBUG
       SERIAL_DEBUG.print("unexpected sequence count: ");
-      SERIAL_DEBUG.println(command_packet_from_serial.sequence_count, DEC);
+      SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
       comm.public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
     }
     else
     {
-      calc_crc = CRC16.ccitt((uint8_t *)&command_packet_from_serial, sizeof(command_packet_from_serial) - 2);
+      calc_crc = CRC16.ccitt((uint8_t *)&command_packet, sizeof(command_packet) - 2);
 #ifdef SERIAL_DEBUG
       SERIAL_DEBUG.print("CRC calculated from command packet: ");
       SERIAL_DEBUG.println(calc_crc, DEC);
 #endif      
-      if (command_packet_from_serial.crc != calc_crc)
+      if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
         comm.public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("bad CRC 0x ");
-        SERIAL_DEBUG.println(command_packet_from_serial.crc, HEX);
+        SERIAL_DEBUG.println(command_packet.crc, HEX);
 #endif  
         clear_input = true;
       }
@@ -151,7 +152,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       {
         comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
         comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
-        memcpy((void *)&comm.public_command_packet, (void *)&command_packet_from_serial, sizeof(comm.public_command_packet));
+        memcpy((void *)&comm.public_command_packet, (void *)&command_packet, sizeof(comm.public_command_packet));
         updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("Successful packet received CRC from command packet: ");
