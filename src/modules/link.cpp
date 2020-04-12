@@ -3,14 +3,20 @@
 // Link Module
 //
 #include <stdint.h>
+
+//#define USE_DUE
+#ifdef USE_DUE  // this crc16 header will not compile with DUE so use external lib fastcrc
 #include <FastCRC.h>
+FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
+#else
+#include <util/crc16.h>
+#endif
+
 #include "../pt/pt.h"
 #include "../modules/link.h"
 #include "../modules/module.h"
 #include "../modules/parameters.h"
 #include "../hal/serial.h"
-
-FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
 
 // Private Variables
 struct link comm;
@@ -29,6 +35,7 @@ uint8_t tmpMode;  // used for setting data for simulation
 // this will be used by module/link to send packets
 uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
 uint16_t last_sequence_count; // what to expect
+uint16_t crc_base;
 
 // Public Variables
 // shared with serial.cpp
@@ -38,6 +45,19 @@ uint8_t command_bytes[sizeof(command_packet_def)];
 uint16_t sizeof_command_bytes = sizeof(command_bytes);
 extern bool watchdog_exceeded;  // timeout waiting for number of received bytes (command packet)
 extern bool clear_input;        // if there are issues with command packet data then let serial know to clear the input buffer
+
+#ifndef USE_DUE
+uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
+{
+ crc_base = 0xFFFF;
+
+ while(byteLength--)
+ {
+   crc_base = _crc_xmodem_update(crc_base, (uint16_t)*bytes);
+ }
+ return(crc_base);
+}
+#endif
 
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
@@ -131,7 +151,12 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     }
     else
     {
+#ifdef USE_DUE
       calc_crc = CRC16.ccitt((uint8_t *)&command_packet, sizeof(command_packet) - 2);
+#else 
+      calc_crc = calc_crc_avrlib((uint8_t *)&command_packet, sizeof(command_packet) - 2);  
+#endif
+ 
 #ifdef SERIAL_DEBUG
       SERIAL_DEBUG.print("CRC calculated from command packet: ");
       SERIAL_DEBUG.println(calc_crc, DEC);
@@ -179,7 +204,12 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   ++sequence_count;
   comm.public_data_packet.sequence_count = sequence_count;
   comm.public_data_packet.packet_version = PACKET_VERSION;
-  comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
+#ifdef USE_DUE
+   comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);   
+#else  
+  comm.public_data_packet.crc = calc_crc_avrlib((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
+#endif
+
 #ifdef SERIAL_DEBUG
   SERIAL_DEBUG.print("Microcontroller sending sequence: ");
   SERIAL_DEBUG.print(sequence_count, DEC);
