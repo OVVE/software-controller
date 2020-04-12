@@ -18,27 +18,24 @@ static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
 
+// Private Variables
 uint16_t calc_crc;
-
-// create an array of bytes for the transport mechanism (serial, sockets, etc.)
-uint8_t data_bytes[sizeof(data_packet_def)];
-uint16_t sizeof_data_bytes = sizeof(data_bytes);
-uint8_t command_bytes[sizeof(command_packet_def)];
-uint16_t sizeof_command_bytes = sizeof(command_bytes);
-
 command_packet_def command_packet;
 
 uint32_t watchdog_count = 0;
 uint32_t dropped_packet_count = 0;
 uint32_t packet_count = 0;
-
 uint8_t tmpMode;  // used for setting data for simulation
-
 // this will be used by module/link to send packets
 uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
 uint16_t last_sequence_count; // what to expect
 
-// data shared with serial.cpp
+// Public Variables
+// shared with serial.cpp
+uint8_t data_bytes[sizeof(data_packet_def)];
+uint16_t sizeof_data_bytes = sizeof(data_bytes);
+uint8_t command_bytes[sizeof(command_packet_def)];
+uint16_t sizeof_command_bytes = sizeof(command_bytes);
 extern bool watchdog_exceeded;  // timeout waiting for number of received bytes (command packet)
 extern bool clear_input;        // if there are issues with command packet data then let serial know to clear the input buffer
 
