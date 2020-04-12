@@ -25,9 +25,6 @@ uint16_t calc_crc;
 data_packet_def update_crc_data_packet;
 command_packet_def command_packet_from_serial;
 
-#ifdef SERIAL_DEBUG
-extern HardwareSerial &serial_debug;
-#endif
 uint32_t watchdog_count = 0;
 uint32_t dropped_packet_count = 0;
 uint32_t packet_count = 0;
@@ -107,12 +104,12 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
  
 #ifdef SERIAL_DEBUG
-  serial_debug.print("packet count: ");
-  serial_debug.println(packet_count, DEC);
-  serial_debug.print("dropped packet count: ");
-  serial_debug.println(dropped_packet_count, DEC);
-  serial_debug.print("timeout count: ");
-  serial_debug.println(watchdog_count);
+  SERIAL_DEBUG.print("packet count: ");
+  SERIAL_DEBUG.println(packet_count, DEC);
+  SERIAL_DEBUG.print("dropped packet count: ");
+  SERIAL_DEBUG.println(dropped_packet_count, DEC);
+  SERIAL_DEBUG.print("timeout count: ");
+  SERIAL_DEBUG.println(watchdog_count);
 #endif
   if (watchdog_exceeded == true)
   {
@@ -127,8 +124,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     {
       dropped_packet_count++;
 #ifdef SERIAL_DEBUG
-      serial_debug.print("unexpected sequence count: ");
-      serial_debug.println(command_packet_from_serial.sequence_count, DEC);
+      SERIAL_DEBUG.print("unexpected sequence count: ");
+      SERIAL_DEBUG.println(command_packet_from_serial.sequence_count, DEC);
 #endif    
       clear_input = true;
       comm.public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
@@ -137,16 +134,16 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     {
       calc_crc = CRC16.ccitt((uint8_t *)&command_packet_from_serial, sizeof(command_packet_from_serial) - 2);
 #ifdef SERIAL_DEBUG
-      serial_debug.print("CRC calculated from command packet: ");
-      serial_debug.println(calc_crc, DEC);
+      SERIAL_DEBUG.print("CRC calculated from command packet: ");
+      SERIAL_DEBUG.println(calc_crc, DEC);
 #endif      
       if (command_packet_from_serial.crc != calc_crc)
       {
         dropped_packet_count++;
         comm.public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
 #ifdef SERIAL_DEBUG
-        serial_debug.print("bad CRC 0x ");
-        serial_debug.println(command_packet_from_serial.crc, HEX);
+        SERIAL_DEBUG.print("bad CRC 0x ");
+        SERIAL_DEBUG.println(command_packet_from_serial.crc, HEX);
 #endif  
         clear_input = true;
       }
@@ -157,8 +154,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
         memcpy((void *)&comm.public_command_packet, (void *)&command_packet_from_serial, sizeof(comm.public_command_packet));
         updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
-        serial_debug.print("Successful packet received CRC from command packet: ");
-        serial_debug.println(comm.public_command_packet.crc, DEC);
+        SERIAL_DEBUG.print("Successful packet received CRC from command packet: ");
+        SERIAL_DEBUG.println(comm.public_command_packet.crc, DEC);
 #endif           
       }          
     }
@@ -175,8 +172,8 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   comm.public_data_packet.packet_version = PACKET_VERSION;
   comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
 #ifdef SERIAL_DEBUG
-  serial_debug.print("CRC calculated and will be sent with next data packet: ");
-  serial_debug.println(comm.public_data_packet.crc, DEC);
+  SERIAL_DEBUG.print("CRC calculated and will be sent with next data packet: ");
+  SERIAL_DEBUG.println(comm.public_data_packet.crc, DEC);
 #endif    
   memcpy((void *)&update_crc_data_packet, (void *)&comm.public_data_packet, sizeof(update_crc_data_packet));
   packet_count++;    
