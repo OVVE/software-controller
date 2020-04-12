@@ -6,22 +6,23 @@
 #include "../hal/hal.h"
 #include "../hal/serial.h"
 
+// Private Variables
 uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
 uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
 uint8_t inByte;                   // store each byte read
 int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
-
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool read_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
-bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
-bool clear_input = false;         // if we get a bad packet (wrong sequence id or crc) set this to true and trash input buffer just before sending next data packet
 
+// Public Variables
 // this is the data bytes that correspond to data structures from link.cpp - serial.cpp sends/receives generic bytes just knowing the count and timeout value
 extern uint16_t sizeof_data_bytes;
 extern uint8_t data_bytes[];
 extern uint16_t sizeof_command_bytes;
 extern uint8_t command_bytes[];
+bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
+bool clear_input = false;         // if we get a bad packet (wrong sequence id or crc) set this to true and trash input buffer just before sending next data packet
 
 int serialHalInit(void)
 {
