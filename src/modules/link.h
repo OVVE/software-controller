@@ -3,7 +3,6 @@
 #define __LINK_MODULE_H__
 
 #include <stdbool.h>
-#include <Arduino.h>
 #include <stdint.h>
 
 #define ALARM_ECU_POWER_LOSS              0x01
