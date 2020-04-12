@@ -3,7 +3,6 @@
 #include "../pt/pt.h"
 #include "../hal/hal.h"
 #include "../hal/serial.h"
-#include "../modules/link.h"  // need to remove this dependency
 
 uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
@@ -16,23 +15,11 @@ bool read_active = false;     // watchdog timer in progress (waiting for command
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
 bool clear_input = false;         // if we get a bad packet (wrong sequence id or crc) set this to true and trash input buffer just before sending next data packet
 
-// this will be used by module/link to send packets
-//uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
-//uint16_t last_sequence_count; // what to expect
-
-// this is the storage for getting bytes Serial.readBytes(1), reading bytes one at a time. probably could use pointer, but used union command bytes to get one byte per call
-// when the full packet is received this is put copied to the public command data structure.
-typedef union command_packet_union{
-command_packet_def command_packet;
-uint8_t command_bytes[sizeof(command_packet_def)];
-};
-
-command_packet_union command_packet_u;
-
-extern command_packet_def command_packet_from_serial;
-//extern data_packet_def update_crc_data_packet; // this is the data structure that the public data structure is copied to so the crc can be updated and no data fields changed while sending.
+// this is the data bytes that correspond to data structures from link.cpp - serial.cpp sends/receives generic bytes just knowing the count and timeout value
 extern uint16_t sizeof_data_bytes;
 extern uint8_t data_bytes[];
+extern uint16_t sizeof_command_bytes;
+extern uint8_t command_bytes[];
 
 int serialHalInit(void)
 {
@@ -60,25 +47,16 @@ int serialHalGetData(void)
   {       
     SERIAL_UI.readBytes(&inByte, 1);
     
-    command_packet_u.command_bytes[incoming_index] = inByte;
+    command_bytes[incoming_index] = inByte;
     
     incoming_index++;
 
-    if (incoming_index >= sizeof(comm.public_command_packet))
+    if (incoming_index >= sizeof_command_bytes)
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
       incoming_index = 0;
       read_active = false;
       watchdog_exceeded = false;
-
-      memcpy((void *)&command_packet_from_serial, (void *)&command_packet_u.command_packet, sizeof(command_packet_from_serial));
-#if 0 //#ifdef SERIAL_DEBUG
-      SERIAL_DEBUG.print("sequence from Rpi: ");
-      SERIAL_DEBUG.print(command_packet_from_serial.sequence_count, DEC);
-      SERIAL_DEBUG.print(" ");
-      SERIAL_DEBUG.println(command_packet_from_serial.crc, DEC);
-      SERIAL_DEBUG.println(" ");
-#endif      
       return HAL_OK;
     } 
   }
@@ -86,12 +64,6 @@ int serialHalGetData(void)
   {
     if ((millis() - watchdog_start_ms) > WATCHDOG_MS)
     {
-#if 0 //#ifdef SERIAL_DEBUG
-      SERIAL_DEBUG.print("!!!Watchdog timeout, bytes received count: ");
-      SERIAL_DEBUG.println(incoming_index, DEC);
-      SERIAL_DEBUG.print("first byte (sequence count): ");
-      SERIAL_DEBUG.println(command_packet_u.command_packet.sequence_count, DEC);
-#endif        
       read_active = false; 
       watchdog_exceeded = true; 
       incoming_index = 0;
@@ -113,14 +85,7 @@ int serialHalSendData()
       { SERIAL_UI.read();
       } while (SERIAL_UI.available() > 0);
     }
-#if 0 //#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.print("Sent to Rpi sequence: ");
-    SERIAL_DEBUG.print(update_crc_data_packet.sequence_count, DEC);
-    SERIAL_DEBUG.print(" CRC: ");
-    SERIAL_DEBUG.print(update_crc_data_packet.crc, DEC);
-    SERIAL_DEBUG.println(" ");
-#endif 
-       
+      
     bytesSent = SERIAL_UI.write((byte *)&data_bytes, sizeof_data_bytes);
     
     if (bytesSent != sizeof_data_bytes) {
