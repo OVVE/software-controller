@@ -1,3 +1,4 @@
+// TODO: Document what this module does
 
 #ifndef __SERIAL_HAL_H__
 #define __SERIAL_HAL_H__
