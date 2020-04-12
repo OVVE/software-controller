@@ -8,7 +8,7 @@
 #define SEND_INTERVAL_MS 100 // minimum time between sending packets. The time could take longer if response is late.
 
 #define SERIAL_UI Serial1
-//#define SERIAL_DEBUG Serial2
+//#define SERIAL_DEBUG Serial
 
 int serialHalInit(void);
 int serialHalGetData(void);
