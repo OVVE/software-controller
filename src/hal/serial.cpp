@@ -20,7 +20,7 @@ uint16_t bytesSent;               // Serial.write() returns this - we should inc
 uint8_t inByte;                   // store each byte read
 int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 
-uint32_t watchdog_max_ms = 70; //90; //70; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
+uint32_t watchdog_max_ms = 200; //90; //70; //50;    // watch dog time out. After sending data packet wait this long for a command/confirm packet. If timeout then send next data packet.
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool read_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
