@@ -8,7 +8,6 @@
 #include "../modules/module.h"
 #include "../modules/parameters.h"
 #include "../hal/serial.h"
-#include <Arduino.h>
 
 FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
 
@@ -22,16 +21,25 @@ uint16_t calc_crc;
 
 // copy the public data packet to this buffer because there might be changes
 // by other modules while serial.cpp is waiting to send this
-data_packet_def update_crc_data_packet;
+//data_packet_def update_crc_data_packet;
+uint8_t data_bytes[sizeof(data_packet_def)];
+uint16_t sizeof_data_bytes = sizeof(data_bytes);
+
 command_packet_def command_packet_from_serial;
 
 uint32_t watchdog_count = 0;
 uint32_t dropped_packet_count = 0;
 uint32_t packet_count = 0;
 
-uint16_t debug_index;
+uint8_t tmpMode;  // used for setting data for simulation
 
-uint8_t tmpMode;
+// this will be used by module/link to send packets
+uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
+uint16_t last_sequence_count; // what to expect
+
+// data shared with serial.cpp
+extern bool watchdog_exceeded;  // timeout waiting for number of received bytes (command packet)
+extern bool clear_input;        // if there are issues with command packet data then let serial know to clear the input buffer
 
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
@@ -103,14 +111,6 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
 
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
  
-#ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("packet count: ");
-  SERIAL_DEBUG.println(packet_count, DEC);
-  SERIAL_DEBUG.print("dropped packet count: ");
-  SERIAL_DEBUG.println(dropped_packet_count, DEC);
-  SERIAL_DEBUG.print("timeout count: ");
-  SERIAL_DEBUG.println(watchdog_count);
-#endif
   if (watchdog_exceeded == true)
   {
     watchdog_count++;    
@@ -160,7 +160,15 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       }          
     }
   }  
-
+#ifdef SERIAL_DEBUG
+  SERIAL_DEBUG.print("packet count: ");
+  SERIAL_DEBUG.println(packet_count, DEC);
+  SERIAL_DEBUG.print("dropped packet count: ");
+  SERIAL_DEBUG.println(dropped_packet_count, DEC);
+  SERIAL_DEBUG.print("timeout count: ");
+  SERIAL_DEBUG.println(watchdog_count);
+  SERIAL_DEBUG.println(" ");
+#endif
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -168,17 +176,20 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
 static PT_THREAD(serialSendThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
+  last_sequence_count = sequence_count;  // set this for the next read as the sequence count will advance and wait for read to complete
+  ++sequence_count;
   comm.public_data_packet.sequence_count = sequence_count;
   comm.public_data_packet.packet_version = PACKET_VERSION;
   comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
 #ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("CRC calculated and will be sent with next data packet: ");
+  SERIAL_DEBUG.print("Microcontroller sending sequence: ");
+  SERIAL_DEBUG.print(sequence_count, DEC);
+  SERIAL_DEBUG.print(", CRC: ");
   SERIAL_DEBUG.println(comm.public_data_packet.crc, DEC);
 #endif    
-  memcpy((void *)&update_crc_data_packet, (void *)&comm.public_data_packet, sizeof(update_crc_data_packet));
-  packet_count++;    
+  memcpy((void *)&data_bytes, (void *)&comm.public_data_packet, sizeof(data_bytes));
+  packet_count++; 
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
-  //}    
   PT_RESTART(pt);
   PT_END(pt);
 }
