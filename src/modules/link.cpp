@@ -56,7 +56,7 @@ void updateFromCommandPacket()
   comm.volumeRequested = comm.public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= comm.public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = comm.public_command_packet.ie_ratio_set;
-#define SET_VALUES
+//#define SET_VALUES
 #ifdef SET_VALUES
   comm.public_data_packet.tidal_volume_set = comm.public_command_packet.tidal_volume_set;
   comm.public_data_packet.respiratory_rate_set = comm.public_command_packet.respiratory_rate_set;
