@@ -213,6 +213,10 @@ int linkModuleInit(void)
   if (serialHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
+
+  PT_INIT(&serialSendThread);
+  PT_INIT(&serialReadThread);
+
   return MODULE_OK;
 }
 
