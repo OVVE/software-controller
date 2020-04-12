@@ -1,3 +1,5 @@
+// TODO: Document what this module does
+
 #include <stdint.h>
 
 #include "../pt/pt.h"
