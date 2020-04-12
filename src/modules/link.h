@@ -1,4 +1,4 @@
-
+// TODO: Document what this module does
 #ifndef __LINK_MODULE_H__
 #define __LINK_MODULE_H__
 
