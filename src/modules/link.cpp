@@ -16,6 +16,8 @@ FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 
 #include "../modules/link.h"
 #include "../modules/module.h"
 #include "../modules/parameters.h"
+#include "../modules/control.h"
+#include "../modules/sensors.h"
 #include "../hal/serial.h"
 
 // Private Variables
@@ -45,6 +47,9 @@ uint8_t command_bytes[sizeof(command_packet_def)];
 uint16_t sizeof_command_bytes = sizeof(command_bytes);
 extern bool watchdog_exceeded;  // timeout waiting for number of received bytes (command packet)
 extern bool clear_input;        // if there are issues with command packet data then let serial know to clear the input buffer
+extern struct parameters parameters;
+extern struct control control;
+extern struct sensors sensors;
 
 #ifndef USE_DUE
 uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
@@ -79,7 +84,7 @@ void updateFromCommandPacket()
   comm.volumeRequested = comm.public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= comm.public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = comm.public_command_packet.ie_ratio_set;
-//#define SET_VALUES
+//#define SET_VALUES - for testing
 #ifdef SET_VALUES
   comm.public_data_packet.tidal_volume_set = comm.public_command_packet.tidal_volume_set;
   comm.public_data_packet.respiratory_rate_set = comm.public_command_packet.respiratory_rate_set;
@@ -98,29 +103,108 @@ void updateFromCommandPacket()
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
 void updateDataPacket()
 {
-/*
- struct parameters {
-  // Variables
-  uint8_t  startVentilation;
-  uint8_t  ventilationMode;
-  uint32_t volumeRequested;
-  uint32_t respirationRateRequested;
-  uint32_t ieRatioRequested;
-  
-  // Alarms
-  int8_t   parametersInvalidAlarm;
-};
-
-extern struct parameters parameters; 
-*/
-  if (comm.startVentilation)
+  // only set the lower 7 bits of mode value
+  comm.public_data_packet.mode_value = 0x7f & parameters.ventilationMode;
+  if (parameters.startVentilation)
   {
     comm.public_data_packet.mode_value |= MODE_START_STOP;
   }
   else
   {
-    comm.public_data_packet.mode_value = comm.public_data_packet.mode_value & ~MODE_START_STOP;
-  }  
+    comm.public_data_packet.mode_value &= ~MODE_START_STOP;
+  }
+  // could not find 
+  //    respiratory_rate_measured
+  //    tidal_volume_measured
+  //    battery_level
+  //
+  comm.public_data_packet.tidal_volume_set = parameters.volumeRequested;
+  comm.public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
+  comm.public_data_packet.ie_ratio_set = parameters.ieRatioRequested;
+  
+  comm.public_data_packet.control_state = control.state;
+  // should we use the one from parameters or this one
+  comm.public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one
+  
+  comm.public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
+  
+  comm.public_data_packet.plateau_value_measurement = sensors.plateauPressure;
+  
+  comm.public_data_packet.pressure_measured = sensors.currentPressure;  
+  
+  comm.public_data_packet.peak_pressure_measured = sensors.peakPressure;
+  comm.public_data_packet.peep_value_measured = sensors.peepPressure;
+
+  comm.public_data_packet.volume_in_measured = sensors.volumeIn;
+  comm.public_data_packet.volume_out_measured = sensors.volumeOut;  
+  comm.public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
+  comm.public_data_packet.flow_measured = sensors.currentFlow; 
+/*
+
+
+typedef struct data_packet_def {
+  uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
+  uint8_t packet_version;             // byte 2      - rpi unsigned char
+  uint8_t mode_value;                 // byte 3      - rpi unsige char
+  uint32_t respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
+  uint32_t respiratory_rate_set;      // bytes 8 - 11
+  uint32_t tidal_volume_measured;     // bytes 12 - 15
+  uint32_t tidal_volume_set;          // bytes 16 - 19
+  uint32_t ie_ratio_measured;         // bytes 20 - 23
+  uint32_t ie_ratio_set;              // bytes 24 - 27
+  uint32_t peep_value_measured;       // bytes 28 - 31
+  uint32_t peak_pressure_measured;    // bytes 32 - 35
+  uint32_t plateau_value_measurement; // bytes 36 - 39
+  uint32_t pressure_measured;         // bytes 40 - 43
+  uint32_t flow_measured;             // bytes 44 - 47
+  uint32_t volume_in_measured;        // bytes 48 - 51
+  uint32_t volume_out_measured;       // bytes 52 - 55
+  uint32_t volume_rate_measured;      // bytes 56 - 59
+  uint8_t control_state;              // byte 60       - rpi unsigned char
+  uint8_t battery_level;              // byte 61
+  uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
+  uint32_t alarm_bits;                // bytes 64 - 67
+  uint16_t crc;                       // bytes 68 - 69 - rpi unsigned short int
+}__attribute__((packed));  
+*/
+/*
+struct sensors {
+  // Variables
+  int32_t currentFlow;
+  int32_t currentVolume;
+  int32_t volumeIn;
+  int32_t volumeOut;
+  int32_t volumePerMinute;
+  int32_t currentPressure;
+  int32_t peakPressure;
+  int32_t plateauPressure;
+  int32_t peepPressure;
+  bool    inhalationDetected;
+  bool    exhalationDetected;
+  
+  // Alarms
+  int8_t  onBatteryAlarm;
+  int8_t  lowBatteryAlarm;
+  int8_t  highPressureAlarm;
+  int8_t  lowPressureAlarm;
+  int8_t  lowVolumeAlarm;
+  int8_t  apneaAlarm;
+};
+*/
+
+/*  
+struct control {
+  // Variables
+  uint8_t  state;
+  uint32_t respirationRateRequested;
+  uint32_t ieRatioMeasured;
+  uint32_t breathCount;
+  
+  // Alarms
+  int8_t   breathTimeoutAlarm;
+  int8_t   unknownStateAlarm;
+};
+*/
 }
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
@@ -202,6 +286,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   PT_BEGIN(pt);
   last_sequence_count = sequence_count;  // set this for the next read as the sequence count will advance and wait for read to complete
   ++sequence_count;
+  updateDataPacket();
   comm.public_data_packet.sequence_count = sequence_count;
   comm.public_data_packet.packet_version = PACKET_VERSION;
 #ifdef USE_DUE
