@@ -87,7 +87,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       PT_WAIT_UNTIL(pt, storageHalRead(PARAMETERS_BANK(!parametersAddress),
                                        &tmpParameters[1],
                                        sizeof(tmpParameters[1])) != HAL_IN_PROGRESS);
-      if (!memcmp(&tmpParameters[0], &tmpParameters[1], sizeof(tmpParameters[0]))) {
+      if (memcmp(&tmpParameters[0], &tmpParameters[1], sizeof(tmpParameters[0]))) {
         // TODO: Error on parameter mismatch after read-back
       } else {
         // Write back new parameters address to get the data from the new bank next time
@@ -99,6 +99,9 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
         parameters = tmpParameters[0];
       }
     }
+    
+    // Return to the scheduler after each loop
+    PT_YIELD(pt);
   }
   
   // Should never reach here
