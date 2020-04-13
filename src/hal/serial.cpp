@@ -11,7 +11,7 @@ uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
 uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
 uint8_t inByte;                   // store each byte read
-int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
+//int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool read_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 
@@ -41,6 +41,8 @@ int serialHalInit(void)
 
 int serialHalGetData(void)
 {
+  static int inComingIndex = 0;
+  
   if (read_active != true)
   {
     return HAL_IN_PROGRESS;
@@ -50,14 +52,14 @@ int serialHalGetData(void)
   {       
     SERIAL_UI.readBytes(&inByte, 1);
     
-    command_bytes[incoming_index] = inByte;
+    command_bytes[inComingIndex] = inByte;
     
-    incoming_index++;
+    inComingIndex++;
 
-    if (incoming_index >= sizeof_command_bytes)
+    if (inComingIndex >= sizeof_command_bytes)
     {
       // save a copy for other modules, but keep a reference in case the shared copy gets modified
-      incoming_index = 0;
+      inComingIndex = 0;
       read_active = false;
       watchdog_exceeded = false;
       return HAL_OK;
@@ -69,7 +71,7 @@ int serialHalGetData(void)
     {
       read_active = false; 
       watchdog_exceeded = true; 
-      incoming_index = 0;
+      inComingIndex = 0;
       return HAL_OK;        
     }
   } // if serial.available
@@ -99,7 +101,7 @@ int serialHalSendData()
     //sequence_count++;
     last_send_ms = current_send_ms;
     watchdog_start_ms = millis();
-    incoming_index = 0; // set this for incoming bytes
+    //inComingIndex = 0; // set this for incoming bytes
 #ifdef SERIAL_DEBUG
     SERIAL_DEBUG.print("watchdog_start_ms initialized: ");
     SERIAL_DEBUG.println(watchdog_start_ms, DEC);
