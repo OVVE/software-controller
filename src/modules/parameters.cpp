@@ -87,7 +87,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       PT_WAIT_UNTIL(pt, storageHalRead(PARAMETERS_BANK(!parametersAddress),
                                        &tmpParameters[1],
                                        sizeof(tmpParameters[1])) != HAL_IN_PROGRESS);
-      if (memcmp(&tmpParameters[0], &tmpParameters[1], sizeof(tmpParameters[0]))) {
+      if (memcmp(&tmpParameters[0], &tmpParameters[1], sizeof(tmpParameters[0])) && 0) { // TODO: disabled until storage HAL implemented
         // TODO: Error on parameter mismatch after read-back
       } else {
         // Write back new parameters address to get the data from the new bank next time
