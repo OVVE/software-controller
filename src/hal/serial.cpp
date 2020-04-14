@@ -8,10 +8,6 @@
 
 // Private Variables
 uint32_t last_send_ms = 0;        // this is used for send interval
-
-//uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
-uint8_t inByte;                   // store each byte read
-//int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 uint32_t watchdog_start_ms;       // save the watchdog start time
 bool read_active = false;     // watchdog timer in progress (waiting for command/confirm packet)
 
@@ -42,6 +38,7 @@ int serialHalInit(void)
 int serialHalGetData(void)
 {
   static int inComingIndex = 0;
+  static uint8_t inByte;  
   
   if (read_active != true)
   {
