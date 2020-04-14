@@ -28,13 +28,8 @@ struct link comm;
 static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
-command_packet_def command_packet;
-uint32_t watchdog_count = 0;
-uint32_t dropped_packet_count = 0;
-uint32_t packet_count = 0;
 uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
-uint16_t last_sequence_count; // what to expect
-uint16_t calc_crc;
+uint16_t last_sequence_count; // what to expect for next sequence, set in write and checked in read
 
 // Public Variables
 // shared with serial.cpp
@@ -149,6 +144,11 @@ void updateDataPacket()
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
 {
+  static uint16_t calc_crc;
+  static uint32_t dropped_packet_count = 0;
+  static uint32_t watchdog_count = 0;
+  static command_packet_def command_packet;
+  
   PT_BEGIN(pt);
 
   PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
@@ -216,7 +216,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
   }  
 #ifdef SERIAL_DEBUG
   SERIAL_DEBUG.print("packet count: ");
-  SERIAL_DEBUG.println(packet_count, DEC);
+  SERIAL_DEBUG.println(sequence_count, DEC);
   SERIAL_DEBUG.print("dropped packet count: ");
   SERIAL_DEBUG.println(dropped_packet_count, DEC);
   SERIAL_DEBUG.print("timeout count: ");
@@ -248,7 +248,6 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   SERIAL_DEBUG.println(comm.public_data_packet.crc, DEC);
 #endif    
   memcpy((void *)&data_bytes, (void *)&comm.public_data_packet, sizeof(data_bytes));
-  packet_count++; 
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
