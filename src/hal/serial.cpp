@@ -9,7 +9,7 @@
 // Private Variables
 uint32_t last_send_ms = 0;        // this is used for send interval
 uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
-uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
+//uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
 uint8_t inByte;                   // store each byte read
 //int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
 uint32_t watchdog_start_ms;       // save the watchdog start time
@@ -90,9 +90,62 @@ int serialHalSendData()
       { SERIAL_UI.read();
       } while (SERIAL_UI.available() > 0);
     }
-      
+    static uint16_t bytesSent = 0;
+    static int bytesToWrite;
+    if (bytesSent < sizeof_data_bytes)
+    {
+#ifdef USE_AVAILABLE_WRITE 
+      static uint16_t availableForWrite;     
+      availableForWrite = SERIAL_UI.availableForWrite();
+      bytesToWrite = min(availableForWrite, sizeof_data_bytes - bytesSent);
+#else
+      bytesToWrite = sizeof_data_bytes;
+#endif  
+      bytesSent += SERIAL_UI.write((byte *)&data_bytes[bytesSent], bytesToWrite);
+    }
+    if (bytesSent < sizeof_data_bytes) {
+      return HAL_IN_PROGRESS;
+    }
+    bytesSent = 0;
+       
+    //last_sequence_count = sequence_count;
+    //sequence_count++;
+    last_send_ms = current_send_ms;
+    watchdog_start_ms = millis();
+    //inComingIndex = 0; // set this for incoming bytes
+#ifdef SERIAL_DEBUG
+    SERIAL_DEBUG.print("watchdog_start_ms initialized: ");
+    SERIAL_DEBUG.println(watchdog_start_ms, DEC);
+#endif    
+    read_active = true;
+    return HAL_OK;
+  }
+  return HAL_IN_PROGRESS;
+}
+
+
+/*
+// this function can be deleted if everything is stable
+// had some slowness with above function which had something
+// to do with the debug prints that were being used.
+int serialHalSendData()
+{
+  current_send_ms = millis();
+  if ((current_send_ms - last_send_ms) >= SEND_INTERVAL_MS && read_active != true)
+  {
+    if (clear_input == true)
+    {
+      clear_input = false;
+      do
+      { SERIAL_UI.read();
+      } while (SERIAL_UI.available() > 0);
+    }
+    static uint16_t bytesSent;
+    //static uint16_t availableForWrite;
+    //static int bytesToWrite;
+    //static int bytesToWrite = min(SERIAL_UI.availableForWrite(), sizeof_data_bytes) - bytesSent);      
     bytesSent = SERIAL_UI.write((byte *)&data_bytes, sizeof_data_bytes);
-    
+
     if (bytesSent != sizeof_data_bytes) {
       // handle error
     }
@@ -111,4 +164,4 @@ int serialHalSendData()
   }
   return HAL_IN_PROGRESS;
 }
-
+*/
