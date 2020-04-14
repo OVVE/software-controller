@@ -8,7 +8,7 @@
 
 // Private Variables
 uint32_t last_send_ms = 0;        // this is used for send interval
-uint32_t current_send_ms = 0;     // current time is referenced a few times so refer to this variable 
+
 //uint16_t bytesSent;               // Serial.write() returns this - we should increase the default Serial buffer size so that the function does not block
 uint8_t inByte;                   // store each byte read
 //int incoming_index = 0;           // index for array of bytes received as we are getting them one at a time
@@ -80,8 +80,9 @@ int serialHalGetData(void)
 
 int serialHalSendData()
 {
-  current_send_ms = millis();
-  if ((current_send_ms - last_send_ms) >= SEND_INTERVAL_MS && read_active != true)
+  static uint32_t current_ms;
+  current_ms = millis();
+  if ((current_ms - last_send_ms) >= SEND_INTERVAL_MS && read_active != true)
   {
     if (clear_input == true)
     {
@@ -92,8 +93,13 @@ int serialHalSendData()
     }
     static uint16_t bytesSent = 0;
     static int bytesToWrite;
+    static uint32_t startSendTime = 0;
     if (bytesSent < sizeof_data_bytes)
     {
+      if (startSendTime == 0)
+      {
+        startSendTime = current_ms;
+      }
 #ifdef USE_AVAILABLE_WRITE 
       static uint16_t availableForWrite;     
       availableForWrite = SERIAL_UI.availableForWrite();
@@ -104,13 +110,21 @@ int serialHalSendData()
       bytesSent += SERIAL_UI.write((byte *)&data_bytes[bytesSent], bytesToWrite);
     }
     if (bytesSent < sizeof_data_bytes) {
+      if (current_ms - startSendTime > SEND_MAX_TIME_MS)
+      {
+        bytesSent = 0;
+        startSendTime = 0;
+        clear_input = true;
+        last_send_ms = current_ms;
+        return HAL_TIMEOUT;
+      }
       return HAL_IN_PROGRESS;
     }
     bytesSent = 0;
-       
+    startSendTime = 0;
     //last_sequence_count = sequence_count;
     //sequence_count++;
-    last_send_ms = current_send_ms;
+    last_send_ms = current_ms;
     watchdog_start_ms = millis();
     //inComingIndex = 0; // set this for incoming bytes
 #ifdef SERIAL_DEBUG
