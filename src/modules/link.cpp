@@ -120,6 +120,7 @@ void updateDataPacket()
   //    battery_level
   //
   comm.public_data_packet.tidal_volume_set = parameters.volumeRequested;
+  comm.public_data_packet.tidal_volume_measured = sensors.currentVolume;
   comm.public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
   comm.public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
 #ifdef SERIAL_DEBUG
@@ -133,13 +134,12 @@ void updateDataPacket()
   
   comm.public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
   
+  // readings from sensor module
   comm.public_data_packet.plateau_value_measurement = sensors.plateauPressure;
-  
   comm.public_data_packet.pressure_measured = sensors.currentPressure;  
-  
   comm.public_data_packet.peak_pressure_measured = sensors.peakPressure;
   comm.public_data_packet.peep_value_measured = sensors.peepPressure;
-
+  comm.public_data_packet.tidal_volume_measured = sensors.currentVolume;
   comm.public_data_packet.volume_in_measured = sensors.volumeIn;
   comm.public_data_packet.volume_out_measured = sensors.volumeOut;  
   comm.public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
