@@ -4,8 +4,11 @@
 //
 #include <stdint.h>
 
-//#define USE_DUE
-#ifdef USE_DUE  // this crc16 header will not compile with DUE so use external lib fastcrc
+#define USE_FAST_CRC
+#ifdef USE_FAST_CRC  // utils/crc16.h not found for DUE and the function used here to wrap it is causing timeouts
+                     // the header file has functions defined using inline assembly. It works fine on Mega with a 
+                     // standalone program, but using it with the controller is always taking too much time.
+                     
 #include <FastCRC.h>
 FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
 #else
@@ -25,19 +28,13 @@ struct link comm;
 static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
-
-// Private Variables
-uint16_t calc_crc;
 command_packet_def command_packet;
-
 uint32_t watchdog_count = 0;
 uint32_t dropped_packet_count = 0;
 uint32_t packet_count = 0;
-uint8_t tmpMode;  // used for setting data for simulation
-// this will be used by module/link to send packets
 uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
 uint16_t last_sequence_count; // what to expect
-uint16_t crc_base;
+uint16_t calc_crc;
 
 // Public Variables
 // shared with serial.cpp
@@ -51,11 +48,12 @@ extern struct parameters parameters;
 extern struct control control;
 extern struct sensors sensors;
 
-#ifndef USE_DUE
+#ifndef USE_FAST_CRC
 uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 {
+ static uint16_t crc_base = 0xFFFF;
  crc_base = 0xFFFF;
-
+ 
  while(byteLength--)
  {
    crc_base = _crc_xmodem_update(crc_base, (uint16_t)*bytes);
@@ -67,6 +65,7 @@ uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
 {
+  static uint8_t tmpMode;  // used for setting bits
   comm.startVentilation = (comm.public_command_packet.mode_value & MODE_START_STOP) != 0x00;
 
   tmpMode = 0x7f & comm.public_command_packet.mode_value;
@@ -93,6 +92,7 @@ void updateFromCommandPacket()
   comm.public_data_packet.respiratory_rate_measured = 200;
   comm.public_data_packet.ie_ratio_set = 300; 
 #endif  
+  comm.public_data_packet.battery_level = 0; // TBD set to real value when available
   
   // Alarms
   comm.droppedPacketAlarm = (comm.public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
@@ -120,7 +120,11 @@ void updateDataPacket()
   //
   comm.public_data_packet.tidal_volume_set = parameters.volumeRequested;
   comm.public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
-  comm.public_data_packet.ie_ratio_set = parameters.ieRatioRequested;
+  comm.public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
+#ifdef SERIAL_DEBUG
+  SERIAL_DEBUG.print("ie_ratio_set from commmand packet: ");
+  SERIAL_DEBUG.println(comm.public_command_packet.ie_ratio_set, DEC);
+#endif
   
   comm.public_data_packet.control_state = control.state;
   // should we use the one from parameters or this one
@@ -139,72 +143,6 @@ void updateDataPacket()
   comm.public_data_packet.volume_out_measured = sensors.volumeOut;  
   comm.public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
   comm.public_data_packet.flow_measured = sensors.currentFlow; 
-/*
-
-
-typedef struct data_packet_def {
-  uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  uint8_t packet_version;             // byte 2      - rpi unsigned char
-  uint8_t mode_value;                 // byte 3      - rpi unsige char
-  uint32_t respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
-  uint32_t respiratory_rate_set;      // bytes 8 - 11
-  uint32_t tidal_volume_measured;     // bytes 12 - 15
-  uint32_t tidal_volume_set;          // bytes 16 - 19
-  uint32_t ie_ratio_measured;         // bytes 20 - 23
-  uint32_t ie_ratio_set;              // bytes 24 - 27
-  uint32_t peep_value_measured;       // bytes 28 - 31
-  uint32_t peak_pressure_measured;    // bytes 32 - 35
-  uint32_t plateau_value_measurement; // bytes 36 - 39
-  uint32_t pressure_measured;         // bytes 40 - 43
-  uint32_t flow_measured;             // bytes 44 - 47
-  uint32_t volume_in_measured;        // bytes 48 - 51
-  uint32_t volume_out_measured;       // bytes 52 - 55
-  uint32_t volume_rate_measured;      // bytes 56 - 59
-  uint8_t control_state;              // byte 60       - rpi unsigned char
-  uint8_t battery_level;              // byte 61
-  uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
-  uint32_t alarm_bits;                // bytes 64 - 67
-  uint16_t crc;                       // bytes 68 - 69 - rpi unsigned short int
-}__attribute__((packed));  
-*/
-/*
-struct sensors {
-  // Variables
-  int32_t currentFlow;
-  int32_t currentVolume;
-  int32_t volumeIn;
-  int32_t volumeOut;
-  int32_t volumePerMinute;
-  int32_t currentPressure;
-  int32_t peakPressure;
-  int32_t plateauPressure;
-  int32_t peepPressure;
-  bool    inhalationDetected;
-  bool    exhalationDetected;
-  
-  // Alarms
-  int8_t  onBatteryAlarm;
-  int8_t  lowBatteryAlarm;
-  int8_t  highPressureAlarm;
-  int8_t  lowPressureAlarm;
-  int8_t  lowVolumeAlarm;
-  int8_t  apneaAlarm;
-};
-*/
-
-/*  
-struct control {
-  // Variables
-  uint8_t  state;
-  uint32_t respirationRateRequested;
-  uint32_t ieRatioMeasured;
-  uint32_t breathCount;
-  
-  // Alarms
-  int8_t   breathTimeoutAlarm;
-  int8_t   unknownStateAlarm;
-};
-*/
 }
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
@@ -235,11 +173,17 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     }
     else
     {
-#ifdef USE_DUE
+#ifdef USE_FAST_CRC
       calc_crc = CRC16.ccitt((uint8_t *)&command_packet, sizeof(command_packet) - 2);
 #else 
-      calc_crc = calc_crc_avrlib((uint8_t *)&command_packet, sizeof(command_packet) - 2);  
+#ifdef SERIAL_DEBUG
+      SERIAL_DEBUG.println("before calc_crc_avrlib()"); 
+#endif      
+      calc_crc = calc_crc_avrlib((uint8_t *)&command_packet, sizeof(command_packet) - 2); 
+#ifdef SERIAL_DEBUG     
+      SERIAL_DEBUG.println("after calc_crc_avrlib()");      
 #endif
+#endif 
  
 #ifdef SERIAL_DEBUG
       SERIAL_DEBUG.print("CRC calculated from command packet: ");
@@ -289,7 +233,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   updateDataPacket();
   comm.public_data_packet.sequence_count = sequence_count;
   comm.public_data_packet.packet_version = PACKET_VERSION;
-#ifdef USE_DUE
+#ifdef USE_FAST_CRC
    comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);   
 #else  
   comm.public_data_packet.crc = calc_crc_avrlib((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
