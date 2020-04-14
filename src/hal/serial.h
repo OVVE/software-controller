@@ -12,7 +12,7 @@
 #define USE_AVAILABLE_WRITE  // #ifdef in serial.cpp for checking the available bytes on write queue before sending to keep from blocking
 
 #define SERIAL_UI Serial1
-#define SERIAL_DEBUG Serial
+//#define SERIAL_DEBUG Serial
 
 int serialHalInit(void);
 int serialHalGetData(void);
