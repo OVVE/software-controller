@@ -133,6 +133,7 @@ void updateDataPacket()
   comm.public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one
   
   comm.public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
+  //comm.public_data_packet.respiratory_rate_measured = control.  // could not find the field for this
   
   // readings from sensor module
   comm.public_data_packet.plateau_value_measurement = sensors.plateauPressure;
