@@ -4,21 +4,23 @@
 
 #include "../hal/hal.h"
 
-// Time units
-#define SEC   * 1
-#define MSEC  * 1000
-#define USEC  * 1000000
+#include <stdint.h> 
+
+// Time units normalized to microseconds.
+#define  SEC  * 1000000UL
+#define MSEC  * 1000UL
+#define USEC  * 1UL
 
 struct timer {
-  unsigned int start;
-  unsigned int duration;
+  uint32_t start;
+  uint32_t duration;
 };
 
 // TODO: Doc
 int timerHalInit(void);
 
 // TODO: Doc
-int timerHalBegin(struct timer* timer, unsigned int duration);
+int timerHalBegin(struct timer* timer, uint32_t duration);
 
 // TODO: Doc
 int timerHalRun(struct timer* timer);

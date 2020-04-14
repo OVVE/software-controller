@@ -102,6 +102,7 @@ if ((packet_count % 100) == 0)
         comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
         //memcpy((void *)&comm.public_command_packet, (void *)&command_packet_from_serial, sizeof(comm.public_command_packet));
         comm.startVentilation = (command_packet_from_serial.mode_value & 0x80) != 0x00;
+        comm.ventilationMode = 0x1; // Set this statically for now to enable control state machine.
 #ifdef SERIAL_DEBUG
         serial_debug.print("Successful packet received CRC from command packet: ");
         serial_debug.println(comm.public_command_packet.mode_value, HEX);

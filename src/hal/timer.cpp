@@ -4,16 +4,20 @@
 #include "../hal/hal.h"
 #include "../hal/timer.h"
 
+// #define DEBUG
+#define DEBUG_MODULE "timer"
+#include "../util/debug.h"
+
 int timerHalInit(void)
 {
   // No initialized needed in this case
   return HAL_OK;
 }
 
-int timerHalBegin(struct timer* timer, unsigned int duration)
+int timerHalBegin(struct timer* timer, uint32_t duration)
 {
   if (timer) {
-    timer->start = (unsigned int) micros();
+    timer->start = (uint32_t) micros();
     timer->duration = duration;
     return HAL_OK;
   }
@@ -23,7 +27,8 @@ int timerHalBegin(struct timer* timer, unsigned int duration)
 int timerHalRun(struct timer* timer)
 {
   if (timer) {
-    if ((unsigned int) micros() - timer->start < timer->duration) {
+    // TODO: Handle overflow of the timer used by micros().
+    if ((((uint32_t) micros()) - timer->start) < timer->duration) {
       return HAL_IN_PROGRESS;
     } else {
       return HAL_TIMEOUT;
