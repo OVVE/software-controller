@@ -65,7 +65,7 @@ bool alarmCheckAll(struct alarmProperties* properties)
   bool allClear = true;
   
   // Set the priority to below the "lowest" possible value
-  properties->priority == ALARM_PRIORITY_LOW + 1;
+  properties->priority = ALARM_PRIORITY_LOW + 1;
 
   // Loop through all registered alarms, checking if any changes need to be made
   // to their state, setting the return flags if any conditions are met
