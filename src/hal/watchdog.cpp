@@ -23,26 +23,17 @@ void watchdogSetup(void) {
 int watchdogHalInit(void)
 {
 #if defined(__AVR__)
-  if (WATCHDOG_PERIOD_MS == 15) {
-    wdt_enable(WDTO_15MS);
-  } else if (WATCHDOG_PERIOD_MS == 30) {
-    wdt_enable(WDTO_30MS);
-  } else if (WATCHDOG_PERIOD_MS == 60) {
-    wdt_enable(WDTO_60MS);
-  } else if (WATCHDOG_PERIOD_MS == 120) {
-    wdt_enable(WDTO_120MS);
-  } else if (WATCHDOG_PERIOD_MS == 250) {
-    wdt_enable(WDTO_250MS);
-  } else if (WATCHDOG_PERIOD_MS == 500) {
-    wdt_enable(WDTO_500MS);
-  } else if (WATCHDOG_PERIOD_MS == 1000) {
-    wdt_enable(WDTO_1S);
-  } else if (WATCHDOG_PERIOD_MS == 2000) {
-    wdt_enable(WDTO_2S);
-  } else {
-    return HAL_FAIL;
+  switch (WATCHDOG_PERIOD_MS) {
+    case   15: wdt_enable(WDTO_15MS); break;
+    case   30: wdt_enable(WDTO_30MS); break;
+    case   60: wdt_enable(WDTO_60MS); break;
+    case  120: wdt_enable(WDTO_120MS); break;
+    case  250: wdt_enable(WDTO_250MS); break;
+    case  500: wdt_enable(WDTO_500MS); break;
+    case 1000: wdt_enable(WDTO_1S); break;
+    case 2000: wdt_enable(WDTO_2S); break;
+    default: return HAL_FAIL;
   }
-
 #elif defined(__arm__)
   if (WATCHDOG_PERIOD_MS <= 16000) {
     WDT_Enable(WDT,
