@@ -10,6 +10,8 @@
 int alarmHalInit(void)
 {
   pinMode(ALARM_PIN, OUTPUT);
+  
+  return HAL_OK;
 }
 
 int alarmHalRing(unsigned int pattern)
@@ -18,6 +20,11 @@ int alarmHalRing(unsigned int pattern)
   static bool alarmOn = false;
   static struct timer timer;
   uint32_t alarmTime;
+  
+  // Check validity of pattern
+  if (pattern > ALARM_HAL_CONSTANT) {
+    return HAL_FAIL;
+  }
 
   // Check to see if new tone needs to be played
   if (pattern != currentPattern) {
@@ -44,9 +51,7 @@ int alarmHalRing(unsigned int pattern)
   
   if (alarmOn) {
     // If a blinking buzzer, check the running timer
-    if ((currentPattern == ALARM_HAL_0_25HZ) ||
-        (currentPattern == ALARM_HAL_0_5HZ) ||
-        (currentPattern == ALARM_HAL_1HZ)) {
+    if (currentPattern != ALARM_HAL_CONSTANT) {
       if (timerHalRun(&timer) != HAL_IN_PROGRESS) {
         noTone(ALARM_PIN);
         alarmOn = false;
@@ -58,12 +63,8 @@ int alarmHalRing(unsigned int pattern)
     if (currentPattern == ALARM_HAL_CONSTANT) {
       tone(ALARM_PIN, ALARM_FREQUENCY);
       alarmOn = true;
-    }
-    
-    // If a blinking buzzer, check the running timer
-    if ((currentPattern == ALARM_HAL_0_25HZ) ||
-        (currentPattern == ALARM_HAL_0_5HZ) ||
-        (currentPattern == ALARM_HAL_1HZ)) {
+    } else if (currentPattern != ALARM_HAL_OFF) {
+      // If a blinking buzzer (ie, not off or constant), check the running timer
       if (timerHalRun(&timer) != HAL_IN_PROGRESS) {
         tone(ALARM_PIN, ALARM_FREQUENCY);
         alarmOn = true;
