@@ -78,16 +78,7 @@ void updateFromCommandPacket()
   comm.volumeRequested = comm.public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= comm.public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = comm.public_command_packet.ie_ratio_set;
-//#define SET_VALUES // - for testing
-#ifdef SET_VALUES
-  comm.public_data_packet.mode_value = comm.public_command_packet.mode_value; //comm.ventilationMode;
-  comm.public_data_packet.tidal_volume_set = comm.public_command_packet.tidal_volume_set;
-  comm.public_data_packet.respiratory_rate_set = comm.public_command_packet.respiratory_rate_set;
-  comm.public_data_packet.ie_ratio_set = comm.public_command_packet.ie_ratio_set;
-  comm.public_data_packet.tidal_volume_measured = 100;
-  comm.public_data_packet.respiratory_rate_measured = 200;
-  comm.public_data_packet.ie_ratio_set = 300; 
-#endif  
+ 
   comm.public_data_packet.battery_level = 0; // TBD set to real value when available
   
   // Alarms
@@ -140,6 +131,17 @@ void updateDataPacket()
   comm.public_data_packet.volume_out_measured = sensors.volumeOut;  
   comm.public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
   comm.public_data_packet.flow_measured = sensors.currentFlow; 
+//#define SET_VALUES // - for testing
+#ifdef SET_VALUES
+  comm.public_data_packet.mode_value = comm.public_command_packet.mode_value; //comm.ventilationMode;
+  comm.public_data_packet.tidal_volume_set = comm.public_command_packet.tidal_volume_set;
+  comm.public_data_packet.respiratory_rate_set = comm.public_command_packet.respiratory_rate_set;
+  comm.public_data_packet.ie_ratio_set = comm.public_command_packet.ie_ratio_set;
+  comm.public_data_packet.tidal_volume_measured = 100;
+  comm.public_data_packet.respiratory_rate_measured = 200;
+  comm.public_data_packet.ie_ratio_set = 300; 
+#endif  
+  
 }
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
