@@ -139,7 +139,6 @@ void updateDataPacket()
   comm.public_data_packet.ie_ratio_set = comm.public_command_packet.ie_ratio_set;
   comm.public_data_packet.tidal_volume_measured = 100;
   comm.public_data_packet.respiratory_rate_measured = 200;
-  comm.public_data_packet.ie_ratio_set = 300; 
 #endif  
   
 }
