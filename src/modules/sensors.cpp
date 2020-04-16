@@ -31,7 +31,7 @@ static struct timer airVolumeTimer;
 
 uint32_t last_debug_time;
 
-#define PRESSURE_SAMPLING_RATE 20000
+#define PRESSURE_SAMPLING_RATE (20 MSEC)
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -45,7 +45,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   PT_END(pt);
 }
 
-#define AIRFLOW_SAMPLING_RATE 20000
+#define AIRFLOW_SAMPLING_RATE (20 MSEC)
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -59,7 +59,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   PT_END(pt);
 }
 
-#define AIRVOLUME_SAMPLING_RATE 20000
+#define AIRVOLUME_SAMPLING_RATE (20 MSEC)
 static PT_THREAD(sensorsAirVolumeThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
