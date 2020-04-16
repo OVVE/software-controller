@@ -20,14 +20,19 @@ extern uint8_t command_bytes[];
 bool watchdog_exceeded = false;   // flag for watchdog timer received. this is for link.cpp.
 bool clear_input = false;         // if we get a bad packet (wrong sequence id or crc) set this to true and trash input buffer just before sending next data packet
 
+void serialClear()
+{
+  do
+  { SERIAL_UI.read();
+  } while (SERIAL_UI.available() > 0);  
+}
+
 int serialHalInit(void)
 {
   SERIAL_UI.begin(BAUD_RATE);  // this function does not return anything
   // not sure how we can do something like while (!serial)
   // return MODULE_FAIL;
-  do
-  { SERIAL_UI.read();
-  } while (SERIAL_UI.available() > 0);
+  serialClear();
   
 #ifdef SERIAL_DEBUG
   SERIAL_DEBUG.begin(BAUD_RATE);
@@ -84,9 +89,7 @@ int serialHalSendData()
     if (clear_input == true)
     {
       clear_input = false;
-      do
-      { SERIAL_UI.read();
-      } while (SERIAL_UI.available() > 0);
+      serialClear();
     }
     static uint16_t bytesSent = 0;
     static int bytesToWrite;
@@ -133,46 +136,3 @@ int serialHalSendData()
   }
   return HAL_IN_PROGRESS;
 }
-
-
-/*
-// this function can be deleted if everything is stable
-// had some slowness with above function which had something
-// to do with the debug prints that were being used.
-int serialHalSendData()
-{
-  current_send_ms = millis();
-  if ((current_send_ms - last_send_ms) >= SEND_INTERVAL_MS && read_active != true)
-  {
-    if (clear_input == true)
-    {
-      clear_input = false;
-      do
-      { SERIAL_UI.read();
-      } while (SERIAL_UI.available() > 0);
-    }
-    static uint16_t bytesSent;
-    //static uint16_t availableForWrite;
-    //static int bytesToWrite;
-    //static int bytesToWrite = min(SERIAL_UI.availableForWrite(), sizeof_data_bytes) - bytesSent);      
-    bytesSent = SERIAL_UI.write((byte *)&data_bytes, sizeof_data_bytes);
-
-    if (bytesSent != sizeof_data_bytes) {
-      // handle error
-    }
-       
-    //last_sequence_count = sequence_count;
-    //sequence_count++;
-    last_send_ms = current_send_ms;
-    watchdog_start_ms = millis();
-    //inComingIndex = 0; // set this for incoming bytes
-#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.print("watchdog_start_ms initialized: ");
-    SERIAL_DEBUG.println(watchdog_start_ms, DEC);
-#endif    
-    read_active = true;
-    return HAL_OK;
-  }
-  return HAL_IN_PROGRESS;
-}
-*/
