@@ -47,7 +47,7 @@ int pressureSensorHalGetValue(int16_t *value){
 
 //--------------------------------------------------------------------------------------------------
 int16_t fSum;    // flow sensor data accumulator
-int16_t fVolSum; // volume accumulator, units of 0.05[mL], meaning it can store up to ~1.6L ((2^15 -1) * 0.05[mL] = 1638[mL])
+int32_t fVolSum; // volume accumulator, units of 0.01[mL]
 // This routine reads the flow sensor value as a voltage off the analog pin and inserts it into the filter
 // The flow gets integrated into the Volume accumulator
 void airflowSensorHalFetch(){
@@ -61,16 +61,17 @@ void airflowSensorHalFetch(){
   // In order to preserve precision of the volume, the acculumator should be in
   // units on the order of 0.1mL, since the longest breath cycle is 6 seconds 
   // (5[bpm], 1:1I:E = 12[sec/breath] / 2 = 6[sec/breath] for inhalation/exhalation stages)
-  // Over 6 seconds, a sampling rate of 10[Hz] means 60 samples and if the calculation
-  // error is about 1 unit off every time, units of 0.05[mL] means a difference of only
-  // 3[mL] over the course of a breath (60[samples] * 0.05[mL] = 3[mL]).
-  // From 0.01[SLM] flow to 0.05[mL] volume:
+  // Over 6 seconds, a sampling rate of 100[Hz] means 600 samples and if the calculation
+  // error is about 1 unit off every time, units of 0.01[mL] means a difference of only
+  // 6[mL] over the course of a breath (600[samples] * 0.01[mL] = 6[mL]).
+  // From 0.01[SLM] flow to 0.01[mL] volume:
   //  Vol = Flow * dt
-  //      = (Flow[SLM] / (60[sec/min]) * (200[0.05mL/0.01L])) * (0.01[sec])
-  //      = Flow * 200 / 100 / 60
-  //      = Flow / 30
+  //      = (Flow[SLM] / (60[sec/min]) * (1000[0.01mL/0.01L])) * (0.01[sec])
+  //      = Flow * 1000 / 100 / 60
+  //      = Flow / 6
   // TODO: Consider using units that avoids division entirely
-  fVolSum += f / 30;
+  // TODO: floor flow at zero before using it volume?
+  fVolSum += f / 6;
 }
 
 // This routine returns the flow sensor value out of the filter
@@ -94,8 +95,8 @@ int airflowSensorHalGetValue(int16_t *value){
 // This routine returns the integrated volume value
 int airVolumeSensorHalGetValue(int16_t *value){
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-    // Since volume is stored in units [0.05mL], convert to [mL]
-    *value = fVolSum / 200;
+    // Since volume is stored in units [0.01mL], convert to [mL]
+    *value = fVolSum / 1000;
   }
 }
 
