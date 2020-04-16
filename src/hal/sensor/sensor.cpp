@@ -46,38 +46,56 @@ int pressureSensorHalGetValue(int16_t *value){
 
 
 //--------------------------------------------------------------------------------------------------
-#define ADC_1V_OFFSET  204     // 1V offset removed
-#define FLOW_SENSOR_SCALING 27 // should have been 24.42 if the sensor and ADC were 100% to the spec
 int16_t fSum;    // flow sensor data accumulator
-int16_t fVolSum; // volume accumulator (1 unit is 1/12ml), max stored value >2.7L
+int16_t fVolSum; // volume accumulator, units of 0.05[mL], meaning it can store up to ~1.6L ((2^15 -1) * 0.05[mL] = 1638[mL])
 // This routine reads the flow sensor value as a voltage off the analog pin and inserts it into the filter
 // The flow gets integrated into the Volume accumulator
 void airflowSensorHalFetch(){
   int16_t fIn;  // pressure value from sensor.
-  fIn=analogRead(FLOW_SENSE_PIN) - ADC_1V_OFFSET; // 1V offset removed
+  fIn=analogRead(FLOW_SENSE_PIN);
   fSum = fSum-(fSum>>3)+fIn; // filter
+  
   // get precise volume : integrate flow at every sample
-  int16_t f = (fSum>>3)*FLOW_SENSOR_SCALING; // flow in 0.01 SLM
-  fVolSum += f/50; // /60*1000/1000/100*10 = /600 = /(50*12)
-    // /60 --> convert SLM to liters per second
-    // *1000 --> convert liters to cubic centimeters
-    // /1000 --> we count time in milliseconds
-    // /100  --> convert 0.01 mlps to 1 mlps
-    // *mt_delta --> current measurement time delta in milliseconds
+  int16_t f; // flow in 0.01 SLM
+  airflowSensorHalGetValue(&f);
+  // In order to preserve precision of the volume, the acculumator should be in
+  // units on the order of 0.1mL, since the longest breath cycle is 6 seconds 
+  // (5[bpm], 1:1I:E = 12[sec/breath] / 2 = 6[sec/breath] for inhalation/exhalation stages)
+  // Over 6 seconds, a sampling rate of 10[Hz] means 60 samples and if the calculation
+  // error is about 1 unit off every time, units of 0.05[mL] means a difference of only
+  // 3[mL] over the course of a breath (60[samples] * 0.05[mL] = 3[mL]).
+  // From 0.01[SLM] flow to 0.05[mL] volume:
+  //  Vol = Flow * dt
+  //      = (Flow[SLM] / (60[sec/min]) * (200[0.05mL/0.01L])) * (0.01[sec])
+  //      = Flow * 200 / 100 / 60
+  //      = Flow / 30
+  // TODO: Consider using units that avoids division entirely
+  fVolSum += f / 30;
 }
 
 // This routine returns the flow sensor value out of the filter
 int airflowSensorHalGetValue(int16_t *value){
+  int32_t temp;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-    *value = (fSum>>3)*FLOW_SENSOR_SCALING; // flow in 0.01 SLM
+    temp = (fSum>>3);
   }  
+  // fSum (now temp) is filtered ADC values, from PMF4003V data sheet:
+  // flow = (Vout - 1[V]) / 4[V] * Range = (Vout - 1[V]) / 4[V] * 20000[0.01SLM]
+  // Vout = ADCVal / 2^10 * 5[V] = ADCVal * 5[V] / 1024
+  // So:
+  // flow = (ADCVal / 1024 * 5[V] - 1[V]) / 4[V] * 20000[0.01SLM]
+  // flow = (ADCVal * 5 - 1 * 1024) / 1024 / 4 * 20000
+  // flow = (ADCVal * 5 * 20000 - 1024 * 20000) / 4096
+  // flow = (ADCVal * 100000 - 20480000
+  *value = (int16_t) (((temp * 100000L) - 20480000L) >> 12);
   return HAL_OK;
 }
 
 // This routine returns the integrated volume value
 int airVolumeSensorHalGetValue(int16_t *value){
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-    *value = fVolSum/12; // volume in ml
+    // Since volume is stored in units [0.05mL], convert to [mL]
+    *value = fVolSum / 200;
   }
 }
 
