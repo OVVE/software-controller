@@ -30,6 +30,9 @@ static struct pt serialReadThread;
 static struct pt serialSendThread;
 uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
 uint16_t last_sequence_count; // what to expect for next sequence, set in write and checked in read
+data_packet_def public_data_packet;
+command_packet_def public_command_packet;
+
 
 // Public Variables
 // shared with serial.cpp
@@ -61,84 +64,84 @@ uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 void updateFromCommandPacket()
 {
   static uint8_t tmpMode;  // used for setting bits
-  comm.startVentilation = (comm.public_command_packet.mode_value & MODE_START_STOP) != 0x00;
+  comm.startVentilation = (public_command_packet.mode_value & MODE_START_STOP) != 0x00;
 
-  tmpMode = 0x7f & comm.public_command_packet.mode_value;
+  tmpMode = 0x7f & public_command_packet.mode_value;
   
   // check for a conflict - more than one mode - not the best logic going forward
   if (tmpMode != MODE_ASSIST || tmpMode != MODE_NON_ASSIST || tmpMode != MODE_SIM)
   {
-    comm.public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
+    public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
   }
   else
   {    
     comm.ventilationMode = tmpMode;
-    comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
+    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
   }
-  comm.volumeRequested = comm.public_command_packet.tidal_volume_set;
-  comm.respirationRateRequested= comm.public_command_packet.respiratory_rate_set;
-  comm.ieRatioRequested = comm.public_command_packet.ie_ratio_set;
+  comm.volumeRequested = public_command_packet.tidal_volume_set;
+  comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
+  comm.ieRatioRequested = public_command_packet.ie_ratio_set;
  
-  comm.public_data_packet.battery_level = 0; // TBD set to real value when available
+  public_data_packet.battery_level = 0; // TBD set to real value when available
   
   // Alarms
-  comm.droppedPacketAlarm = (comm.public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
-  comm.crcErrorAlarm = (comm.public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
-  comm.unsupportedPacketVersionAlarm = (comm.public_command_packet.alarm_bits & ALARM_PACKET_VERSION) != 0x00;
+  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
+  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
+  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_PACKET_VERSION) != 0x00;
 }
 
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
 void updateDataPacket()
 {
   // only set the lower 7 bits of mode value
-  comm.public_data_packet.mode_value = 0x7f & parameters.ventilationMode;
+  public_data_packet.mode_value = 0x7f & parameters.ventilationMode;
   if (parameters.startVentilation)
   {
-    comm.public_data_packet.mode_value |= MODE_START_STOP;
+    public_data_packet.mode_value |= MODE_START_STOP;
   }
   else
   {
-    comm.public_data_packet.mode_value &= ~MODE_START_STOP;
+    public_data_packet.mode_value &= ~MODE_START_STOP;
   }
   // could not find 
   //    respiratory_rate_measured
   //    tidal_volume_measured
   //    battery_level
   //
-  comm.public_data_packet.tidal_volume_set = parameters.volumeRequested;
-  comm.public_data_packet.tidal_volume_measured = sensors.currentVolume;
-  comm.public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
-  comm.public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
+  public_data_packet.tidal_volume_set = parameters.volumeRequested;
+  public_data_packet.tidal_volume_measured = sensors.currentVolume;
+  public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
+  public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
 #ifdef SERIAL_DEBUG
   SERIAL_DEBUG.print("ie_ratio_set from commmand packet: ");
-  SERIAL_DEBUG.println(comm.public_command_packet.ie_ratio_set, DEC);
+  SERIAL_DEBUG.println(public_command_packet.ie_ratio_set, DEC);
 #endif
   
-  comm.public_data_packet.control_state = control.state;
+  public_data_packet.control_state = control.state;
   // should we use the one from parameters or this one
-  comm.public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one
+  public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one
   
-  comm.public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
-  //comm.public_data_packet.respiratory_rate_measured = control.  // could not find the field for this
+  public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
+  //public_data_packet.respiratory_rate_measured = control.  // could not find the field for this
   
   // readings from sensor module
-  comm.public_data_packet.plateau_value_measurement = sensors.plateauPressure;
-  comm.public_data_packet.pressure_measured = sensors.currentPressure;  
-  comm.public_data_packet.peak_pressure_measured = sensors.peakPressure;
-  comm.public_data_packet.peep_value_measured = sensors.peepPressure;
-  comm.public_data_packet.tidal_volume_measured = sensors.currentVolume;
-  comm.public_data_packet.volume_in_measured = sensors.volumeIn;
-  comm.public_data_packet.volume_out_measured = sensors.volumeOut;  
-  comm.public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
-  comm.public_data_packet.flow_measured = sensors.currentFlow; 
+  public_data_packet.plateau_value_measurement = sensors.plateauPressure;
+  public_data_packet.pressure_measured = sensors.currentPressure;  
+  public_data_packet.peak_pressure_measured = sensors.peakPressure;
+  public_data_packet.peep_value_measured = sensors.peepPressure;
+  public_data_packet.tidal_volume_measured = sensors.currentVolume;
+  public_data_packet.volume_in_measured = sensors.volumeIn;
+  public_data_packet.volume_out_measured = sensors.volumeOut;  
+  public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
+  public_data_packet.flow_measured = sensors.currentFlow; 
 //#define SET_VALUES // - for testing
 #ifdef SET_VALUES
-  comm.public_data_packet.mode_value = comm.public_command_packet.mode_value; //comm.ventilationMode;
-  comm.public_data_packet.tidal_volume_set = comm.public_command_packet.tidal_volume_set;
-  comm.public_data_packet.respiratory_rate_set = comm.public_command_packet.respiratory_rate_set;
-  comm.public_data_packet.ie_ratio_set = comm.public_command_packet.ie_ratio_set;
-  comm.public_data_packet.tidal_volume_measured = 100;
-  comm.public_data_packet.respiratory_rate_measured = 200;
+  public_data_packet.mode_value = public_command_packet.mode_value; //comm.ventilationMode;
+  public_data_packet.tidal_volume_set = public_command_packet.tidal_volume_set;
+  public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
+  public_data_packet.ie_ratio_set = public_command_packet.ie_ratio_set;
+  public_data_packet.tidal_volume_measured = 100;
+  public_data_packet.respiratory_rate_measured = 200;
 #endif  
   
 }
@@ -159,7 +162,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     watchdog_count++;    
     watchdog_exceeded = false;
     clear_input = true;
-    comm.public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
+    public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
   }
   else
   {
@@ -172,7 +175,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
-      comm.public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
+      public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
     }
     else
     {
@@ -195,7 +198,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
-        comm.public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
+        public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("bad CRC 0x ");
         SERIAL_DEBUG.println(command_packet.crc, HEX);
@@ -204,13 +207,13 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       }
       else
       {
-        comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
-        comm.public_data_packet.alarm_bits = comm.public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
-        memcpy((void *)&comm.public_command_packet, (void *)&command_packet, sizeof(comm.public_command_packet));
+        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
+        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
+        memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("Successful packet received CRC from command packet: ");
-        SERIAL_DEBUG.println(comm.public_command_packet.crc, DEC);
+        SERIAL_DEBUG.println(public_command_packet.crc, DEC);
 #endif           
       }          
     }
@@ -234,21 +237,21 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   last_sequence_count = sequence_count;  // set this for the next read as the sequence count will advance and wait for read to complete
   ++sequence_count;
   updateDataPacket();
-  comm.public_data_packet.sequence_count = sequence_count;
-  comm.public_data_packet.packet_version = PACKET_VERSION;
+  public_data_packet.sequence_count = sequence_count;
+  public_data_packet.packet_version = PACKET_VERSION;
 #ifdef USE_FAST_CRC
-   comm.public_data_packet.crc = CRC16.ccitt((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);   
+   public_data_packet.crc = CRC16.ccitt((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);   
 #else  
-  comm.public_data_packet.crc = calc_crc_avrlib((uint8_t *)&comm.public_data_packet, sizeof(comm.public_data_packet) - 2);
+  public_data_packet.crc = calc_crc_avrlib((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);
 #endif
 
 #ifdef SERIAL_DEBUG
   SERIAL_DEBUG.print("Microcontroller sending sequence: ");
   SERIAL_DEBUG.print(sequence_count, DEC);
   SERIAL_DEBUG.print(", CRC: ");
-  SERIAL_DEBUG.println(comm.public_data_packet.crc, DEC);
+  SERIAL_DEBUG.println(public_data_packet.crc, DEC);
 #endif    
-  memcpy((void *)&data_bytes, (void *)&comm.public_data_packet, sizeof(data_bytes));
+  memcpy((void *)&data_bytes, (void *)&public_data_packet, sizeof(data_bytes));
   PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
