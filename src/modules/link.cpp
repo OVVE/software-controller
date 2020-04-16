@@ -47,14 +47,15 @@ extern struct control control;
 extern struct sensors sensors;
 
 #ifndef USE_FAST_CRC
+
 uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 {
- static uint16_t crc_base = 0xFFFF;
+ static uint16_t crc_base;
  crc_base = 0xFFFF;
- 
+
  while(byteLength--)
  {
-   crc_base = _crc_xmodem_update(crc_base, (uint16_t)*bytes);
+   crc_base = _crc_xmodem_update(crc_base, (uint8_t)*bytes++);
  }
  return(crc_base);
 }
@@ -112,10 +113,6 @@ void updateDataPacket()
   public_data_packet.tidal_volume_measured = sensors.currentVolume;
   public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
   public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
-#ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("ie_ratio_set from commmand packet: ");
-  SERIAL_DEBUG.println(public_command_packet.ie_ratio_set, DEC);
-#endif
   
   public_data_packet.control_state = control.state;
   // should we use the one from parameters or this one
@@ -182,19 +179,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
 #ifdef USE_FAST_CRC
       calc_crc = CRC16.ccitt((uint8_t *)&command_packet, sizeof(command_packet) - 2);
 #else 
-#ifdef SERIAL_DEBUG
-      SERIAL_DEBUG.println("before calc_crc_avrlib()"); 
-#endif      
       calc_crc = calc_crc_avrlib((uint8_t *)&command_packet, sizeof(command_packet) - 2); 
-#ifdef SERIAL_DEBUG     
-      SERIAL_DEBUG.println("after calc_crc_avrlib()");      
-#endif
 #endif 
- 
-#ifdef SERIAL_DEBUG
-      SERIAL_DEBUG.print("CRC calculated from command packet: ");
-      SERIAL_DEBUG.println(calc_crc, DEC);
-#endif      
       if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
