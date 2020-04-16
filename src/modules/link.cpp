@@ -4,7 +4,7 @@
 //
 #include <stdint.h>
 
-#define USE_FAST_CRC
+//#define USE_FAST_CRC
 #ifdef USE_FAST_CRC  // utils/crc16.h not found for DUE and the function used here to wrap it is causing timeouts
                      // the header file has functions defined using inline assembly. It works fine on Mega with a 
                      // standalone program, but using it with the controller is always taking too much time.
