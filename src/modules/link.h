@@ -84,9 +84,6 @@ struct link {
   int8_t   droppedPacketAlarm;
   int8_t   crcErrorAlarm;
   int8_t   unsupportedPacketVersionAlarm;
-
-  data_packet_def public_data_packet;
-  command_packet_def public_command_packet;  
 };
 
 // Public Variables
