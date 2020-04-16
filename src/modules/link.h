@@ -72,8 +72,6 @@ typedef struct command_packet_def {
 }__attribute__((packed));
 
 struct link {
-  data_packet_def public_data_packet;
-  command_packet_def public_command_packet;  
   uint8_t  startVentilation;
   uint8_t  ventilationMode;
   uint32_t volumeRequested;
