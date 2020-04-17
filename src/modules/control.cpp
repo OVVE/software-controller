@@ -37,10 +37,65 @@ static uint32_t targetInhalationTime;
 static uint32_t measuredInhalationTime;
 static uint32_t measuredExhalationTime;
 
+// Control Variables (to be potentially added to control struct)
+static uint16_t currentVolume;
+static uint16_t desiredVolume;
+static uint16_t volumeToleramce;
+static uint16_t airFlow;
+
+static uint16_t volumeControlGain;
+
 // Mid-level volume control function
-static void updateVolumeControl(uint16_t* distance, uint16_t* duration)
+//static void updateVolumeControl(uint16_t* distance, uint16_t* duration)
+static void updateVolumeControl(uint16_t* velocity, uint16_t* duration)
 {
-  // TODO: fill-in this function
+	// Handle ventilation mode
+	if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+		// Update current volume
+		getVolume(&currentVolume);
+		// Determine control state
+		if (control.state == CONTROL_INHALATION) {
+			// Set desired volume to be target volume for inhalation
+			desiredVolume = targetVolume;
+		}
+		else if (control.state == CONTROL_EXHALATION) {
+			// Set desired volume to be 0 for exhalation
+			desiredVolume = 0;
+		}
+
+		// Check if reached desired volume within some tolerance
+		if (abs(desiredVolume - currentVolume) < volumeToleramce) {
+			// Modulate velocity to move toward desired volume
+			velocity = volumeControlGain * (desiredVolume - currentVolume);
+		}
+
+	}
+	else if (parameters.ventilationMode == VENTILATOR_MODE_AC) {
+		// Update current volume
+		getVolume(&currentVolume);
+		// Determine control state
+		if (control.state == CONTROL_INHALATION) {
+			// Set desired volume to be target volume for inhalation
+			desiredVolume = targetVolume;
+		}
+		else if (control.state == CONTROL_EXHALATION) {
+			// Set desired volume to be 0 for exhalation
+			desiredVolume = 0;
+		}
+
+		// Check if reached desired volume within some tolerance
+		if (abs(desiredVolume - currentVolume) < volumeToleramce) {
+			// Modulate velocity to move toward desired volume
+			velocity = volumeControlGain * (desiredVolume - currentVolume);
+		}
+	}
+}
+
+// Calculate current volume
+static void getVolume(uint16_t* volume)
+{
+	//
+	volume += airFlow * controlTimer;
 }
 
 static PT_THREAD(controlThreadMain(struct pt* pt))
@@ -78,7 +133,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_INHALATION;
       
     } else if (control.state == CONTROL_INHALATION) {
-      uint16_t motorDistance = 0;
+      //uint16_t motorDistance = 0;
+			uint16_t motorVelocity = 0;
       uint16_t motorDuration = 0;
   
       // If in a volume controlled mode, run the Mid-level volume controller
@@ -86,7 +142,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
           (parameters.ventilationMode == VENTILATOR_MODE_AC)) {
         
         // Mid-level controller function
-        updateVolumeControl(&motorDistance, &motorDuration);
+				//updateVolumeControl(&motorDistance, &motorDuration);
+        updateVolumeControl(&motorVelocity, &motorDuration);
       }
       
       // Update distance/duration accumulators (for exhalation)
@@ -123,7 +180,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Since exhalation is not dependent on the bag, allow the bag to decompress with the same parameters as compression
       // In order to time exhalation, set a timer to time the exhalation cycle
       // TODO: Andrew, thoughts?; also, if this is a motor home, maybe need different HAL function for it
-      motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION,
+			motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION,
                     totalMotorCompressionDistance,
                     totalMotorCompressionDuration);
       control.state = CONTROL_EXHALATION;
