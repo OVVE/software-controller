@@ -70,7 +70,7 @@ void updateFromCommandPacket()
   tmpMode = 0x7f & public_command_packet.mode_value;
   
   // check for a conflict - more than one mode - not the best logic going forward
-  if (tmpMode != MODE_ASSIST || tmpMode != MODE_NON_ASSIST || tmpMode != MODE_SIM)
+  if (tmpMode != MODE_ASSIST && tmpMode != MODE_NON_ASSIST && tmpMode != MODE_SIM)
   {
     public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
   }
@@ -84,7 +84,14 @@ void updateFromCommandPacket()
   comm.ieRatioRequested = public_command_packet.ie_ratio_set;
  
   public_data_packet.battery_level = 0; // TBD set to real value when available
-  
+#ifdef SERIAL_DEBUG
+        SERIAL_DEBUG.print("mode bits: 0x");
+        SERIAL_DEBUG.println(public_command_packet.mode_value, HEX);
+        SERIAL_DEBUG.print("start/stop value: 0x");
+        SERIAL_DEBUG.println(comm.startVentilation, HEX);
+        SERIAL_DEBUG.print("mode value: 0x");
+        SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
+#endif  
   // Alarms
   comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
   comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
