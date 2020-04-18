@@ -59,7 +59,7 @@ void airflowSensorHalFetch(){
   int16_t f; // flow in 0.01 SLM
   airflowSensorHalGetValue(&f);
   // In order to preserve precision of the volume, the acculumator should be in
-  // units on the order of 0.1mL, since the longest breath cycle is 6 seconds 
+  // units on the order of 0.01mL, since the longest breath cycle is 6 seconds 
   // (5[bpm], 1:1I:E = 12[sec/breath] / 2 = 6[sec/breath] for inhalation/exhalation stages)
   // Over 6 seconds, a sampling rate of 100[Hz] means 600 samples and if the calculation
   // error is about 1 unit off every time, units of 0.01[mL] means a difference of only
@@ -96,7 +96,7 @@ int airflowSensorHalGetValue(int16_t *value){
 int airVolumeSensorHalGetValue(int16_t *value){
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
     // Since volume is stored in units [0.01mL], convert to [mL]
-    *value = fVolSum / 1000;
+    *value = fVolSum / 100;
   }
 }
 
