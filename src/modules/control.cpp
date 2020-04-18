@@ -8,6 +8,7 @@
 
 #include "../hal/motor.h"
 #include "../hal/timer.h"
+#include "../hal/sensor/sensor.h"
 
 #include "../modules/module.h"
 #include "../modules/control.h"
@@ -37,65 +38,93 @@ static uint32_t targetInhalationTime;
 static uint32_t measuredInhalationTime;
 static uint32_t measuredExhalationTime;
 
-// Control Variables (to be potentially added to control struct)
-static uint16_t currentVolume;
-static uint16_t desiredVolume;
-static uint16_t volumeToleramce;
-static uint16_t airFlow;
+// Control variables
+static uint16_t currentVolume = 0;
+static uint16_t currentAirFlow = 0;
+static uint16_t toleranceAirFlow = 0;					// *ENTER VALUE* Allowable deviation from desired air flow
+static uint16_t toleranceVolume = 0;					// *ENTER VALUE* Allowable deviation from desired volume
+static uint16_t maxAirAcceleration = 0;				// *ENTER VALUE*
+static uint16_t nomAirFlow = 0;
+static uint16_t targetAirFlow = 0;
+static uint16_t desiredAirFlow = 0;
+static uint16_t trapezoidRatio = 2 / 1;				// *ENTER VALUE* Ratio of plateau to ramp (softness of trapezoid)
+static uint32_t rampTime = 0;
+static uint32_t platTime = 0;
+static uint32_t elapsedTime = 0;
+static uint16_t airFlowControlGain = 0;				// *ENTER VALUE*
 
-static uint16_t volumeControlGain;
-
-// Mid-level volume control function
-//static void updateVolumeControl(uint16_t* distance, uint16_t* duration)
-static void updateVolumeControl(uint16_t* velocity, uint16_t* duration)
+// Calculate trajectory parameters once at initiation of inhalation at current volume
+static void computeTrajectory()
 {
-	// Handle ventilation mode
-	if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
-		// Update current volume
-		getVolume(&currentVolume);
-		// Determine control state
-		if (control.state == CONTROL_INHALATION) {
-			// Set desired volume to be target volume for inhalation
-			desiredVolume = targetVolume;
-		}
-		else if (control.state == CONTROL_EXHALATION) {
-			// Set desired volume to be 0 for exhalation
-			desiredVolume = 0;
-		}
-
-		// Check if reached desired volume within some tolerance
-		if (abs(desiredVolume - currentVolume) < volumeToleramce) {
-			// Modulate velocity to move toward desired volume
-			velocity = volumeControlGain * (desiredVolume - currentVolume);
-		}
-
+	// Check if exhalation, if so, set volume target to 0
+	if (control.state == CONTROL_BEGIN_EXHALATION) {
+		targetVolume = 0;
 	}
-	else if (parameters.ventilationMode == VENTILATOR_MODE_AC) {
-		// Update current volume
-		getVolume(&currentVolume);
-		// Determine control state
-		if (control.state == CONTROL_INHALATION) {
-			// Set desired volume to be target volume for inhalation
-			desiredVolume = targetVolume;
-		}
-		else if (control.state == CONTROL_EXHALATION) {
-			// Set desired volume to be 0 for exhalation
-			desiredVolume = 0;
-		}
 
-		// Check if reached desired volume within some tolerance
-		if (abs(desiredVolume - currentVolume) < volumeToleramce) {
-			// Modulate velocity to move toward desired volume
-			velocity = volumeControlGain * (desiredVolume - currentVolume);
-		}
+	// Update current volume
+	airVolumeSensorHalGetValue(&currentVolume);
+
+	// Calculate time sections
+	rampTime = targetInhalationTime / (2 + trapezoidRatio);
+	platTime = trapezoidRatio * rampTime;
+
+	// Determine nominal air flow based on current volume and timing
+	nomAirFlow = (targetVolume - currentVolume) / (rampTime + platTime);
+
+	// Check acceleration limits
+	if ((nomAirFlow / rampTime) > maxAirAcceleration) {
+		// EXCEEDED MAX ACCEL MESSAGE
 	}
 }
 
-// Calculate current volume
-static void getVolume(uint16_t* volume)
+// Update trajectory at every call to control
+static void updateTrajectory()
 {
-	//
-	volume += airFlow * controlTimer;
+	// Determine elapsed time and place along trajectory
+	elapsedTime = (((uint32_t)micros()) - controlTimer.start);
+
+	if (elapsedTime < rampTime) {
+		// Ramp up
+		targetAirFlow = nomAirFlow * (elapsedTime / rampTime);
+	}
+	else if ((elapsedTime > rampTime) && (elapsedTime < platTime)) {
+		// Plateau
+		targetAirFlow = nomAirFlow;
+	}
+	else {
+		// Ramp down
+		targetAirFlow = nomAirFlow * (elapsedTime + 2*rampTime - platTime);
+	}
+}
+
+// Update volume control by tracking air flow trajectory
+static void updateVolumeControl(uint16_t* velocity)
+{
+	// Update trajectory to get instantaneous target air flow
+	updateTrajectory();
+
+	// Handle ventilation mode
+	if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+
+		// Update current air flow
+		airflowSensorHalGetValue(&currentAirFlow);
+
+		// Determine control state
+		if (control.state == CONTROL_INHALATION) {
+			// Set desired air flow to be target air flow for inhalation trajectory
+			desiredAirFlow = targetAirFlow;
+		}
+		else if (control.state == CONTROL_EXHALATION) {
+			// Set desired air flow to be negative for exhalation
+			desiredAirFlow = -1 * targetAirFlow;
+		}
+
+		// Check if reached desired volume within some tolerance
+		if (abs(desiredAirFlow - currentAirFlow) < toleranceAirFlow) {
+			// Modulate velocity to move toward desired volume
+			velocity += airFlowControlGain * (desiredAirFlow - currentAirFlow);
+		}
+	}
 }
 
 static PT_THREAD(controlThreadMain(struct pt* pt))
@@ -132,10 +161,13 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       control.state = CONTROL_INHALATION;
       
-    } else if (control.state == CONTROL_INHALATION) {
-      //uint16_t motorDistance = 0;
+			// Reset motorVelocity
 			uint16_t motorVelocity = 0;
-      uint16_t motorDuration = 0;
+
+			// Compute trajectory
+			computeTrajectory();
+
+    } else if (control.state == CONTROL_INHALATION) {
   
       // If in a volume controlled mode, run the Mid-level volume controller
       if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
@@ -143,21 +175,15 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         
         // Mid-level controller function
 				//updateVolumeControl(&motorDistance, &motorDuration);
-        updateVolumeControl(&motorVelocity, &motorDuration);
+        updateVolumeControl(&motorVelocity);
       }
+
       
-      // Update distance/duration accumulators (for exhalation)
-      totalMotorCompressionDistance += motorDistance;
-      totalMotorCompressionDuration += motorDuration;
-      
-      // If controller reports nonzero distance, need to move motor
-        if (motorDistance != 0) {
-          
-        }
-      
-      // If the controller reports zero distance or the timer has expired, move
+			// ***** HERE NEEDS INTERFACING WITH LOW-LEVEL CONTROL FOR VELOCITY COMMAND
+
+      // If the controller reports reached volume or the timer has expired, move
       // on to next state, otherwise run the motor as specified by the controller
-      if ((timerHalRun(&controlTimer) == HAL_TIMEOUT) || (motorDistance == 0)) {
+      if ((timerHalRun(&controlTimer) == HAL_TIMEOUT) || (abs(targetVolume - currentVolume) < toleranceVolume)) {
         measuredInhalationTime = timerHalCurrent(&breathTimer);
         control.state = CONTROL_BEGIN_HOLD_IN;
       } else {
@@ -168,6 +194,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       }
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
+
+			// Reset motorVelocity
+			uint16_t motorVelocity = 0;
+
       // Setup the hold timer
       timerHalBegin(&controlTimer, HOLD_TIME);
       control.state = CONTROL_HOLD_IN;
@@ -185,6 +215,9 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
                     totalMotorCompressionDuration);
       control.state = CONTROL_EXHALATION;
       
+			// Compute trajectory
+			computeTrajectory();
+
     } else if (control.state == CONTROL_EXHALATION) {
       // Wait for the motor to move back
       // TODO: consider if patient takes breathe before motor has completely moved back?
@@ -205,8 +238,30 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.respirationRateMeasured = (60 SEC) / (currentBreathTime USEC);
       control.breathCount++;
 
-      // Check if we need to continue onto another breath or if ventilation has stopped
-      control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
+			// If in a volume controlled mode, run the Mid-level volume controller
+			if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
+				(parameters.ventilationMode == VENTILATOR_MODE_AC)) {
+
+				// Mid-level controller function
+				//updateVolumeControl(&motorDistance, &motorDuration);
+				updateVolumeControl(&motorVelocity);
+			}
+
+			// ***** HERE NEEDS INTERFACING WITH LOW-LEVEL CONTROL FOR VELOCITY COMMAND
+
+			// If the controller reports reached volume or the timer has expired, move
+			// on to next state, otherwise run the motor as specified by the controller
+			if ((timerHalRun(&controlTimer) == HAL_TIMEOUT) || (abs(targetVolume - currentVolume) < toleranceVolume)) {
+				measuredInhalationTime = timerHalCurrent(&breathTimer);
+				// Check if we need to continue onto another breath or if ventilation has stopped
+				control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
+			}
+			else {
+				motorHalBegin(MOTOR_HAL_DIRECTION_INHALATION, motorDistance, motorDuration);
+				// TODO: Wait until motor reaches destination? Or try to parallelize
+				// parameters re-issue motor control setpoints before completing last ones?
+				PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+			}
       
     } else {
       // TODO: Error, unknown control state!!!
