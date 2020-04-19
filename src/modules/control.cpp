@@ -56,20 +56,20 @@ static uint16_t airFlowControlGain = 0;				// *ENTER VALUE*
 // Calculate trajectory parameters once at initiation of inhalation at current volume
 static void computeTrajectory()
 {
-	// Check if exhalation, if so, set volume target to 0
-	if (control.state == CONTROL_BEGIN_EXHALATION) {
-		targetVolume = 0;
-	}
-
 	// Update current volume
 	airVolumeSensorHalGetValue(&currentVolume);
 
 	// Calculate time sections
-	rampTime = targetInhalationTime / (2 + trapezoidRatio);
-	platTime = trapezoidRatio * rampTime;
-
-	// Determine nominal air flow based on current volume and timing
-	nomAirFlow = (targetVolume - currentVolume) / (rampTime + platTime);
+	if (control.state == CONTROL_BEGIN_EXHALATION) {
+		rampTime = (totalBreathTime - targetInhalationTime) / (2 + trapezoidRatio);
+		platTime = trapezoidRatio * rampTime;
+		nomAirFlow = (0 - currentVolume) / (rampTime + platTime);
+	}
+	else if {
+		rampTime = targetInhalationTime / (2 + trapezoidRatio);
+		platTime = trapezoidRatio * rampTime;
+		nomAirFlow = (targetVolume - currentVolume) / (rampTime + platTime);
+	}
 
 	// Check acceleration limits
 	if ((nomAirFlow / rampTime) > maxAirAcceleration) {
