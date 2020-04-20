@@ -36,7 +36,7 @@ void alarmSet(struct alarm* alarm);
 bool alarmGet(struct alarm* alarm);
 
 // TODO: Doc
-bool alarmSuppress(struct alarm* alarm);
+void alarmSuppress(struct alarm* alarm);
 
 // TODO: Doc
 bool alarmCheckAll(struct alarmProperties* properties);
