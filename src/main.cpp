@@ -1,5 +1,6 @@
 
 #include "hal/alarm.h"
+#include "hal/timer.h"
 #include "hal/watchdog.h"
 
 #include "modules/link.h"
@@ -31,7 +32,18 @@ void mainSetup(void)
   DEBUG_BEGIN;
   
   // TODO: cleanup prints
-  DEBUG_PRINT("setup");
+  DEBUG_PRINT("hal setup");
+  
+  // Initialize HAL
+  // TODO: Handle failure conditions
+  // TODO: refactor all HAL initiailization functions here, since more than one
+  //       module might be using a single HAL (like timer)
+  watchdogHalInit();
+
+  timerHalInit();
+  alarmHalInit();
+  
+  DEBUG_PRINT("module setup");
 
   // TODO: Handle failure conditions
   controlModuleInit();
