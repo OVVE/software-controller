@@ -48,7 +48,7 @@ bool alarmGet(struct alarm* alarm)
   return alarm->set;
 }
 
-void alarmSupress(struct alarm* alarm)
+void alarmSuppress(struct alarm* alarm)
 {
   // Clear and suppress the alarm; beginning the suppression timer
   alarm->suppressed = true;
