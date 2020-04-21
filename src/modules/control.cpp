@@ -47,8 +47,9 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
       DEBUG_PRINT("state: CONTROL_BEGIN_INHALATION");
-
-      if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+      
+      // if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+      if (true) {
         // TODO: Calculate breath parameters and motor control.
         motorCompressionDistance = 40; // Fixed to 40 degrees excursion for now.
         motorCompressionDuration = 0;
@@ -62,7 +63,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_INHALATION) {
       DEBUG_PRINT("state: CONTROL_INHALATION");
 
-      if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+      // if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
+      if (true) {
         PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
       } else {
         // TODO: Implement Assist mode run
