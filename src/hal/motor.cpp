@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <util/atomic.h>
 
 #include "Arduino.h"
 
@@ -100,8 +101,8 @@ static struct {
 } motor_move_command;
 
 static volatile struct {
-  int32_t step_command = 0;
-  int32_t step_position = 0;
+  int16_t step_command = 0;
+  int16_t step_position = 0;
   int8_t  microstep_position = 0;
 } motor_control;
 
@@ -251,7 +252,7 @@ void motor_position_zero()
 //
 // Parameters
 // ----------
-// int32_t angle      The angle (in degrees) to move the motor.
+// uint8_t angle      The angle (in degrees) to move the motor.
 // int8_t  direction  The direction to move the motor. One of:
 //                      * MOTOR_DIRECTION_OPEN
 //                      * MOTOR_DIRECTION_CLOSE
@@ -274,25 +275,25 @@ void motor_move(uint8_t angle, int8_t direction)
     // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
 
     // Convert to millidegrees and account for direction.
-    motor_control.step_command += direction*((((uint32_t) angle)*1000)/MOTOR_STEP_ANGLE);
+    motor_control.step_command += direction*((((int16_t) angle)*1000)/MOTOR_STEP_ANGLE);
   }
 }
 
 // Moves the motor to the home position (fully open).
 void motor_home()
 {
-  // Move the motor far enough in the OPEN direction (360_, more than the total
+  // Move the motor far enough in the OPEN direction (more than the total
   // possible excursion) in order to guarantee that the top limit switch will
   // be tripped.
-  motor_move(360, MOTOR_DIRECTION_OPEN);
+  motor_move(180, MOTOR_DIRECTION_OPEN);
 }
 
 // Moves the motor to the away position (fully closed).
 void motor_away() {
-  // Move the motor far enough in the CLOSE direction (360_, more than the
-  // total possible excursion) in order to guarantee that the bottom limit
-  // switch will be tripped.
-  motor_move(360, MOTOR_DIRECTION_CLOSE);
+  // Move the motor far enough in the CLOSE direction (more than the total
+  // possible excursion) in order to guarantee that the bottom limit switch
+  // will be tripped.
+  motor_move(180, MOTOR_DIRECTION_CLOSE);
 }
 
 //*****************************************************************************
