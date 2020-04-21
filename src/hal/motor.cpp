@@ -360,9 +360,6 @@ ISR(TIMER4_COMPA_vect)
 //*****************************************************************************
 int motorHalInit(void)
 {
-  uint8_t sreg = SREG; // save interrupt state
-  cli(); // disable interrupts
-
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     timer3_setup();
     timer4_setup();
@@ -376,6 +373,9 @@ int motorHalInit(void)
     pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
     pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
   }
+
+  // TODO The following code has a few long pauses, which may want to be
+  // avoided during WDT reset.
 
   // Move the motor to the home position to zero the motor position.
   motor_home();
