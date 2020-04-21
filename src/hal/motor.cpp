@@ -275,7 +275,7 @@ void motor_move(uint8_t angle, int8_t direction)
     // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
 
     // Convert to millidegrees and account for direction.
-    motor_control.step_command += direction*((((int16_t) angle)*1000)/MOTOR_STEP_ANGLE);
+    motor_control.step_command += (int16_t) (direction*((((int32_t) angle)*1000)/MOTOR_STEP_ANGLE));
   }
 }
 
