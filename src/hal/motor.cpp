@@ -35,10 +35,6 @@
 #define PIN_LIMIT_TRIPPED     HIGH
 #define PIN_LIMIT_NOT_TRIPPED LOW
 
-// Sensor Pins
-#define PIN_FLOW_SENSOR     A0
-#define PIN_PRESSURE_SENSOR A1
-
 //**************************************
 // Motor Definitions
 //**************************************
@@ -49,9 +45,17 @@
 // NEMA 23 50:1
 // #define MOTOR_STEP_ANGLE 36
 
+// stepperonline 
+// NEMA 23 20:1
+// #define MOTOR_STEP_ANGLE 90
+
 // stepperonline 23HS22-2804S-HG50
 // NEMA 23 15:1
 #define MOTOR_STEP_ANGLE 120
+
+// stepperonline 23HS30-2804S-HG10
+// NEMA 23 10:1
+// #define MOTOR_STEP_ANGLE 180
 
 
 //**************************************
@@ -120,7 +124,7 @@ void timer3_setup() {
   // OCR3A = 20000; // 50 Hz (1,000,000 / 20,000 = 50)
   OCR3A = 10000; // 100 Hz (1,000,000 / 10,000 = 100)
   TIMSK3 = (1<<OCIE3A);
-  TCCR3B |= (0<<CS32)   | (1<<CS31)  | (0<<CS30);
+  TCCR3B |= (0<<CS32) | (1<<CS31) | (0<<CS30);
 }
 
 //*****************************************************************************
@@ -148,16 +152,11 @@ void timer4_setup()
   TCCR4A = TCCR4A_value;
   TCCR4B = TCCR4B_value_disabled;
   TCNT4 = 0;
-  // OCR4A = 1000; // 1 KHz (1,000,000 / 1,000 = 1,000)
-  // OCR4A = 2000; // 500 Hz (1,000,000 / 2,000 = 500)
-  // OCR4A = 2500; // 400 Hz (1,000,000 / 2,500 = 400)
   
+  // TODO
   OCR4A = 625;
-  // OCR4A = 375;
-  // OCR4A = 225;
-  // OCR4A = 125;
-
   OCR4B = OCR4A/2; // 50% duty cycle
+
   TIMSK4 = (1<<OCIE4A);
 }
 
@@ -184,15 +183,12 @@ void motor_pwm_disable()
   timer4_disable();
 }
 
-// Manages the motor state machine. Motor state is updated atomically.
+// Manages the motor state machine.
 void set_motor_state(uint8_t next_state)
 {
   if (motor_state == next_state) {
     return;
   }
-
-  uint8_t sreg = SREG; // save interrupt state
-  cli(); // disable interrputs
 
   if (next_state == MOTOR_STATE_OFF) {
     DEBUG_PRINT("state: MOTOR_STATE_OFF");
@@ -247,8 +243,6 @@ void set_motor_state(uint8_t next_state)
   }
 
   motor_state = next_state;
-
-  SREG = sreg; // restore interrupt state
 }
 
 //*****************************************************************************
@@ -260,14 +254,9 @@ void motor_position_zero()
 {
   assert((motor_state != MOTOR_STATE_OPEN) && (motor_state != MOTOR_STATE_CLOSE));
 
-  uint8_t sreg = SREG; // save interrupt state
-  cli(); // disable interrupts
-
   motor_control.microstep_position = 0;
   motor_control.step_position = 0;
   motor_control.step_command = 0;
-
-  SREG = sreg; // restore interrupt state
 }
 
 // Moves the motor to an angle relative to its current position.
@@ -278,7 +267,7 @@ void motor_position_zero()
 // int8_t  direction  The direction to move the motor. One of:
 //                      * MOTOR_DIRECTION_OPEN
 //                      * MOTOR_DIRECTION_CLOSE
-void motor_move(int32_t angle, int8_t direction)
+void motor_move(uint8_t angle, int8_t direction)
 {
   // TODO: Do we want to have assertions? How are they implemented in this
   // system? (i.e. Do they cause a watchdog reset, print a debug message to the
@@ -286,22 +275,19 @@ void motor_move(int32_t angle, int8_t direction)
   assert((direction == MOTOR_DIRECTION_OPEN) ||
          (direction == MOTOR_DIRECTION_CLOSE));
 
-  uint8_t sreg = SREG; // save interrupt state
-  cli(); // disable interrupts
-  
-  motor_busy = true;
-  
-  // Convert to millidegrees and account for direction.
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    motor_busy = true;
+    
 
-  // Deriving motor_control.step_command from motor_control.step_position can
-  // cause error to accumulate from movement to movement. If
-  // motor_step_position is to be used for position control, then it needs  to
-  // be updated atomically in the motor position tracking ISR.
-  // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
+    // Deriving motor_control.step_command from motor_control.step_position can
+    // cause error to accumulate from movement to movement. If
+    // motor_step_position is to be used for position control, then it needs  to
+    // be updated atomically in the motor position tracking ISR.
+    // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
 
-  motor_control.step_command += direction*((angle*1000)/MOTOR_STEP_ANGLE);
-
-  SREG = sreg; // restore interrupt state
+    // Convert to millidegrees and account for direction.
+    motor_control.step_command += direction*((((uint32_t) angle)*1000)/MOTOR_STEP_ANGLE);
+  }
 }
 
 // Moves the motor to the home position (fully open).
@@ -328,10 +314,6 @@ void motor_away() {
 // Motor State Control ISR
 static inline void motor_state_control_ISR()
 {
-  // Report position data every 0.5s.
-  DEBUG_PRINT_EVERY(50, "step_command:  %d", motor_control.step_command);
-  DEBUG_PRINT_EVERY(50, "step_position: %d", motor_control.step_position);
-
   int32_t motor_step_delta = motor_control.step_command - motor_control.step_position;
 
   if (motor_step_delta > MOTOR_CONTROL_STEP_ERROR) {
@@ -393,24 +375,19 @@ int motorHalInit(void)
   uint8_t sreg = SREG; // save interrupt state
   cli(); // disable interrupts
 
-  timer3_setup();
-  timer4_setup();
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    timer3_setup();
+    timer4_setup();
 
-  // Serial Debug Port
-  // Serial.begin(38400);
-  // Serial.print("Start");
-  // Serial.println();
+    // Motor Pin Configuration
+    pinMode(PIN_MOTOR_PWM, OUTPUT);
+    pinMode(PIN_MOTOR_ENABLE, OUTPUT);
+    pinMode(PIN_MOTOR_DIRECTION, OUTPUT);
 
-  // Motor Pin Configuration
-  pinMode(PIN_MOTOR_PWM, OUTPUT);
-  pinMode(PIN_MOTOR_ENABLE, OUTPUT);
-  pinMode(PIN_MOTOR_DIRECTION, OUTPUT);
-
-  // Limit Switch Pin Configuration
-  pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
-  pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
-
-  SREG = sreg; // restore interrupt state
+    // Limit Switch Pin Configuration
+    pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
+    pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
+  }
 
   // Move the motor to the home position to zero the motor position.
   motor_home();
