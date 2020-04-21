@@ -191,20 +191,14 @@ void set_motor_state(uint8_t next_state)
   }
 
   if (next_state == MOTOR_STATE_OFF) {
-    DEBUG_PRINT("state: MOTOR_STATE_OFF");
-
     motor_pwm_disable();
     digitalWrite(PIN_MOTOR_ENABLE, LOW);
     motor_busy = false;
   } else if (next_state == MOTOR_STATE_HOLD) {
-    DEBUG_PRINT("state: MOTOR_STATE_HOLD");
-
     motor_pwm_disable();
     digitalWrite(PIN_MOTOR_ENABLE, HIGH);
     motor_busy = false;
   } else if (next_state == MOTOR_STATE_OPEN) {
-    DEBUG_PRINT("state: MOTOR_STATE_OPEN");
-
     // TODO
     /*
     if (motor_state == MOTOR_STATE_CLOSE) {
@@ -212,8 +206,6 @@ void set_motor_state(uint8_t next_state)
       // intermediate state transition constitute an error?
       //
       // Not sure if restoring interrupt state is necessary here.
-      SREG = sreg; // restore interrupt state
-
       assert(motor_state != MOTOR_STATE_CLOSE);
     }
     */
@@ -222,8 +214,6 @@ void set_motor_state(uint8_t next_state)
     digitalWrite(PIN_MOTOR_ENABLE, HIGH);
     motor_pwm_enable();
   } else if (next_state == MOTOR_STATE_CLOSE) {
-    DEBUG_PRINT("state: MOTOR_STATE_CLOSE");
-
     // TODO
     /*
     if (motor_state == MOTOR_STATE_OPEN) {
@@ -231,8 +221,6 @@ void set_motor_state(uint8_t next_state)
       // intermediate state transition be an error?
 
       // Not sure if restoring interrupt state is necessary here.
-      SREG = sreg; restore interrupt state
-
       assert(motor_state != MOTOR_STATE_OPEN);
     }
     */
