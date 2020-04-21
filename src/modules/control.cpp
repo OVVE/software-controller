@@ -98,7 +98,7 @@ static void updateTrajectory()
 }
 
 // Update volume control by tracking air flow trajectory
-static void updateVolumeControl(uint16_t* velocity)
+static int updateVolumeControl(uint16_t* velocity)
 {
 	// Update trajectory to get instantaneous target air flow
 	updateTrajectory();
@@ -119,10 +119,24 @@ static void updateVolumeControl(uint16_t* velocity)
 			desiredAirFlow = -1 * targetAirFlow;
 		}
 
-		// Check if reached desired volume within some tolerance
-		if (abs(desiredAirFlow - currentAirFlow) < toleranceAirFlow) {
+		// Check if timed out or reached desired volume within some tolerance
+		if ((timerHalRun(&controlTimer) == HAL_TIMEOUT) || (abs(targetVolume - currentVolume) < toleranceVolume)) {
+			// Reached target volume
+			return 1;
+		}
+		// Check if reached desired air flow within some tolerance
+		else if (abs(desiredAirFlow - currentAirFlow) > toleranceAirFlow) {
 			// Modulate velocity to move toward desired volume
 			velocity += airFlowControlGain * (desiredAirFlow - currentAirFlow);
+
+			// SEND MOTOR COMMANDS HERE
+
+			// Motor still running
+			return 0;
+		}
+		else {
+			// Motor still running
+			return 0;
 		}
 	}
 }
@@ -168,16 +182,15 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 			computeTrajectory();
 
     } else if (control.state == CONTROL_INHALATION) {
-  
+			/*
       // If in a volume controlled mode, run the Mid-level volume controller
       if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
           (parameters.ventilationMode == VENTILATOR_MODE_AC)) {
         
         // Mid-level controller function
 				//updateVolumeControl(&motorDistance, &motorDuration);
-        updateVolumeControl(&motorVelocity);
       }
-
+			*/
       
 			// ***** HERE NEEDS INTERFACING WITH LOW-LEVEL CONTROL FOR VELOCITY COMMAND
 
@@ -190,7 +203,13 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         motorHalBegin(MOTOR_HAL_DIRECTION_INHALATION, motorDistance, motorDuration);
         // TODO: Wait until motor reaches destination? Or try to parallelize
         // parameters re-issue motor control setpoints before completing last ones?
-        PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+        //PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+
+				if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
+					(parameters.ventilationMode == VENTILATOR_MODE_AC)) {
+
+					PT_WAIT_UNTIL(pt, updateVolumeControl(&motorVelocity) != 0);
+				}
       }
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
@@ -238,6 +257,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.respirationRateMeasured = (60 SEC) / (currentBreathTime USEC);
       control.breathCount++;
 
+			/*
 			// If in a volume controlled mode, run the Mid-level volume controller
 			if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
 				(parameters.ventilationMode == VENTILATOR_MODE_AC)) {
@@ -246,6 +266,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 				//updateVolumeControl(&motorDistance, &motorDuration);
 				updateVolumeControl(&motorVelocity);
 			}
+			*/
 
 			// ***** HERE NEEDS INTERFACING WITH LOW-LEVEL CONTROL FOR VELOCITY COMMAND
 
@@ -260,7 +281,12 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 				motorHalBegin(MOTOR_HAL_DIRECTION_INHALATION, motorDistance, motorDuration);
 				// TODO: Wait until motor reaches destination? Or try to parallelize
 				// parameters re-issue motor control setpoints before completing last ones?
-				PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+				
+				if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
+					(parameters.ventilationMode == VENTILATOR_MODE_AC)) {
+
+					PT_WAIT_UNTIL(pt, updateVolumeControl(&motorVelocity) != 0);
+				}
 			}
       
     } else {
