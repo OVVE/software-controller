@@ -42,18 +42,18 @@ typedef struct data_packet_def {
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
   uint32_t respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
   uint32_t respiratory_rate_set;      // bytes 8 - 11
-  uint32_t tidal_volume_measured;     // bytes 12 - 15
-  uint32_t tidal_volume_set;          // bytes 16 - 19
+  int32_t tidal_volume_measured;      // bytes 12 - 15
+  int32_t tidal_volume_set;           // bytes 16 - 19
   uint32_t ie_ratio_measured;         // bytes 20 - 23
   uint32_t ie_ratio_set;              // bytes 24 - 27
-  uint32_t peep_value_measured;       // bytes 28 - 31
-  uint32_t peak_pressure_measured;    // bytes 32 - 35
-  uint32_t plateau_value_measurement; // bytes 36 - 39
-  uint32_t pressure_measured;         // bytes 40 - 43
-  uint32_t flow_measured;             // bytes 44 - 47
-  uint32_t volume_in_measured;        // bytes 48 - 51
-  uint32_t volume_out_measured;       // bytes 52 - 55
-  uint32_t volume_rate_measured;      // bytes 56 - 59
+  int32_t peep_value_measured;        // bytes 28 - 31
+  int32_t peak_pressure_measured;     // bytes 32 - 35
+  int32_t plateau_value_measurement;  // bytes 36 - 39
+  int32_t pressure_measured;          // bytes 40 - 43
+  int32_t flow_measured;              // bytes 44 - 47
+  int32_t volume_in_measured;         // bytes 48 - 51
+  int32_t volume_out_measured;        // bytes 52 - 55
+  int32_t volume_rate_measured;       // bytes 56 - 59
   uint8_t control_state;              // byte 60       - rpi unsigned char
   uint8_t battery_level;              // byte 61
   uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
@@ -66,7 +66,7 @@ typedef struct command_packet_def {
   uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
   uint32_t respiratory_rate_set;      // bytes 4 - 7 - rpi unsigned int
-  uint32_t tidal_volume_set;          // bytes 8 - 11
+  int32_t tidal_volume_set;           // bytes 8 - 11
   uint32_t ie_ratio_set;              // bytes 12 - 15
   uint32_t alarm_bits;                // bytes 16 - 19
   uint16_t crc;                       // bytes 20 - 21 - rpi unsigned short int  
