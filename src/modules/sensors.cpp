@@ -31,7 +31,7 @@ static struct timer airVolumeTimer;
 
 uint32_t last_debug_time;
 
-#define PRESSURE_SAMPLING_RATE (20 MSEC)
+#define PRESSURE_SAMPLING_RATE (10 MSEC)
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -39,13 +39,14 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   int16_t rwPressure;						// pressure in real world units (tenths of mms of H2O)
   pressureSensorHalGetValue(&rwPressure);	// get pressure
   sensors.currentPressure = rwPressure;		// store in public sensor structure
-  DEBUG_PRINT_EVERY(20, "Pressure= %d mm H2O", rwPressure);
+  DEBUG_PRINT_EVERY(100, "Pressure= %c%u.%01u mm H2O",
+                    (rwPressure < 0) ? '-' : ' ', abs(rwPressure)/10, abs(rwPressure)%10);
   PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
 }
 
-#define AIRFLOW_SAMPLING_RATE (20 MSEC)
+#define AIRFLOW_SAMPLING_RATE (10 MSEC)
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -53,21 +54,29 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   int16_t rwAirflow;						// airflow in real world units (0.01 SLM) 
   airflowSensorHalGetValue(&rwAirflow);		// get airflow
   sensors.currentFlow = rwAirflow;			// store in public sensor structure
-  DEBUG_PRINT_EVERY(20, "Airflow= %d.%d SLM", rwAirflow/100, rwAirflow%100);
+  DEBUG_PRINT_EVERY(100, "Airflow= %c%u.%02u SLM",
+                    (rwAirflow < 0) ? '-' : ' ', abs(rwAirflow)/100, abs(rwAirflow)%100);
   PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
 }
 
-#define AIRVOLUME_SAMPLING_RATE (20 MSEC)
+#define AIRVOLUME_SAMPLING_RATE (10 MSEC)
 static PT_THREAD(sensorsAirVolumeThreadMain(struct pt* pt))
 {
+  static unsigned int counter = 0;
   PT_BEGIN(pt);
   timerHalBegin(&airVolumeTimer, AIRVOLUME_SAMPLING_RATE);  // set to 50ms to not overflow timer. Can be slowed down once timer hal is updated.
   int16_t rwAirVolume;						// air volume in real world units (ml)
   airVolumeSensorHalGetValue(&rwAirVolume);	// get air volume
   sensors.currentVolume = rwAirVolume;		// store in public sensor structure
-  DEBUG_PRINT_EVERY(20, "AirVolume= %d ml", rwAirVolume);
+  DEBUG_PRINT_EVERY(100, "AirVolume= %d ml", rwAirVolume);
+  if (++counter == 2000) {
+    // For now, every 20s reset the volume
+    DEBUG_PRINT("*** Resetting Volume ***");
+    airVolumeSensorHalReset();
+    counter = 0;
+  }
   PT_WAIT_UNTIL(pt, timerHalRun(&airVolumeTimer)!=HAL_IN_PROGRESS);
   PT_RESTART(pt);
   PT_END(pt);
