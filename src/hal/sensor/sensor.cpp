@@ -29,14 +29,14 @@ int16_t pSum; // pressure data accumulator
 void pressureSensorHalFetch(){
   int16_t pIn;  // pressure value from sensor.
   pIn=analogRead(PRESSURE_SENSE_PIN);
-  pSum = pSum-(pSum>>4)+pIn; // filter
+  pSum = pIn; // Filter Implementation: pSum-(pSum>>4)+pIn; // filter
 }
 
 // This routine returns the pressure value out of the filter
 int pressureSensorHalGetValue(int16_t *value){
   int32_t temp;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-	temp = pSum>>4;
+	temp = pSum; // Filter implementation: pSum>>4;
   }
   int32_t pascals = ((temp * 217L) - 110995L)>>2;	// convert to Pascals
   int32_t u100umH2O = (pascals * 4177L)>>12;		// convert Pascals to 0.1mmH2O
@@ -53,7 +53,7 @@ int32_t fVolSum; // volume accumulator, units of 0.01[mL]
 void airflowSensorHalFetch(){
   int16_t fIn;  // pressure value from sensor.
   fIn=analogRead(FLOW_SENSE_PIN);
-  fSum = fSum-(fSum>>3)+fIn; // filter
+  fSum = fIn; // Filter Implementation: fSum-(fSum>>3)+fIn; // filter
   
   // get precise volume : integrate flow at every sample
   int16_t f; // flow in 0.01 SLM
@@ -78,7 +78,7 @@ void airflowSensorHalFetch(){
 int airflowSensorHalGetValue(int16_t *value){
   int32_t temp;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-    temp = (fSum>>3);
+    temp = fSum; // Filter Implementation: (fSum>>3);
   }  
   // fSum (now temp) is filtered ADC values, from PMF4003V data sheet:
   // flow = (Vout - 1[V]) / 4[V] * Range = (Vout - 1[V]) / 4[V] * 20000[0.01SLM]
@@ -98,10 +98,12 @@ int airVolumeSensorHalGetValue(int16_t *value){
     // Since volume is stored in units [0.01mL], convert to [mL]
     *value = fVolSum / 100;
   }
+  return HAL_OK;
 }
 
-void resetVolume() {
+int airVolumeSensorHalReset(void) {
   fVolSum = 0;
+  return HAL_OK;
 }
 
 

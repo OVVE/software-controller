@@ -17,5 +17,8 @@ int pressureSensorHalGetValue(int16_t *value);
 // Gets the volume value in ml
 int airVolumeSensorHalGetValue(int16_t *value);
 
+// Resets volume integrator
+int airVolumeSensorHalReset(void);
+
 
 #endif /* __SENSOR_HAL_H__ */
