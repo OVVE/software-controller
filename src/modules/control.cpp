@@ -24,8 +24,7 @@ struct control control = {
 static struct pt controlThread;
 static struct timer controlTimer;
 
-static unsigned int motorCompressionDistance;
-static unsigned int motorCompressionDuration;
+static int8_t motorCompressionDistance;
 
 static PT_THREAD(controlThreadMain(struct pt* pt))
 {
@@ -52,9 +51,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       if (true) {
         // TODO: Calculate breath parameters and motor control.
         motorCompressionDistance = 40; // Fixed to 40 degrees excursion for now.
-        motorCompressionDuration = 0;
         // TODO: Error check
-        motorHalBegin(MOTOR_HAL_DIRECTION_INHALATION, motorCompressionDistance, motorCompressionDuration);
+        motorHalCommand(motorCompressionDistance, 5000U);
       } else {
         // TODO: Implement Assist mode setup
       }
@@ -65,7 +63,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       // if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
       if (true) {
-        PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+        PT_WAIT_UNTIL(pt, motorHalStatus() != HAL_IN_PROGRESS);
       } else {
         // TODO: Implement Assist mode run
       }
@@ -89,7 +87,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Since exhalation is not dependent on the bag, allow the bag to decompress with the same parameters as compression
       // In order to time exhalation, set a timer to time the exhalation cycle
       // TODO: consider if patient takes breathe before motor has completely moved back
-      motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION, motorCompressionDistance, motorCompressionDuration);
+      motorHalCommand(5, 5000U);
       timerHalBegin(&controlTimer, 2666 MSEC); // TODO: calculate this value from the breath parameters.
       control.state = CONTROL_EXHALATION;
       
@@ -97,7 +95,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       DEBUG_PRINT("state: CONTROL_EXHALATION");
 
       // TODO: Fix this condition for assisted modes
-      PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS && timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
+      PT_WAIT_UNTIL(pt, motorHalStatus() != HAL_IN_PROGRESS && timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
       
     } else {
