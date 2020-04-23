@@ -1,19 +1,18 @@
-
 #ifndef __MOTOR_HAL_H__
 #define __MOTOR_HAL_H__
 
 #include "../hal/hal.h"
 
-#define MOTOR_HAL_DIRECTION_INHALATION 0x55
-#define MOTOR_HAL_DIRECTION_EXHALATION 0xAF
+#include <stdint.h>
 
 // TODO: Doc
-int motorHalInit(void);
+int8_t motorHalInit(void);
 
 // TODO: Doc
-int motorHalBegin(unsigned int direction, unsigned int distance, unsigned int duration);
+int8_t motorHalCommand(uint8_t position, uint16_t speed);
 
 // TODO: Doc
-int motorHalRun(void);
+int8_t motorHalStatus(void);
 
 #endif /* __MOTOR_HAL_H__ */
+
