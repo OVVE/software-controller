@@ -31,9 +31,6 @@ static struct pt controlThread;
 static struct timer breathTimer;
 static struct timer controlTimer;
 
-static uint16_t totalMotorCompressionDistance;
-static uint16_t totalMotorCompressionDuration;
-
 static uint16_t targetVolume;
 static uint32_t totalBreathTime;
 static uint32_t targetInhalationTime;
@@ -42,13 +39,11 @@ static uint32_t measuredInhalationTime;
 static uint32_t measuredExhalationTime;
 
 // Mid-level volume control function
-static void updateVolumeControl(uint16_t* distance, uint16_t* duration)
+static void updateVolumeControl(uint16_t* position, uint16_t* speed)
 {
   // TODO: fill-in this function; for now just perform a 40 degree motion
-  if (totalMotorCompressionDistance == 0) {
-    *distance = 40;
-    *duration = 0;
-  }
+  *position = 40;
+  *speed = 5000;
 }
 
 static PT_THREAD(controlThreadMain(struct pt* pt))
@@ -83,8 +78,6 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       targetVolume = parameters.volumeRequested;
       
       // Initialize all 
-      totalMotorCompressionDistance = 0;
-      totalMotorCompressionDuration = 0;
       measuredInhalationTime = 0;
       measuredExhalationTime = 0;
       
@@ -97,31 +90,28 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_INHALATION) {
       DEBUG_PRINT("state: CONTROL_INHALATION");
 
-      uint16_t motorDistance = 0;
-      uint16_t motorDuration = 0;
+      uint16_t motorPosition = 0;
+      uint16_t motorSpeed = 0;
   
       // If in a volume controlled mode, run the Mid-level volume controller
       if ((parameters.ventilationMode == VENTILATOR_MODE_VC) ||
           (parameters.ventilationMode == VENTILATOR_MODE_AC)) {
         
         // Mid-level controller function
-        updateVolumeControl(&motorDistance, &motorDuration);
+        updateVolumeControl(&motorPosition, &motorSpeed);
       }
       
-      // Update distance/duration accumulators (for exhalation)
-      totalMotorCompressionDistance += motorDistance;
-      totalMotorCompressionDuration += motorDuration;
-      
       // If the controller reports zero distance or the timer has expired, move
-      // on to next state, otherwi<<se run the motor as specified by the controller
-      if ((timerHalRun(&controlTimer) == HAL_TIMEOUT) || (motorDistance == 0)) {
+      // on to next state, otherwise run the motor as specified by the controller
+      // TODO: Fix up conditions based on new motor hal api
+      if (timerHalRun(&controlTimer) == HAL_TIMEOUT) {
         measuredInhalationTime = timerHalCurrent(&breathTimer);
         control.state = CONTROL_BEGIN_HOLD_IN;
       } else {
-        motorHalBegin(MOTOR_HAL_DIRECTION_INHALATION, motorDistance, motorDuration);
+        motorHalCommand(motorPosition, motorSpeed); // TODO: Fix the speed
         // TODO: Wait until motor reaches destination? Or try to parallelize
         // parameters re-issue motor control setpoints before completing last ones?
-        PT_WAIT_UNTIL(pt, motorHalRun() != HAL_IN_PROGRESS);
+        PT_WAIT_UNTIL(pt, motorHalStatus() != HAL_IN_PROGRESS);
       }
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
@@ -141,12 +131,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_BEGIN_EXHALATION) {
       DEBUG_PRINT("state: CONTROL_BEGIN_EXHALATION");
 
-      // Since exhalation is not dependent on the bag, allow the bag to decompress with the same parameters as compression
-      // In order to time exhalation, set a timer to time the exhalation cycle
+      // Since patient exhalation is not dependent on the bag, allow the bag to 
+      // decompress back with fixed parameters for now
       // TODO: consider if patient takes breathe before motor has completely moved back
-      motorHalBegin(MOTOR_HAL_DIRECTION_EXHALATION,
-                    totalMotorCompressionDistance,
-                    totalMotorCompressionDuration);
+      motorHalCommand(5, 5000U);
       control.state = CONTROL_EXHALATION;
       
     } else if (control.state == CONTROL_EXHALATION) {
@@ -154,7 +142,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Wait for the motor to move back
       // TODO: consider if patient takes breathe before motor has completely moved back?
       // probably cant start the breath until the motor moves back anyway, right?
-      PT_WAIT_UNTIL(pt, ((motorHalRun() != HAL_IN_PROGRESS) ||
+      PT_WAIT_UNTIL(pt, ((motorHalStatus() != HAL_IN_PROGRESS) ||
                          (timerHalRun(&breathTimer) != HAL_IN_PROGRESS)));
       
       // Now wait for the current exhalation time (now the remainder of the breath
@@ -162,7 +150,6 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS) ||
                          ((parameters.ventilationMode == VENTILATOR_MODE_AC) &&
                            sensors.inhalationDetected)));
-
       
       // Calculate and update the measured times
       uint32_t currentBreathTime = timerHalCurrent(&breathTimer);
