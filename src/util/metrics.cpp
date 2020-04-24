@@ -10,6 +10,7 @@
 void metricsReset(struct metrics* metrics)
 {
   metrics->count = 0;
+  metrics->sum = 0;
   metrics->average = 0;
   metrics->maximum = 0;
   metrics->minimum = UINT32_MAX;
