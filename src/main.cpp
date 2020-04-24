@@ -11,6 +11,7 @@
 #define DEBUG_MODULE "main"
 #include "util/debug.h"
 
+static struct metrics mainLoopMetrics;
 static struct metrics scheduleMetrics;
 static struct metrics controlModuleMetrics;
 static struct metrics sensorsModuleMetrics;
@@ -30,6 +31,7 @@ void mainSetup(void)
   parametersModuleInit();
   linkModuleInit();
 
+  metricsReset(&mainLoopMetrics);
   metricsReset(&scheduleMetrics);
   metricsReset(&controlModuleMetrics);
   metricsReset(&sensorsModuleMetrics);
@@ -40,6 +42,7 @@ void mainSetup(void)
 
 void mainLoop(void)
 {
+  metricsStart(&mainLoopMetrics);
   metricsStart(&scheduleMetrics);
   
   // Run all modules in RR; take specified actions in the event of failure
@@ -72,6 +75,10 @@ void mainLoop(void)
   metricsStop(&scheduleMetrics);
   DEBUG_PRINT_EVERY(25000, "Runtime Metrics:");
   DEBUG_PRINT_EVERY(25000, " Main loop:  %10lu us : %10lu us : %10lu us",
+                    mainLoopMetrics.minimum,
+                    mainLoopMetrics.average,
+                    mainLoopMetrics.maximum);
+  DEBUG_PRINT_EVERY(25000, " Scheduler:  %10lu us : %10lu us : %10lu us",
                     scheduleMetrics.minimum,
                     scheduleMetrics.average,
                     scheduleMetrics.maximum);
@@ -91,4 +98,5 @@ void mainLoop(void)
                     linkModuleMetrics.minimum,
                     linkModuleMetrics.average,
                     linkModuleMetrics.maximum);
+  metricsStop(&mainLoopMetrics);
 }
