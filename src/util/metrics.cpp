@@ -28,11 +28,12 @@ void metricsStop(struct metrics* metrics)
   uint32_t time = ((uint32_t) micros()) - metrics->current;
   metrics->count++;
   
-  // Handle rollover of sum (which should always rollover faster than sum
+  // Handle rollover of sum (which should always rollover faster than counter)
   if (metrics->sum + time < metrics->sum) {
     // TODO: Find a better solution
     //       For now, set sum to a reasonable multiplier of the average so the current
     //       time can continue to be rolled in without dominating the average
+    //       See github PR #34 for a short discussion on possible improvements/modifications
     metrics->count = 100;
     metrics->sum = metrics->average * metrics->count;
   }
