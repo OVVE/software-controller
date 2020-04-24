@@ -36,7 +36,7 @@
 
 #define PACKET_VERSION 2
 
-typedef struct data_packet_def {
+typedef struct __attribute__((packed)) {
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
   uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
@@ -59,9 +59,9 @@ typedef struct data_packet_def {
   uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
   uint32_t alarm_bits;                // bytes 64 - 67
   uint16_t crc;                       // bytes 68 - 69 - rpi unsigned short int
-}__attribute__((packed));
+} data_packet_def;
 
-typedef struct command_packet_def {
+typedef struct __attribute__((packed)) {
   uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
   uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
@@ -70,7 +70,7 @@ typedef struct command_packet_def {
   uint32_t ie_ratio_set;              // bytes 12 - 15
   uint32_t alarm_bits;                // bytes 16 - 19
   uint16_t crc;                       // bytes 20 - 21 - rpi unsigned short int  
-}__attribute__((packed));
+} command_packet_def;
 
 struct link {
   // Variables
