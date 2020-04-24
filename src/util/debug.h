@@ -34,7 +34,7 @@
 // to remember this per line)
 #define DEBUG_PRINT_EVERY(i, ...)                                       \
   do {                                                                  \
-    static unsigned int _count = (i - __LINE__) % i;   \
+    static unsigned int _count = (i - __LINE__) % i;                    \
     if (i - (++_count) == 0) {                                          \
       DEBUG_PRINT(__VA_ARGS__);                                         \
       _count = 0;                                                       \
