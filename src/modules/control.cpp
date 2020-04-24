@@ -24,6 +24,8 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
+#define MIN_VELOCITY  2 // TODO: Fix this
+
 
 // Public Variables
 struct control control = {
@@ -42,6 +44,8 @@ static uint32_t targetInhalationTime;
 static uint32_t measuredInhalationTime;
 static uint32_t measuredExhalationTime;
 
+static bool controlComplete;
+
 // *****************
 // Control variables
 // *****************
@@ -50,15 +54,15 @@ static uint32_t measuredExhalationTime;
 // Velocity max = 20 rpm
 static unsigned int currentPosition = 0;
 static unsigned int targetPosition = 0;
-static unsigned int targetVelocity = 0;
+static float targetAirFlow = 0.0f;
 static unsigned int tolerancePosition = 0;
 static unsigned int trapezoidRatio = 2;             // TEMPORARILY SET
 static uint32_t rampTime = 0;
 static uint32_t platTime = 0;
 static uint32_t elapsedTime = 0;
-static float velocityScale = 0.0;
-static float nomVelocity = 0.0;
-static uint32_t breathTimerStateStart;
+static float velocityScale = 0.0f;
+static float nomVelocity = 0.0f;
+static uint32_t breathTimerStateStart = 0;
 
 // Pre-compute the trajectory based on known set points and timing requirements
 static void computeTrajectory()
@@ -73,17 +77,18 @@ static void computeTrajectory()
 
     // Position information needs to be integrated to allow for adaptive positioning on exhalation
     targetPosition = 5;
-    rampTime = (totalBreathTime - targetInhalationTime) / (2 + trapezoidRatio);
+    rampTime = (totalBreathTime - targetInhalationTime) / (2.0f + trapezoidRatio);
     platTime = trapezoidRatio * rampTime;
-    nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0 * 1000000.0 * 60.0 / ((float)(rampTime + platTime) * 360.0);
+    nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0f * 1000000.0f * 60.0f / ((float)(rampTime + platTime) * 360.0f);
+
 
   } else if (control.state == CONTROL_BEGIN_INHALATION) {
 
     // EVENTUALLY REFACTORING FOR VOLUME TRAJECTORY, temporarily position tracking for testing
     targetPosition = 40;
-    rampTime = targetInhalationTime / (2 + trapezoidRatio);
+    rampTime = targetInhalationTime / (2.0f + trapezoidRatio);
     platTime = trapezoidRatio * rampTime;
-    nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0 * 1000000.0 * 60.0 / ((float)(rampTime + platTime) * 360.0);
+    nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0f * 1000000.0f * 60.0f / ((float)(rampTime + platTime) * 360.0f);
 
   } else {
     // Blank
@@ -100,48 +105,115 @@ static void updateTrajectory()
   if (elapsedTime < rampTime) {
     // Ramp up
     velocityScale = ((float)elapsedTime / (float)rampTime);
-    targetVelocity = (unsigned int)(nomVelocity * velocityScale);
 
   } else if ((elapsedTime > rampTime) && (elapsedTime < (platTime + rampTime))) {
     // Plateau
     velocityScale = 1.0;
-    targetVelocity = (unsigned int)(nomVelocity * velocityScale);
 
   } else {
     // Ramp down
     velocityScale = (float)(2 * rampTime + platTime - elapsedTime) / (float)rampTime;
-    targetVelocity = (unsigned int)(nomVelocity * velocityScale);
 
   }
 
-  // Debug Output Section
+ targetAirFlow = (nomVelocity * velocityScale);
+ // Debug Output Section
   DEBUG_PRINT_EVERY(100, "Target Position: %lu ; Nominal Velocity: %lu ; Target Velocity: %lu", 
-    (uint32_t)targetPosition, (uint32_t)nomVelocity, (uint32_t)targetVelocity);
+    (uint32_t)targetPosition, (uint32_t)nomVelocity, (uint32_t)targetAirFlow);
   // DEBUG_PRINT_EVERY(1000, "Elapsed Time: %lu ; Ramp Time: %lu ; Velocity Scale: %lu", elapsedTime, rampTime, (uint32_t)(1000.0 * velocityScale));
   // DEBUG_PRINT_EVERY(1000, "Proportion of Phase: %lu", velocityScale);
 
 }
 
 // Update control commands and handle ISR/control flags
-static int updateControl()
+static int updateControl(void)
 {
 
-  // Update trajectory to get instantaneous target air flow
-  updateTrajectory();
+    float flowSensorInput;
+    static float lastFlowSensorInput=0.0f;
+    float controlP,controlD;
+    static float controlI=0.0f;
+    float controlOut;
+    float controlOutLimited;
 
-  // **************************************************************
-  // Here is where closed loop control structure will be developed
-  // **************************************************************
-  // Depending on whether we are in inhalation or exhalation, we will
-  // switch between closed loop air flow tracking and closed loop position
-  // tracking. The updateControl() function will accept a flag set by an ISR.
+    //TEMPORARY ASSIGNMENT. SHOULD BE STORED IN PARAMETERS
+    float Kf=0.8f;
+    float Kp=0.1f;
+    float Ki=.0f;
+    float Kd=.0f;
+    float KiMax=10.0f; //max speed adjustment because of I-part in % of nominalVelocity
+    float controlMax=20.0f; //max speed adjustment of current target velocity
 
-  // Send motor commands
-  motorHalCommand(targetPosition, targetVelocity);
+    //Timing
+    // TODO: Use metrics here instead
+    long startMicros=0;
+    long timeToComputeControl=0;
+    static long timeToComputeControlFiltered=0;
+    //startMicros=micros();
 
-  // Return unfinished
-  return 0;
+    // Update trajectory to get instantaneous target air flow
+    updateTrajectory();
 
+    // **************************************************************
+    // Here is where closed loop control structure will be developed
+    // **************************************************************
+    // Depending on whether we are in inhalation or exhalation, we will
+    // switch between closed loop air flow tracking and closed loop position
+    // tracking. The updateControl() function will accept a flag set by an ISR.
+
+
+    //read sensor inputs
+    flowSensorInput=targetAirFlow;//needs to be getFlowSensorInput
+
+    //calculate proportional part
+    controlP=targetAirFlow-flowSensorInput;
+
+    //calculate differential part
+    controlD=lastFlowSensorInput-flowSensorInput;
+
+    //calculate integral part
+    controlI+=controlP;
+
+    //limit integral part
+    if ((Ki*controlI)>(nomVelocity*KiMax/100.0f))
+        controlI=(nomVelocity*KiMax/100.0f)/Ki;
+
+    if ((Ki*controlI)<(-nomVelocity*KiMax/100.0f))
+        controlI=-(nomVelocity*KiMax/100.0f)/Ki;
+
+    //limit and output
+
+    controlOut=Kp*controlP+Kd*controlD+Ki*controlI;
+
+
+    if (controlOut>(controlMax/100.0f*targetAirFlow))
+        controlOut=(controlMax/100.0f*targetAirFlow);
+
+    if (controlOut<-(controlMax/100.0f*targetAirFlow))
+        controlOut=-(controlMax/100.0f*targetAirFlow);
+
+    //final control output is feed forward + limited controlOut
+    controlOutLimited=Kf*targetAirFlow+controlOut;
+
+    // Send motor commands
+    motorHalCommand(targetPosition, controlOutLimited);
+
+    lastFlowSensorInput=flowSensorInput;
+
+    //timeToComputeControl=micros()-startMicros;
+
+    if (timeToComputeControl>0) //micros() overruns every 70mins, catch this here
+    {
+        timeToComputeControlFiltered=9*timeToComputeControlFiltered+timeToComputeControl;
+        timeToComputeControlFiltered/=10;
+        DEBUG_PRINT_EVERY(1000,"Control Stats: Avg us: %ul\n",timeToComputeControlFiltered);
+    }
+    // Return finished
+    if (controlOutLimited < MIN_VELOCITY) {
+      return 1;
+    }
+    // Return unfinished
+    return 0;
 }
 
 static bool checkInhalationTimeout(void)
@@ -194,6 +266,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       timerHalBegin(&breathTimer, totalBreathTime);
       
       breathTimerStateStart = timerHalCurrent(&breathTimer);
+      controlComplete = false;
 
       // Compute trajectory
       computeTrajectory();
@@ -203,29 +276,28 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_INHALATION) {
       DEBUG_PRINT("state: CONTROL_INHALATION");
 
-      // Kick off control loop timer, ensuring the control loop runs periodically
-      timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD);
+      while (1) {
+        // Kick off control loop timer, ensuring the control loop runs periodically
+        timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD);
       
-      // TODO: Different modes?
-      updateControl();
+        // TODO: Different modes?
+        controlComplete = updateControl();
       
-      // Wait until either the control loop timer has expired or until the timeout
-      // condition has been reached; assuming the velocity isnt 0
-      if (targetVelocity == 0) {
-        PT_WAIT_UNTIL(pt, ((timerHalRun(&controlTimer) != HAL_IN_PROGRESS) ||
-                          checkInhalationTimeout()));
+        // If the control still hasnt reached its destination and the timeout
+        // condition hasnt been met, continue the control loop, waiting for the
+        // next control cycle; otherwise exit this state
+        if (!controlComplete && !checkInhalationTimeout()) {
+          PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
+        } else {
+          break;
+        }
       }
-      
-      // If either a timeout occurred or the controller is setting the velocity
-      // to 0, we have arrived at the maximum compression point, move on to the
-      // next part of the breath
-      if (checkInhalationTimeout() || (targetVelocity == 0)) {
-        // Update some things on state exit
-        currentPosition = targetPosition;
-        measuredInhalationTime = timerHalCurrent(&breathTimer);
+
+      // Update some things on state exit
+      currentPosition = targetPosition;
+      measuredInhalationTime = timerHalCurrent(&breathTimer);
         
-        control.state = CONTROL_BEGIN_HOLD_IN;
-      }
+      control.state = CONTROL_BEGIN_HOLD_IN;
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
       DEBUG_PRINT("state: CONTROL_BEGIN_HOLD_IN");
@@ -248,27 +320,33 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       computeTrajectory();
       
       breathTimerStateStart = timerHalCurrent(&breathTimer);
+      controlComplete = false;
       
       control.state = CONTROL_EXHALATION;
       
     } else if (control.state == CONTROL_EXHALATION) {
       DEBUG_PRINT("state: CONTROL_EXHALATION");
       
-      // Kick off control loop timer, ensuring the control loop runs periodically
-      timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD);
+      while (1) {
+        // Kick off control loop timer, ensuring the control loop runs periodically
+        timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD);
       
-      // TODO: Different modes?
-      updateControl();
+        // TODO: Different modes?
+        controlComplete = updateControl();
       
-      // Wait until either the control loop timer has expired or until the timeout
-      // condition has been reached; assuming the velocity isnt 0
-      // TODO: Consider what a timeout here means, it means the motor wasn't
-      //       able to get all the way back, should we really keep going?
-      if (targetVelocity == 0) {
-        PT_WAIT_UNTIL(pt, ((timerHalRun(&controlTimer) != HAL_IN_PROGRESS) ||
-                          checkExhalationTimeout()));
+        // If the control still hasnt reached its destination and the timeout
+        // condition hasnt been met, continue the control loop, waiting for the
+        // next control cycle; otherwise move on to the next steps in exhalation
+        // TODO: Consider what a timeout here means, it means the motor wasn't
+        //       able to get all the way back, should we really keep going?
+        if (!controlComplete && !checkInhalationTimeout()) {
+          PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
+        } else {
+          break;
+        }
       }
       
+      // TODO: look into this
       currentPosition = targetPosition;
       
       // At this point, either wait for the breath timer to expire or find a new
@@ -293,7 +371,6 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_IDLE;
     }
     
-    // TODO: Consider removing this yield to improve control loop timing
     PT_YIELD(pt);
   }
   
