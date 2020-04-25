@@ -68,7 +68,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   // Kick off sampling timer
-  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_RATE);
+  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD);
   
   int16_t pressure;
   pressureSensorHalGetValue(&pressure);	// get pressure, in [0.1mmH2O]
@@ -142,7 +142,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       inhalationTimeout = 0;
     }
   }
-  if (sensor.inhalationDetected &&
+  if (sensors.inhalationDetected &&
       (inhalationTimeout++ == (uint8_t) (INHALATION_TIMEOUT / PRESSURE_SAMPLING_PERIOD))) {
     sensors.inhalationDetected = false;
   }
@@ -180,7 +180,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   // Derive Volume IN from current volume; updating the public value upon entry
   // into CONTROL_HOLD_IN state
   if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
-    sensor.volumeIn = airvolume;
+    sensors.volumeIn = airvolume;
     setVolumeIn = true;
   } else if (control.state == CONTROL_EXHALATION) {
     setVolumeIn = false;
@@ -194,7 +194,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   maxVolume = max(maxVolume, airvolume);
   if (volumeMinuteTimeout++ == (uint8_t) (VOLUME_MINUTE_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
     sensors.volumePerMinute -= volumeMinuteWindow[VOLUME_MINUTE_WINDOW - 1];
-    sensors.voluemPerMinute += maxVolume;
+    sensors.volumePerMinute += maxVolume;
     for (int i = VOLUME_MINUTE_WINDOW - 1; i > 0; i--) {
       volumeMinuteWindow[i] = volumeMinuteWindow[i - 1];
     }
