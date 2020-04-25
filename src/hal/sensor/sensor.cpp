@@ -57,7 +57,7 @@ void airflowSensorHalFetch(){
   
   // get precise volume : integrate flow at every sample
   int16_t f; // flow in 0.01 SLM
-  airflowSensorHalGetValue(&f);
+  airflowSensorHalGetFlow(&f);
   // In order to preserve precision of the volume, the acculumator should be in
   // units on the order of 0.01mL, since the longest breath cycle is 6 seconds 
   // (5[bpm], 1:1I:E = 12[sec/breath] / 2 = 6[sec/breath] for inhalation/exhalation stages)
@@ -75,7 +75,7 @@ void airflowSensorHalFetch(){
 }
 
 // This routine returns the flow sensor value out of the filter
-int airflowSensorHalGetValue(int16_t *value){
+int airflowSensorHalGetFlow(int16_t *value){
   int32_t temp;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
     temp = fSum; // Filter Implementation: (fSum>>3);
@@ -93,7 +93,7 @@ int airflowSensorHalGetValue(int16_t *value){
 }
 
 // This routine returns the integrated volume value
-int airVolumeSensorHalGetValue(int16_t *value){
+int airflowSensorHalGetVolume(int16_t *value){
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
     // Since volume is stored in units [0.01mL], convert to [mL]
     *value = fVolSum / 100;
@@ -101,7 +101,7 @@ int airVolumeSensorHalGetValue(int16_t *value){
   return HAL_OK;
 }
 
-int airVolumeSensorHalReset(void) {
+int airflowSensorHalResetVolume(void) {
   fVolSum = 0;
   return HAL_OK;
 }
