@@ -137,18 +137,16 @@ static int updateControl()
 
 }
 
+uint8_t angle;
+uint16_t speed;
+
 static PT_THREAD(controlThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
 
-  // Current Settings
-  // 15 BPM
-  // I:E 1:2
-  // TV - (dependent upon lung compliance and PEEP setting)
-
   while (true) {
     if (control.state == CONTROL_IDLE) {
-      DEBUG_PRINT_EVERY(10000, "state: CONTROL_IDLE");
+      // DEBUG_PRINT_EVERY(10000, "CONTROL_IDLE");
 
       // Wait for the parameters to enter the run state before
       if (parameters.startVentilation) {
@@ -156,72 +154,50 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       }
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
-      DEBUG_PRINT("state: CONTROL_BEGIN_INHALATION");
+      // DEBUG_PRINT("CONTROL_BEGIN_INHALATION");
+     
+      angle = (uint8_t) (parameters.volumeRequested/10);
+      speed = (uint16_t) (parameters.respirationRateRequested*1000);
+      DEBUG_PRINT("Squeezer Arm Angle: %02d degrees", angle);
+      DEBUG_PRINT("Squeezer Arm Speed: %02d RPM\n", (speed/1000));
       
-      // Manually set per current settings above
-      totalBreathTime = (60 SEC) / 15;
-      targetInhalationTime = totalBreathTime / 3;
-
-      timerHalBegin(&controlTimer, targetInhalationTime);
-
-      // Compute trajectory
-      computeTrajectory();
-
       control.state = CONTROL_INHALATION;
       
     } else if (control.state == CONTROL_INHALATION) {
-      DEBUG_PRINT("state: CONTROL_INHALATION");
+      // DEBUG_PRINT("CONTROL_INHALATION");
 
-      // Update control loop
-      if (true) {
-        PT_WAIT_UNTIL(pt, updateControl() != 0);
-      } else {
-        //
-      }
-
-      // TEMPORARY UPDATE POSITION
-      currentPosition = targetPosition;
-
+      PT_WAIT_UNTIL(pt, motorHalCommand(15 + angle, speed) != HAL_IN_PROGRESS);
       control.state = CONTROL_BEGIN_HOLD_IN;
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
-      DEBUG_PRINT("state: CONTROL_BEGIN_HOLD_IN");
+      // DEBUG_PRINT("CONTROL_BEGIN_HOLD_IN");
 
-      timerHalBegin(&controlTimer, 500 MSEC);
+      timerHalBegin(&controlTimer, 200 MSEC);
       control.state = CONTROL_HOLD_IN;
       
     } else if (control.state == CONTROL_HOLD_IN) {
-      DEBUG_PRINT("state: CONTROL_HOLD_IN");
+      // DEBUG_PRINT("CONTROL_HOLD_IN");
 
       PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       control.state = CONTROL_BEGIN_EXHALATION;
       
     } else if (control.state == CONTROL_BEGIN_EXHALATION) {
-      DEBUG_PRINT("state: CONTROL_BEGIN_EXHALATION");
+      // DEBUG_PRINT("CONTROL_BEGIN_EXHALATION");
 
-      timerHalBegin(&controlTimer, (totalBreathTime - targetInhalationTime));
-
-      // Compute trajectory
-      computeTrajectory();
-      
       control.state = CONTROL_EXHALATION;
       
     } else if (control.state == CONTROL_EXHALATION) {
-      DEBUG_PRINT("state: CONTROL_EXHALATION");
+      // DEBUG_PRINT("CONTROL_EXHALATION");
 
-      if (true) {
-        PT_WAIT_UNTIL(pt, updateControl() != 0);
-      } else {
-        //
-      }
+      PT_WAIT_UNTIL(pt, motorHalCommand(15, speed) != HAL_IN_PROGRESS);
 
-      // TEMPORARY UPDATE POSITION
-      currentPosition = targetPosition;
+      timerHalBegin(&controlTimer, 3 SEC);
+      PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       
       control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
       
     } else {
-      DEBUG_PRINT("state: (unknown)");
+      DEBUG_PRINT("state unknown");
 
       // TODO: Error, unknown control state!!!
       control.state = CONTROL_IDLE;

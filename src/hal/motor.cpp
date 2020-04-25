@@ -9,7 +9,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-#define DEBUG
+// #define DEBUG
 #define DEBUG_MODULE "motor"
 #include "../util/debug.h"
 
@@ -74,8 +74,8 @@
 //  400 (quarter steps)
 //  800 (eigth steps)
 // 1600 (sixteenth steps)
-#define MC_MICROSTEP_RESOLUTION 400
-#define MC_MICROSTEPS_PER_STEP (MC_MICROSTEP_RESOLUTION/100)
+// #define MC_MICROSTEP_RESOLUTION 400
+// #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEP_RESOLUTION/100)
 
 // stepperonline DM332T
 // Pulse/rev
@@ -88,8 +88,8 @@
 // 6400
 // 8000
 // 12800
-// #define MC_MICROSTEPS_PER_REVOLUTION 800
-// #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+#define MC_MICROSTEPS_PER_REVOLUTION 800
+#define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
 
 //**************************************
 // Motor State Machine Definitions
