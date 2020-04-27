@@ -12,7 +12,7 @@
 #include "../modules/module.h"
 #include "../modules/sensors.h"
 
-#define DEBUG
+//#define DEBUG
 #define DEBUG_MODULE "sensor"
 #include "../util/debug.h"
 
