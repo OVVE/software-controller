@@ -83,7 +83,7 @@ void updateFromCommandPacket()
   comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = public_command_packet.ie_ratio_set;
  
-  public_data_packet.battery_level = 0; // TBD set to real value when available
+  public_data_packet.battery_status = 0; // TBD set to real value when available
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("mode bits: 0x");
         SERIAL_DEBUG.println(public_command_packet.mode_value, HEX);
