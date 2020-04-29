@@ -16,7 +16,7 @@
 
 #include "../util/metrics.h"
 
-#define DEBUG
+//#define DEBUG
 #define DEBUG_MODULE "control"
 #include "../util/debug.h"
 
@@ -100,7 +100,7 @@ static void computeTrajectory()
 }
 
 // Track timing and scale output based on location in trajectory
-static void updateTrajectory()
+static int updateTrajectory()
 {
 
   // Determine elapsed time and place along trajectory
@@ -114,19 +114,23 @@ static void updateTrajectory()
     // Plateau
     velocityScale = 1.0;
 
-  } else {
+  } else if (elapsedTime<(platTime + 2*rampTime)) {
     // Ramp down
     velocityScale = (float)(2 * rampTime + platTime - elapsedTime) / (float)rampTime;
-
+  }else
+  {
+        velocityScale=0.0f;
+	targetAirFlow=0.0f;
+        return 1;
   }
 
  targetAirFlow = (nomVelocity * velocityScale);
  // Debug Output Section
-  DEBUG_PRINT_EVERY(100, "Target Position: %lu ; Nominal Velocity: %lu ; Target Velocity: %lu", 
+  DEBUG_PRINT_EVERY(10, "Target Position: %lu ; Nominal Velocity: %lu ; Target Velocity: %lu", 
     (uint32_t)targetPosition, (uint32_t)nomVelocity, (uint32_t)targetAirFlow);
   // DEBUG_PRINT_EVERY(1000, "Elapsed Time: %lu ; Ramp Time: %lu ; Velocity Scale: %lu", elapsedTime, rampTime, (uint32_t)(1000.0 * velocityScale));
   // DEBUG_PRINT_EVERY(1000, "Proportion of Phase: %lu", velocityScale);
-
+ return 0;
 }
 
 // Update control commands and handle ISR/control flags
@@ -144,14 +148,29 @@ static int updateControl(void)
     float Kf=0.8f;
     float Kp=0.1f;
     float Ki=.0f;
-    float Kd=.0f;
+    float Kd=0.1f;
     float KiMax=10.0f; //max speed adjustment because of I-part in % of nominalVelocity
     float controlMax=20.0f; //max speed adjustment of current target velocity
     
+
+   if (control.state == CONTROL_EXHALATION)
+    {
+	//deactivate controller for exhilation
+	Kf=1.0f;
+        Kp=.0f;
+        Ki=.0f;
+        Kd=.0f;
+    }
+
     metricsStart(&midControlTiming);
 
     // Update trajectory to get instantaneous target air flow
-    updateTrajectory();
+    if (updateTrajectory()>0)
+    {
+	motorHalCommand(targetPosition,0);
+	DEBUG_PRINT("Target Reached");
+	return 1;
+    }
 
     // **************************************************************
     // Here is where closed loop control structure will be developed
@@ -162,7 +181,7 @@ static int updateControl(void)
 
 
     //read sensor inputs
-    flowSensorInput=targetAirFlow;//needs to be getFlowSensorInput
+    flowSensorInput=sensors.currentFlow;//needs to be getFlowSensorInput
 
     //calculate proportional part
     controlP=targetAirFlow-flowSensorInput;
@@ -201,13 +220,8 @@ static int updateControl(void)
 
     metricsStop(&midControlTiming);
 
-    DEBUG_PRINT_EVERY(1000,"Control Stats: Avg us: %ul\n",midControlTiming.average);
+    DEBUG_PRINT_EVERY(100,"Control Stats: Avg us: %u\n",midControlTiming.average);
     
-    // Return finished
-    if (controlOutLimited < MIN_VELOCITY) {
-      DEBUG_PRINT("Target Reached");
-      return 1;
-    }
     // Return unfinished
     return 0;
 }
@@ -254,10 +268,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // TODO: Actually sync up with how ie is supposed to be represented
       //       for next, fix IE at 1:1.5 (1 / 2.5 = 0x0066)
       parameters.ieRatioRequested = 0x0066;
-      
+      parameters.respirationRateRequested = 15;
+
       // Collect all set points from parameters
       totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
-      targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8;
+      targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
       targetVolume = parameters.volumeRequested;
       
       // Initialize all 
@@ -265,7 +280,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       measuredExhalationTime = 0;
       
       // Kickoff timer for monitoring breath of breathing
-      timerHalBegin(&breathTimer, totalBreathTime);
+      timerHalBegin(&breathTimer, totalBreathTime, false);
       
       breathTimerStateStart = timerHalCurrent(&breathTimer);
       controlComplete = false;
@@ -277,11 +292,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
     } else if (control.state == CONTROL_INHALATION) {
       DEBUG_PRINT("state: CONTROL_INHALATION");
+      
+      // Begin control loop timer when control starts
+      timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
 
       while (1) {
-        // Kick off control loop timer, ensuring the control loop runs periodically
-        timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD);
-      
         // TODO: Different modes?
         controlComplete = updateControl();
       
@@ -305,7 +320,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       DEBUG_PRINT("state: CONTROL_BEGIN_HOLD_IN");
 
       // Setup the hold timer
-      timerHalBegin(&controlTimer, HOLD_TIME);
+      timerHalBegin(&controlTimer, HOLD_TIME, false);
 
       control.state = CONTROL_HOLD_IN;
       
@@ -325,14 +340,14 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       controlComplete = false;
       
       control.state = CONTROL_EXHALATION;
-      
+
     } else if (control.state == CONTROL_EXHALATION) {
       DEBUG_PRINT("state: CONTROL_EXHALATION");
       
-      while (1) {
-        // Kick off control loop timer, ensuring the control loop runs periodically
-        timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD);
+      // Begin control loop timer when control starts
+      timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
       
+      while (1) {
         // TODO: Different modes?
         controlComplete = updateControl();
       
@@ -359,7 +374,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Calculate and update the measured times
       uint32_t currentBreathTime = timerHalCurrent(&breathTimer);
       measuredExhalationTime = currentBreathTime - HOLD_TIME - measuredInhalationTime;
-      control.ieRatioMeasured = (measuredExhalationTime << 8) / measuredInhalationTime;
+      control.ieRatioMeasured = (measuredExhalationTime << 8) / measuredInhalationTime; // TODO: address fixed point math
       control.respirationRateMeasured = (60 SEC) / (currentBreathTime USEC);
       control.breathCount++;
 
