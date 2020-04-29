@@ -18,7 +18,7 @@
 
 #include "../util/utils.h"
 
-#define DEBUG
+//#define DEBUG
 #define DEBUG_MODULE "sensor"
 #include "../util/debug.h"
 
@@ -38,8 +38,8 @@
 
 //
 // Airflow Sensor Parameters
-//
-#define AIRFLOW_SAMPLING_PERIOD                  (10 MSEC)
+// 5ms for more precise integration of volume
+#define AIRFLOW_SAMPLING_PERIOD                  (5 MSEC)
 
 #define VOLUME_MINUTE_PERIOD                      (5 SEC)
 #define VOLUME_MINUTE_WINDOW                     (60 SEC) / VOLUME_MINUTE_PERIOD
@@ -56,6 +56,7 @@ static struct pt sensorsBatteryThread;
 static struct timer pressureTimer;
 static struct timer airflowTimer;
 
+static uint8_t sensorsAdcReadInProgress=0;
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   static int16_t currentMaxPressure = INT16_MIN;
@@ -67,11 +68,32 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 
   PT_BEGIN(pt);
 
-  // Kick off sampling timer
-  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD);
+  //a so while instead of PT_RESTART assures more accurate sampling rate since PT_RESTART also yields and the time of other threads is not accounted for
+
   
+  //this needs to be seperately blocked since we can't allow other sensor threads to use the ADC, but we should yield to all other threads
+  PT_WAIT_UNTIL(pt,!sensorsAdcReadInProgress);
+  sensorsAdcReadInProgress=1; 
+
+  if (sensorAdcStartAnalogRead(PRESSURE_SENSE_PIN)!=HAL_OK)
+  {
+	DEBUG_PRINT( "not HAL_OK at sensorAdcStartAnalogRead(PRESSURE_SENSE_PIN)");
+  }
+
+  PT_WAIT_UNTIL(pt,sensorAdcCheckRead() == HAL_OK);
+
+  static int16_t adcRawData;
+  if (sensorAdcGetData(&adcRawData)!=HAL_OK)
+  {
+	DEBUG_PRINT( "not HAL_OK at sensorAdcCheckGetData() for pressure sensor");
+  }
+
+  sensorsAdcReadInProgress=0;
+  
+  PT_YIELD(pt);
+
   int16_t pressure;
-  pressureSensorHalGetValue(&pressure);	// get pressure, in [0.1mmH2O]
+  pressureSensorHalGetValue(adcRawData,&pressure);	// get pressure, in [0.1mmH2O]
   
   // Update public interface with the pressure value
   sensors.currentPressure = pressure;
@@ -147,10 +169,13 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     sensors.inhalationDetected = false;
   }
   
-  DEBUG_PRINT_EVERY(200, "Pressure  = %c%u.%01u mmH2O",
+  DEBUG_PRINT_EVERY(50, "Pressure  = %c%u.%01u mmH2O",
                     (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
 
   PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer) != HAL_IN_PROGRESS);
+  // restart timer right away
+  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD);
+  
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -162,16 +187,37 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   static uint8_t volumeMinuteTimeout = 0;
   static int16_t maxVolume = INT16_MIN;
   static bool volumeReset = false;
-  
+
   PT_BEGIN(pt);
-  
-  // Kick off sampling timer
-  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD);
-  
+
+  //this needs to be seperately blocked since we can't allow other sensor threads to use the ADC, but we should yield to all other threads
+  PT_WAIT_UNTIL(pt,!sensorsAdcReadInProgress);
+  sensorsAdcReadInProgress=1; 
+
+  if (sensorAdcStartAnalogRead(FLOW_SENSE_PIN)!=HAL_OK)
+  {
+	DEBUG_PRINT( "not HAL_OK at sensorAdcStartAnalogRead(FLOW_SENSE_PIN)");
+  }
+
+  PT_WAIT_UNTIL(pt,sensorAdcCheckRead() == HAL_OK);
+
+  static int16_t adcRawData;
+  if (sensorAdcGetData(&adcRawData)!=HAL_OK)
+  {
+	DEBUG_PRINT( "not HAL_OK at sensorAdcCheckGetData() for flow sensor");
+  }
+
+  sensorsAdcReadInProgress=0;
+ 
+
+  PT_YIELD(pt);
+
   int16_t airflow;
-  int16_t airvolume;
-  airflowSensorHalGetFlow(&airflow); // get airflow, in [0.1SLM]
-  airflowSensorHalGetVolume(&airvolume); // get airvolume, in [mL] (derived from volume)
+  int32_t airvolume;
+  airflowSensorHalGetFlow(adcRawData,&airflow); // get airflow, in [0.1SLM]
+
+  airflowSensorHalUpdateVolume(airflow); 
+  airvolume=airflowSensorHalGetVolume(); // get airvolume, in [mL] (derived from volume)
   
   // Update public interface with the flow and volume values
   sensors.currentFlow = airflow;
@@ -201,7 +247,8 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     volumeMinuteWindow[0] = maxVolume;
     maxVolume = INT16_MIN;
   }
-  
+
+
   // Determine if its time to reset the volume integrator, do it once in exhalation
   if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
     DEBUG_PRINT("*** Reset Volume ***");
@@ -211,11 +258,15 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     volumeReset = false;
   }
   
-  DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
+  DEBUG_PRINT_EVERY(50, "Airflow   = %c%u.%02u SLM",
                     (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
-  DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
+  DEBUG_PRINT_EVERY(50, "AirVolume = %li mL", airvolume/100);
+ 
   
   PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer) != HAL_IN_PROGRESS);
+  //restart timer right aways
+  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD);
+  
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -223,9 +274,9 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 static PT_THREAD(sensorsBatteryThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-  
+
   // TODO: battery sensor
-  
+
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -260,10 +311,16 @@ int sensorsModuleInit(void)
     return MODULE_FAIL;
   }
 
+  DEBUG_PRINT("Flow sensor bias: %i",airflowSensorGetBias());
+
   PT_INIT(&sensorsThread);
   PT_INIT(&sensorsPressureThread);
   PT_INIT(&sensorsAirFlowThread);
   PT_INIT(&sensorsBatteryThread);
+
+  // Kick off sampling timer
+  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD);
+  
 }
 
 int sensorsModuleRun(void)
