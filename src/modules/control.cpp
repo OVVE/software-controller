@@ -14,6 +14,7 @@
 #include "../modules/parameters.h"
 
 #define DEBUG
+#define DEBUG_PLOT //enable plots instead of text output
 #define DEBUG_MODULE "control"
 #include "../util/debug.h"
 
@@ -197,6 +198,8 @@ static int updateControl(void)
         timeToComputeControlFiltered/=10;
         DEBUG_PRINT_EVERY(1000,"Control Stats: Avg us: %ul\n",timeToComputeControlFiltered);
     }
+
+    PLOT((int32_t)(targetAirFlow*100.0f),(int32_t)(controlOutLimited*100.0f),(int32_t)(flowSensorInput*100.0f));
     // Return unfinished
     return 0;
 }

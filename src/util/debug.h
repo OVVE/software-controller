@@ -19,7 +19,21 @@
 #define DEBUG_BEGIN DEBUG_SERIAL_PORT.begin(230400)
 
 #ifdef DEBUG
+#ifdef DEBUG_PLOT
 
+#define PLOT(var1,var2,var3)			\
+do {                                                \
+    DEBUG_SERIAL_PORT.print(var1);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.print(var2);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.println(var3);                       \
+  } while (0);
+
+#define DEBUG_PRINT(...)
+#define DEBUG_PRINT_EVERY(...)
+
+#else
 // Use DEBUG_PRINT to add print messages like printf
 #define DEBUG_PRINT(...)                                                \
   do {                                                                  \
@@ -41,7 +55,12 @@
     }                                                                   \
   } while (0);
 
+#define PLOT(...)
+
+#endif
+
 #else
+#define PLOT(...)
 #define DEBUG_PRINT(...)
 #define DEBUG_PRINT_EVERY(...)
 #endif

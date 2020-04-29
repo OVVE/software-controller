@@ -16,9 +16,9 @@
 #include "../modules/control.h"
 #include "../modules/sensors.h"
 
+//#define DEBUG
 #include "../util/utils.h"
 
-#define DEBUG
 #define DEBUG_MODULE "sensor"
 #include "../util/debug.h"
 

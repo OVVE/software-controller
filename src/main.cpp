@@ -5,9 +5,8 @@
 #include "modules/control.h"
 #include "modules/parameters.h"
 
-#include "util/metrics.h"
-
 #define DEBUG
+#include "util/metrics.h"
 #define DEBUG_MODULE "main"
 #include "util/debug.h"
 
