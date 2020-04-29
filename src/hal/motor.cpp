@@ -18,19 +18,18 @@
 //**************************************
 
 // Motor Pins
-#define PIN_MOTOR_STEP      7 // Each pulse moves the motor by a (micro)step.
-#define PIN_MOTOR_ENABLE    8 // Enable locks the motor in place when it is not moving, which consumes power.
 #define PIN_MOTOR_DIRECTION 9
-
-#define PIN_MOTOR_ENABLE_FALSE LOW
-#define PIN_MOTOR_ENABLE_TRUE  HIGH
+#define PIN_MOTOR_ENABLE    8 // Enable locks the motor in place when it is not moving, which consumes power.
+#define PIN_MOTOR_STEP      7 // Each pulse moves the motor by a (micro)step.
 
 #define PIN_MOTOR_DIRECTION_OPEN  LOW
 #define PIN_MOTOR_DIRECTION_CLOSE HIGH
+#define PIN_MOTOR_ENABLE_FALSE LOW
+#define PIN_MOTOR_ENABLE_TRUE  HIGH
 
 // Limit Switch Pins
-// Connect C (common) to ground and NC (normally closed) to the specified pin
-// (pull-up mode).
+// Connect C (common) to ground and NC (normally closed) to the specified pin,
+// which configured to pull-up mode.
 #define PIN_LIMIT_BOTTOM 5
 #define PIN_LIMIT_TOP    6
 
@@ -41,34 +40,73 @@
 // Motor Definitions
 //**************************************
 
-#define MOTOR_STEPS_PER_REVOLUTION 200
+#ifdef MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
+// Nanotec ST6018D4508   NEMA 24
+// Nanotec GP56-T2-26-HR Gear Ratio 26:1
+#define MOTOR_STEPS_PER_REVOLUTION (26*200)
+#elif defined MOTOR_STEPPERONLINE__23HS30_2804S_HG10
+// STEPPERONLINE 23HS30-2804S-HG10
+// NEMA 23, 76 mm, Gear Ratio 10:1
+#define MOTOR_STEPS_PER_REVOLUTION (10*200)
+#elif defined MOTOR_STEPPERONLINE__23HS22_2804S_HG15
+// STEPPERONLINE 23HS22-2804S-HG15
+// NEMA 23, 56 mm,Gear Ratio 15:1
+#define MOTOR_STEPS_PER_REVOLUTION (15*200)
+#elif defined MOTOR_STEPPERONLINE__23HS22_2804S_HG20
+// STEPPERONLINE 23HS22-2804S-HG20
+// NEMA 23, 56 mm, Gear Ratio 20:1
+#define MOTOR_STEPS_PER_REVOLUTION (20*200) 
+#elif defined MOTOR_STEPPERONLINE__23HS22_2804S_HG50
+// STEPPERONLINE 23HS22-2804S-HG50
+// NEMA 23, 56 mm ,Gear Ratio 50:1
+#define MOTOR_STEPS_PER_REVOLUTION (50*200)
+#else
+  #error No motor has been selected (see motor.h).
+#endif
 
-// TODO: Need to define step angle in terms of microsteps per revolution.
-// #define MOTOR_MICROSTEPS_PER_REVOLUTION
+#define SECONDS_PER_MINUTE 60
 
-// millidegrees of shaft rotation (including the gearbox) per motor step
+#define DEGREES_PER_REVOLUTION 360
 
-// stepperonline 23HS22-2804S-HG50
-// NEMA 23 50:1
-// #define MOTOR_STEP_ANGLE 36
+// TODO: character width convention, 79? 80?
 
-// stepperonline 
-// NEMA 23 20:1
-// #define MOTOR_STEP_ANGLE 90
-
-// stepperonline 23HS22-2804S-HG50
-// NEMA 23 15:1
-#define MOTOR_STEP_ANGLE 120
-
-// stepperonline 23HS30-2804S-HG10
-// NEMA 23 10:1
-// #define MOTOR_STEP_ANGLE 180
-
-
-//**************************************
+//*****************************************************************************
 // Motor Controller Definitions
-//**************************************
+//
+// Each motor controller that can be selected has the following definitions:
+//
+// MC_STEP_PULSE_HIGH
+// Configures the step signal to normally low and pulse high for each
+// (micro)step.
+//
+// MC_STEP_PULSE_LOW
+// Configures the step signal to normally high and pulse low for each
+// (micro)step.
+//
+// MC_DIRECTION_SETUP_TIME
+// The amount of time (in microseconds) that the direction signal must be
+// stable before a pulse on the PWM signal.
+//
+// MC_PULSE_WIDTH
+// The width of each pulse (in microseconds) of the step signal.
+//*****************************************************************************
 
+#ifdef MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
+// Nanotec CL4-E-2-12-5VDI
+
+// Clock Direction Multiplier
+#define MC_OBJECT_2057 128
+
+// Clock Direction Divider
+#define MC_OBJECT_2058   1
+
+// MC_OBJECT_2057 and MC_OBJECT_2058 are configured above for quarter steps.
+#define MC_MICROSTEPS_PER_STEP (512/(MC_OBJECT_2057/MC_OBJECT_2058))
+
+#define MC_DIRECTION_SETUP_TIME 35
+#define MC_STEP_PULSE_HIGH
+#define MC_STEP_PULSE_WIDTH 16
+#elif defined MOTOR_CONTROLLER_STEPPERONLINE_ISD08
 // stepperonline ISD08
 // Microstep Resolution
 // The ISD08 supports the following settings:
@@ -80,6 +118,10 @@
 #define MC_MICROSTEP_RESOLUTION 400
 #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEP_RESOLUTION/100)
 
+#define MC_DIRECTION_SETUP_TIME 35
+#define MC_STEP_PULSE_LOW
+#define MC_STEP_PULSE_WIDTH 16
+#elif defined MOTOR_CONTROLLER_STEPPERONLINE_DM332T
 // stepperonline DM332T
 // Pulse/rev
 // The DM332T supports the following settings:
@@ -91,15 +133,15 @@
 // 6400
 // 8000
 // 12800
-// #define MC_MICROSTEPS_PER_REVOLUTION 800
-// #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+#define MC_MICROSTEPS_PER_REVOLUTION 800
+#define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/200)
 
-// The amount of time (in microseconds) that the direction signal must be
-// stable before a pulse on the PWM signal.
 #define MC_DIRECTION_SETUP_TIME 35
-
-// The duration of each pulse (in microseconds) of the PWM signal.
-#define MC_PULSE_DURATION 16 
+#define MC_STEP_PULSE_LOW
+#define MC_STEP_PULSE_WIDTH 16
+#else
+  #error No motor controller has been selected (see motor.h).
+#endif
 
 // TODO: detect potential overflow in 16-bit motor_position variable
 
@@ -162,19 +204,23 @@ static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
 // TCCR4B. Configure an interrupt to occur for every PWM pulse to track the
 // motor position.
 // 
-// WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
-// CS3[2:0] = 0b010 (clk/8 prescaler)
-//
 //*****************************************************************************
 
+// WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
+#ifdef MC_STEP_PULSE_HIGH
 // COM4B[1:0] = 0b10 (Enable non-inverting PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
-static uint8_t TCCR4A_value = (1<<COM4B1) | (0<<COM4B0) | (0<<WGM41) | (1<<WGM40); // pulse high
-
+#define TCCR4A_VALUE ((1<<COM4B1) | (0<<COM4B0) | (0<<WGM41) | (1<<WGM40))
+#elif defined MC_STEP_PULSE_LOW
 // COM4B[1:0] = 0b11 (Enable inverting PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
-// static uint8_t TCCR4A_value = (1<<COM4B1) | (1<<COM4B0) | (0<<WGM41) | (1<<WGM40); // pulse low
+#define TCCR4A_VALUE ((1<<COM4B1) | (1<<COM4B0) | (0<<WGM41) | (1<<WGM40))
+#else
+  #error No motor controller step pulse convention has been defined.
+#endif
 
-static uint8_t TCCR4B_value_disabled = (1<<WGM43) | (0<<WGM42);
-static uint8_t TCCR4B_value_enabled = TCCR4B_value_disabled | (0<<CS42) | (1<<CS41) | (0<<CS40);
+#define TCCR4B_VALUE_DISABLED ((1<<WGM43) | (0<<WGM42))
+
+// CS3[2:0] = 0b010 (clk/8 prescaler)
+#define TCCR4B_VALUE_ENABLED = (TCCR4B_VALUE_DISABLED | (0<<CS42) | (1<<CS41) | (0<<CS40))
 
 // TODO Keep this forward declaration?
 static void motor_state_register_pending(uint8_t next_state);
@@ -448,8 +494,7 @@ void motor_position_set_zero()
 //                    units: degrees
 void motor_position_set(int8_t position)
 {
-    // Convert to millidegrees and account for direction.
-    motor_position_command = (int16_t) ((((int32_t) position)*1000)/MOTOR_STEP_ANGLE);
+    motor_position_command = (int16_t) ((((int32_t) position)*MOTOR_STEPS_PER_REVOLUTION)/DEGREES_PER_REVOLUTION);
 }
 
 //*****************************************************************************
@@ -465,7 +510,11 @@ void motor_position_set(int8_t position)
 void motor_speed_set(uint16_t speed)
 {
   // Convert from MRPM to frequency.
-  uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+  // uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+
+  // uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+  
+  uint32_t frequency = 0;
 
   DEBUG_PRINT("frequency: %d", frequency);
 
