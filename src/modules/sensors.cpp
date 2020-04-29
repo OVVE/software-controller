@@ -68,7 +68,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   // Kick off sampling timer
-  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD);
+  // TODO: refactor to use periodic timer
+  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, false);
   
   int16_t pressure;
   pressureSensorHalGetValue(&pressure);	// get pressure, in [0.1mmH2O]
@@ -166,7 +167,8 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   PT_BEGIN(pt);
   
   // Kick off sampling timer
-  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD);
+  // TODO: refactor to use periodic timer
+  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD, false);
   
   int16_t airflow;
   int16_t airvolume;
