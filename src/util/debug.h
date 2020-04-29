@@ -16,29 +16,29 @@
 #endif
 
 // Initial setup of debug; only to be used once
-#define DEBUG_BEGIN DEBUG_SERIAL_PORT.begin(115200)
+#define DEBUG_BEGIN DEBUG_SERIAL_PORT.begin(230400)
 
 #ifdef DEBUG
 
 // Use DEBUG_PRINT to add print messages like printf
-#define DEBUG_PRINT(...)                              \
-  do {                                                \
-    char _buf[DEBUG_BUFFER_SIZE];                     \
-    snprintf(_buf, DEBUG_BUFFER_SIZE, __VA_ARGS__);   \
-    DEBUG_SERIAL_PORT.print("[" DEBUG_MODULE "] ");        \
-    DEBUG_SERIAL_PORT.println(_buf);                       \
+#define DEBUG_PRINT(...)                                                \
+  do {                                                                  \
+    char _buf[DEBUG_BUFFER_SIZE];                                       \
+    snprintf(_buf, DEBUG_BUFFER_SIZE, __VA_ARGS__);                     \
+    DEBUG_SERIAL_PORT.print("[" DEBUG_MODULE "] ");                     \
+    DEBUG_SERIAL_PORT.println(_buf);                                    \
   } while (0);
 
 // Use DEBUG_PRINT_EVERY to add print messages line printf, but it will only
 // print the message every i times the line is reached (note: it costs 2 bytes
 // to remember this per line)
-#define DEBUG_PRINT_EVERY(i, ...)                     \
-  do {                                                \
-    static unsigned int _count = 0;                   \
-    if ((++_count) / i) {                             \
-      DEBUG_PRINT(__VA_ARGS__);                       \
-      _count = 0;                                     \
-    }                                                 \
+#define DEBUG_PRINT_EVERY(i, ...)                                       \
+  do {                                                                  \
+    static unsigned int _count = (i - __LINE__) % i;                    \
+    if (i - (++_count) == 0) {                                          \
+      DEBUG_PRINT(__VA_ARGS__);                                         \
+      _count = 0;                                                       \
+    }                                                                   \
   } while (0);
 
 #else

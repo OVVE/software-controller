@@ -144,9 +144,18 @@ void updateDataPacket()
   public_data_packet.tidal_volume_set = public_command_packet.tidal_volume_set;
   public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
   public_data_packet.ie_ratio_set = public_command_packet.ie_ratio_set;
-  public_data_packet.tidal_volume_measured = 100;
-  public_data_packet.respiratory_rate_measured = 200;
+  public_data_packet.tidal_volume_measured = 475;
+  public_data_packet.respiratory_rate_measured = 35;
+  public_data_packet.peep_value_measured = 426;
+  public_data_packet.peak_pressure_measured =  527;
+  public_data_packet.pressure_measured  =  980;
+  public_data_packet.flow_measured = 980;
+  public_data_packet.plateau_value_measurement  = 150;
+  public_data_packet.volume_in_measured = 18;
+  public_data_packet.volume_out_measured = 13;
+  public_data_packet.volume_rate_measured = 12;
 #endif  
+
   
 }
 
