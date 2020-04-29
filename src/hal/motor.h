@@ -5,6 +5,8 @@
 
 #include <stdint.h>
 
+extern volatile int16_t motor_position;
+
 // TODO: Doc
 int8_t motorHalInit(void);
 
