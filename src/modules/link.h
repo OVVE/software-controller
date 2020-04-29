@@ -34,42 +34,87 @@
 #define MODE_START_STOP  0x80
 
 
-#define PACKET_VERSION 2
+#define PACKET_VERSION 3
 
 typedef struct __attribute__((packed)) {
-  uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  uint8_t packet_version;             // byte 2      - rpi unsigned char
-  uint8_t mode_value;                 // byte 3      - rpi unsigned char
-  uint32_t respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
-  uint32_t respiratory_rate_set;      // bytes 8 - 11
-  int32_t tidal_volume_measured;      // bytes 12 - 15
-  int32_t tidal_volume_set;           // bytes 16 - 19
-  uint32_t ie_ratio_measured;         // bytes 20 - 23
-  uint32_t ie_ratio_set;              // bytes 24 - 27
-  int32_t peep_value_measured;        // bytes 28 - 31
-  int32_t peak_pressure_measured;     // bytes 32 - 35
-  int32_t plateau_value_measurement;  // bytes 36 - 39
-  int32_t pressure_measured;          // bytes 40 - 43
-  int32_t flow_measured;              // bytes 44 - 47
-  int32_t volume_in_measured;         // bytes 48 - 51
-  int32_t volume_out_measured;        // bytes 52 - 55
-  int32_t volume_rate_measured;       // bytes 56 - 59
-  uint8_t control_state;              // byte 60       - rpi unsigned char
-  uint8_t battery_level;              // byte 61
-  uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
-  uint32_t alarm_bits;                // bytes 64 - 67
-  uint16_t crc;                       // bytes 68 - 69 - rpi unsigned short int
+  uint16_t sequence_count;                   // bytes 0 - 1
+  uint8_t packet_version;                    // byte 2
+  uint8_t packet_type;                       // byte 3
+  
+  uint8_t mode_value;                        // byte 4
+  uint8_t control_state;                     // byte 5
+  uint8_t battery_status;                    // byte 6
+  
+  uint8_t reserved;                          // byte 7
+  
+  uint16_t respiratory_rate_set;             // bytes 8 - 9  
+  uint16_t respiratory_rate_measured;        // bytes 10 - 11
+
+  int16_t tidal_volume_set;                  // bytes 12 - 13
+  int16_t tidal_volume_measured;             // bytes 14 - 15
+  
+  uint16_t ie_ratio_set;                     // bytes 16 - 17
+  uint16_t ie_ratio_measured;                // bytes 18 - 19
+  
+  int16_t peep_value_measured;               // bytes 20- 21
+  
+  int16_t peak_pressure_measured;            // bytes 22 - 23
+  
+  int16_t plateau_value_measurement;         // bytes 24 - 25
+  
+  int16_t pressure_set;                      // bytes 26 - 27
+  int16_t pressure_measured;                 // bytes 28 - 29
+  
+  int16_t flow_measured;                     // bytes 30 - 31
+  
+  int16_t volume_in_measured;                // bytes 32 - 33
+  int16_t volume_out_measured;               // bytes 34 - 35
+  
+  int16_t volume_rate_measured;              // bytes 36 - 37
+  
+  int16_t high_pressure_limit_set;           // bytes 38 - 39
+  int16_t low_pressure_limit_set;            // bytes 40 - 41
+  
+  int16_t high_volume_limit_set;             // bytes 42 - 43
+  int16_t low_volume_limit_set;              // bytes 44 - 45
+
+  int16_t high_respiratory_rate_limit_set;   // bytes 46 - 47
+  int16_t low_respiratory_rate_limit_set;    // bytes 48 - 49
+  
+  uint32_t alarm_bits;                       // bytes 50 - 53
+  uint16_t crc;                              // bytes 54 - 55
 } data_packet_def;
 
 typedef struct __attribute__((packed)) {
-  uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  uint8_t packet_version;             // byte 2      - rpi unsigned char
-  uint8_t mode_value;                 // byte 3      - rpi unsigned char
-  uint32_t respiratory_rate_set;      // bytes 4 - 7 - rpi unsigned int
-  int32_t tidal_volume_set;           // bytes 8 - 11
-  uint32_t ie_ratio_set;              // bytes 12 - 15
-  uint32_t alarm_bits;                // bytes 16 - 19
-  uint16_t crc;                       // bytes 20 - 21 - rpi unsigned short int  
+  uint16_t sequence_count;                   // bytes 0 - 1
+  uint8_t packet_version;                    // byte 2
+  uint8_t packet_type;                       // byte 3
+  
+  uint8_t mode_value;                        // byte 4
+  
+  uint8_t command;                           // byte 5
+  
+  uint16_t reserved;                         // bytes 6 - 7
+  
+  uint16_t respiratory_rate_set;      // bytes 8 - 9
+  
+  int16_t tidal_volume_set;           // bytes 10 - 11
+  
+  uint16_t ie_ratio_set;              // bytes 12 - 13
+  
+  int16_t pressure_set;               // bytes 14 - 15
+  
+  int16_t high_pressure_limit_set;    // bytes 16 - 17
+  int16_t low_pressure_limit_set;     // bytes 18 - 19
+
+  int16_t high_volume_limit_set;      // bytes 20 - 21
+  int16_t low_volume_limit_set;       // bytes 22 - 23
+
+  int16_t high_respiratory_rate_limit_set;   // bytes 24 - 25
+  int16_t low_respiratory_rate_limit_set;    // bytes 26 - 27
+  
+  uint32_t alarm_bits;                // bytes 28 - 31
+  uint16_t crc;                       // bytes 32 - 33  
 } command_packet_def;
 
 struct link {
