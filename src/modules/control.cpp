@@ -14,6 +14,8 @@
 #include "../modules/sensors.h"
 #include "../modules/parameters.h"
 
+#include "../util/metrics.h"
+
 #define DEBUG
 #define DEBUG_MODULE "control"
 #include "../util/debug.h"
@@ -63,6 +65,8 @@ static uint32_t elapsedTime = 0;
 static float velocityScale = 0.0f;
 static float nomVelocity = 0.0f;
 static uint32_t breathTimerStateStart = 0;
+
+static struct metrics midControlTiming;
 
 // Pre-compute the trajectory based on known set points and timing requirements
 static void computeTrajectory()
@@ -143,13 +147,8 @@ static int updateControl(void)
     float Kd=.0f;
     float KiMax=10.0f; //max speed adjustment because of I-part in % of nominalVelocity
     float controlMax=20.0f; //max speed adjustment of current target velocity
-
-    //Timing
-    // TODO: Use metrics here instead
-    long startMicros=0;
-    long timeToComputeControl=0;
-    static long timeToComputeControlFiltered=0;
-    //startMicros=micros();
+    
+    metricsStart(&midControlTiming);
 
     // Update trajectory to get instantaneous target air flow
     updateTrajectory();
@@ -200,14 +199,10 @@ static int updateControl(void)
 
     lastFlowSensorInput=flowSensorInput;
 
-    //timeToComputeControl=micros()-startMicros;
+    metricsStop(&midControlTiming);
 
-    if (timeToComputeControl>0) //micros() overruns every 70mins, catch this here
-    {
-        timeToComputeControlFiltered=9*timeToComputeControlFiltered+timeToComputeControl;
-        timeToComputeControlFiltered/=10;
-        DEBUG_PRINT_EVERY(1000,"Control Stats: Avg us: %ul\n",timeToComputeControlFiltered);
-    }
+    DEBUG_PRINT_EVERY(1000,"Control Stats: Avg us: %ul\n",midControlTiming.average);
+    
     // Return finished
     if (controlOutLimited < MIN_VELOCITY) {
       return 1;
@@ -230,6 +225,8 @@ static bool checkExhalationTimeout(void)
 static PT_THREAD(controlThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
+
+  metricsReset(&midControlTiming);
 
   // Current Settings
   // 15 BPM
