@@ -205,6 +205,7 @@ static int updateControl(void)
     
     // Return finished
     if (controlOutLimited < MIN_VELOCITY) {
+      DEBUG_PRINT("Target Reached");
       return 1;
     }
     // Return unfinished
@@ -249,6 +250,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
       DEBUG_PRINT("state: CONTROL_BEGIN_INHALATION");
+      
+      // TODO: Actually sync up with how ie is supposed to be represented
+      //       for next, fix IE at 1:1.5 (1 / 2.5 = 0x0066)
+      parameters.ieRatioRequested = 0x0066;
       
       // Collect all set points from parameters
       totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
