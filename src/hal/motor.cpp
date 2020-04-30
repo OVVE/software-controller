@@ -13,13 +13,14 @@
 #define DEBUG_MODULE "motor"
 #include "../util/debug.h"
 
-//**************************************
+//******************************************************************************
 // Pin Definitions
-//**************************************
+//******************************************************************************
 
 // Motor Pins
 #define PIN_MOTOR_DIRECTION 9
-#define PIN_MOTOR_ENABLE    8 // Enable locks the motor in place when it is not moving, which consumes power.
+#define PIN_MOTOR_ENABLE    8 // Enable locks the motor in place when it is not
+                              // moving, which consumes power.
 #define PIN_MOTOR_STEP      7 // Each pulse moves the motor by a (micro)step.
 
 #define PIN_MOTOR_DIRECTION_OPEN  LOW
@@ -28,6 +29,7 @@
 #define PIN_MOTOR_ENABLE_TRUE  HIGH
 
 // Limit Switch Pins
+// 
 // Connect C (common) to ground and NC (normally closed) to the specified pin,
 // which configured to pull-up mode.
 #define PIN_LIMIT_BOTTOM 5
@@ -36,9 +38,9 @@
 #define PIN_LIMIT_TRIPPED     HIGH
 #define PIN_LIMIT_NOT_TRIPPED LOW
 
-//**************************************
+//******************************************************************************
 // Motor Definitions
-//**************************************
+//******************************************************************************
 
 #ifdef MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
 // Nanotec ST6018D4508   NEMA 24
@@ -68,9 +70,7 @@
 
 #define DEGREES_PER_REVOLUTION 360
 
-// TODO: character width convention, 79? 80?
-
-//*****************************************************************************
+//******************************************************************************
 // Motor Controller Definitions
 //
 // Each motor controller that can be selected has the following definitions:
@@ -84,15 +84,18 @@
 // (micro)step.
 //
 // MC_DIRECTION_SETUP_TIME
-// The amount of time (in microseconds) that the direction signal must be
-// stable before a pulse on the PWM signal.
+// The amount of time (in microseconds) that the direction signal must be stable
+// before a pulse on the PWM signal.
 //
 // MC_PULSE_WIDTH
 // The width of each pulse (in microseconds) of the step signal.
-//*****************************************************************************
+//******************************************************************************
 
 #ifdef MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
 // Nanotec CL4-E-2-12-5VDI
+
+// TODO: Implement a "ready" signal on the motor controller for handshake upon
+// initialization?
 
 // Clock Direction Multiplier
 #define MC_OBJECT_2057 128
@@ -143,68 +146,57 @@
   #error No motor controller has been selected (see motor.h).
 #endif
 
-// TODO: detect potential overflow in 16-bit motor_position variable
-
-//**************************************
+//******************************************************************************
 // Motor State Machine Definitions
-//**************************************
+//******************************************************************************
 #define MOTOR_STATE_OFF   0
 #define MOTOR_STATE_HOLD  1
 #define MOTOR_STATE_OPEN  2
 #define MOTOR_STATE_CLOSE 3
 #define MOTOR_STATE_NONE  UINT8_MAX
 
-//**************************************
+//******************************************************************************
 // Motor Control Definitions
-//**************************************
+//******************************************************************************
 
-// TODO: Update this based on maximum PWM frequency and control loop frequency.
+// TODO: Compute this dynamically based on maximum PWM frequency and control
+// loop frequency.
 #define MOTOR_CONTROL_STEP_ERROR 5
 
+// TODO: Naming?
 #define MOTOR_POSITION_INCREMENT_OPEN  false
 #define MOTOR_POSITION_INCREMENT_CLOSE true
 
-//**************************************
+//******************************************************************************
 // Motor Control Variables
-//**************************************
-static volatile struct {
-  // Precomputed value so that we can minimize the amount of math operations
-  // inside of an ISR.
-  bool     counter_update;
-  uint16_t counter_TOP;
-
-  int16_t  step_position;
-} motor_control;
+//******************************************************************************
 
 // Public
-volatile int16_t motor_position; // Motor position in microsteps from zero.
-
-// Private
-
+// TODO: Detect potential overflow in this variable.
 // TODO
 // It's okay to read this variable outside of a critical section, as long as we
 // assume that it can never overflow.
-static volatile bool motor_position_increment;
+volatile int16_t motor_position; // Motor position in microsteps from zero.
 
+// Private
 static int16_t motor_position_command;
 
-//**************************************
-// Motor State Machine Variables
-//**************************************
-static uint8_t motor_state = MOTOR_STATE_NONE;
-static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
+static volatile bool motor_position_increment;
 
-//*****************************************************************************
+// Motor State Machine Variables
+static uint8_t motor_state = MOTOR_STATE_NONE;
+static uint8_t motor_state_pending = MOTOR_STATE_NONE;
+
+//******************************************************************************
 // Timer 4 Configuration: Motor Movement and Position Tracking
 //
 // 
-// Configure Timer 4 to generate a PWM output to the motor controller causing
-// it to move one (micro)step per pulse. The PWM output is enabled and disabled
-// dynamically, so there are separate *_enabled and *_disabled values for
-// TCCR4B. Configure an interrupt to occur for every PWM pulse to track the
-// motor position.
-// 
-//*****************************************************************************
+// Configure Timer 4 to generate a PWM signal to output to the motor controller,
+// causing it to advance the motor by one (micro)step per pulse. The PWM signal
+// is enabled and disabled dynamically, so there are separate *_enabled and
+// *_disabled values for TCCR4B. Configure an interrupt to occur for every PWM
+// pulse to track the motor position.
+//******************************************************************************
 
 // WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
 #ifdef MC_STEP_PULSE_HIGH
@@ -222,27 +214,10 @@ static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
 // CS3[2:0] = 0b010 (clk/8 prescaler)
 #define TCCR4B_VALUE_ENABLED = (TCCR4B_VALUE_DISABLED | (0<<CS42) | (1<<CS41) | (0<<CS40))
 
-// TODO Keep this forward declaration?
+// TODO Forward Declaration
 static void motor_state_register_pending(uint8_t next_state);
 
-// TODO: Make this such that it can be called for WDT reset. Document this.
-//
-// TODO
-// TOP:
-//  * PWM Disable (start and stop at TOP)
-//
-// BOTTOM:
-//  * Count Pulse
-//
-// Speed update is allowed to occur any time, as the update to OCR4A is atomic.
-//
-// This allows for a fixed pulse width via OCR4B.
-// OCR4B = 16 (32 us pulse width) 
-// Can probably initialize OCR4A to 16 as well to initialize output, and can
-// keep counter running! i.e. pwm enable/disable just sets OCR4A to 16 as well.
-// This can get out of sync with the state machine, but a direction variable
-// could be used as well. 
-// Change output to inverting for low pulse, non-inverting for high pulse.
+// TODO: This function can be called by WDT reset.
 void timer4_init()
 {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -278,25 +253,27 @@ static inline void timer4_disable() {
   TCCR4B = TCCR4B_value_disabled;
 }
 
-// Enable interrupt at timer 4 TOP.
+// Enable interrupt at Timer 4 TOP.
 static inline void timer4_interrupt_TOP_enable()
 {
   // Clear Timer 4 Output Compare A Match Flag
-  // This prevents the interrupt from being taken immediately after enabling
-  // it.
+  // This prevents the interrupt from being taken immediately after enabling it.
   TIFR4 = _BV(OCF4A); 
   
   // Set Timer 4 Output Compare A Match Interrupt Enable
   TIMSK4 |= _BV(OCIE4A);
 }
 
-// Disable interrupt at timer 4 BOTTOM.
+// Disable interrupt at Timer 4 BOTTOM.
 static inline void timer4_interrupt_TOP_disable()
 {
   // Clear Timer 4 Compare A Match Interrupt Enable
   TIMSK4 &= ~_BV(OCIE4A);
 }
 
+// Set a new value for Timer 4 TOP
+// This changes the frequency of the PWM signal. It can be updated at any time
+// without any glitches on the output.
 static inline void timer4_set_TOP(uint16_t counter_value)
 {
   OCR4A = counter_value;
