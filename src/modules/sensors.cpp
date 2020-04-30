@@ -157,6 +157,9 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     DEBUG_PRINT_EVERY(100, "Pressure  = %c%u.%01u mmH2O",
                       (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
 
+    // Ensure this threads cannot block if it somehow elapses the timer too fast
+    PT_YIELD(pt);
+
     PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer) != HAL_IN_PROGRESS);
   }
   
@@ -270,7 +273,10 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     
     DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
-    DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);   
+    DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
+    
+    // Ensure this threads cannot block if it somehow elapses the timer too fast
+    PT_YIELD(pt);
     
     PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer) != HAL_IN_PROGRESS);
   }
