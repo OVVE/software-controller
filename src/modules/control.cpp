@@ -67,6 +67,10 @@ static float nomVelocity = 0.0f;
 static uint32_t breathTimerStateStart = 0;
 
 static struct metrics midControlTiming;
+static float controlI=0.0f;
+
+//this is our initial guess scaling factor to match the trajectory to flow sensor values
+#define SCALING_FACTOR 1.89f
 
 // Pre-compute the trajectory based on known set points and timing requirements
 static void computeTrajectory()
@@ -84,7 +88,7 @@ static void computeTrajectory()
     rampTime = (totalBreathTime - targetInhalationTime) / (2.0f + trapezoidRatio);
     platTime = trapezoidRatio * rampTime;
     nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0f * 1000000.0f * 60.0f / ((float)(rampTime + platTime) * 360.0f);
-
+    nomVelocity/=SCALING_FACTOR;
 
   } else if (control.state == CONTROL_BEGIN_INHALATION) {
 
@@ -93,6 +97,7 @@ static void computeTrajectory()
     rampTime = targetInhalationTime / (2.0f + trapezoidRatio);
     platTime = trapezoidRatio * rampTime;
     nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0f * 1000000.0f * 60.0f / ((float)(rampTime + platTime) * 360.0f);
+    nomVelocity/=SCALING_FACTOR;
 
   } else {
     // Blank
@@ -140,14 +145,13 @@ static int updateControl(void)
     float flowSensorInput;
     static float lastFlowSensorInput=0.0f;
     float controlP,controlD;
-    static float controlI=0.0f;
     float controlOut;
     float controlOutLimited;
 
     //TEMPORARY ASSIGNMENT. SHOULD BE STORED IN PARAMETERS
     float Kf=0.8f;
     float Kp=0.1f;
-    float Ki=.0f;
+    float Ki=.01f;
     float Kd=0.1f;
     float KiMax=10.0f; //max speed adjustment because of I-part in % of nominalVelocity
     float controlMax=20.0f; //max speed adjustment of current target velocity
@@ -213,6 +217,8 @@ static int updateControl(void)
     //final control output is feed forward + limited controlOut
     controlOutLimited=Kf*targetAirFlow+controlOut;
 
+    controlOutLimited*=SCALING_FACTOR;
+
     // Send motor commands
     motorHalCommand(targetPosition, controlOutLimited);
 
@@ -221,7 +227,9 @@ static int updateControl(void)
     metricsStop(&midControlTiming);
 
     DEBUG_PRINT_EVERY(100,"Control Stats: Avg us: %u\n",midControlTiming.average);
-    DEBUG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)(Ki*controlD));
+
+    DEBUG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)(Kd*controlD), (int32_t)(Ki*controlD));
+
     // Return unfinished
     return 0;
 }
@@ -288,6 +296,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Compute trajectory
       computeTrajectory();
 
+      controlI=0.0f; //reset I-part
       control.state = CONTROL_INHALATION;
       
     } else if (control.state == CONTROL_INHALATION) {
