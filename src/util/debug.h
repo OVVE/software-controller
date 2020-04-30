@@ -1,7 +1,8 @@
-
 #include <stdio.h>
 
 #include <HardwareSerial.h>
+
+#define DEBUG_PLOT //enabling PLOT globally automatically deactivates every DEBUG text output. Deactivate to enable normal text debug output
 
 #ifndef DEBUG_MODULE
 #error "Cannot include debug.h without defining DEBUG_MODULE"
@@ -16,32 +17,57 @@
 #endif
 
 // Initial setup of debug; only to be used once
-#define DEBUG_BEGIN DEBUG_SERIAL_PORT.begin(230400)
+#define DEBUG_BEGIN DEBUG_SERIAL_PORT.begin(115200)
 
 #ifdef DEBUG
+#ifdef DEBUG_PLOT
 
+#define PLOT(var1,var2,var3,var4,var5,var6)			\
+do {                                                \
+    DEBUG_SERIAL_PORT.print(var1);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.print(var2);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.print(var3);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.print(var4);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.print(var5);                       \
+    DEBUG_SERIAL_PORT.print(" ");                       \
+    DEBUG_SERIAL_PORT.println(var6);                       \
+  } while (0);
+
+#define DEBUG_PRINT(...)
+#define DEBUG_PRINT_EVERY(...)
+
+#else
 // Use DEBUG_PRINT to add print messages like printf
-#define DEBUG_PRINT(...)                                                \
-  do {                                                                  \
-    char _buf[DEBUG_BUFFER_SIZE];                                       \
-    snprintf(_buf, DEBUG_BUFFER_SIZE, __VA_ARGS__);                     \
-    DEBUG_SERIAL_PORT.print("[" DEBUG_MODULE "] ");                     \
-    DEBUG_SERIAL_PORT.println(_buf);                                    \
+#define DEBUG_PRINT(...)                              \
+  do {                                                \
+    char _buf[DEBUG_BUFFER_SIZE];                     \
+    snprintf(_buf, DEBUG_BUFFER_SIZE, __VA_ARGS__);   \
+    DEBUG_SERIAL_PORT.print("[" DEBUG_MODULE "] ");        \
+    DEBUG_SERIAL_PORT.println(_buf);                       \
   } while (0);
 
 // Use DEBUG_PRINT_EVERY to add print messages line printf, but it will only
 // print the message every i times the line is reached (note: it costs 2 bytes
 // to remember this per line)
-#define DEBUG_PRINT_EVERY(i, ...)                                       \
-  do {                                                                  \
-    static unsigned int _count = (i - __LINE__) % i;                    \
-    if (i - (++_count) == 0) {                                          \
-      DEBUG_PRINT(__VA_ARGS__);                                         \
-      _count = 0;                                                       \
-    }                                                                   \
+#define DEBUG_PRINT_EVERY(i, ...)                     \
+  do {                                                \
+    static unsigned int _count = 0;                   \
+    if ((++_count) / i) {                             \
+      DEBUG_PRINT(__VA_ARGS__);                       \
+      _count = 0;                                     \
+    }                                                 \
   } while (0);
 
+#define PLOT(...)
+
+#endif
+
 #else
+#define PLOT(...)
 #define DEBUG_PRINT(...)
 #define DEBUG_PRINT_EVERY(...)
 #endif
