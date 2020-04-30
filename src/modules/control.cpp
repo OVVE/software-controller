@@ -16,7 +16,7 @@
 
 #include "../util/metrics.h"
 
-//#define DEBUG
+#define DEBUG
 #define DEBUG_MODULE "control"
 #include "../util/debug.h"
 
@@ -221,7 +221,7 @@ static int updateControl(void)
     metricsStop(&midControlTiming);
 
     DEBUG_PRINT_EVERY(100,"Control Stats: Avg us: %u\n",midControlTiming.average);
-    
+    DEBUG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)(Ki*controlD));
     // Return unfinished
     return 0;
 }
