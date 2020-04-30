@@ -71,12 +71,12 @@ void updateFromCommandPacket()
   
   if (tmpMode != MODE_VC_CMV && tmpMode != MODE_SIMV)
   {
-    public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
+    public_data_packet.alarm_bits |= ALARM_UI_SETPOINT_MISMATCH;
   }
   else
   {    
     comm.ventilationMode = tmpMode;
-    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
+    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_SETPOINT_MISMATCH;
   }
   comm.volumeRequested = public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
@@ -92,9 +92,9 @@ void updateFromCommandPacket()
         SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
 #endif  
   // Alarms
-  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
-  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
-  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_PACKET_VERSION) != 0x00;
+  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
+  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;  
+  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
 }
 
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
@@ -229,7 +229,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     watchdog_count++;    
     watchdog_exceeded = false;
     clear_input = true;
-    public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
+    public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
   }
   else
   {
@@ -242,7 +242,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
-      public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
+      public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
     }
     else
     {
@@ -254,7 +254,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
-        public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
+        public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("bad CRC 0x ");
         SERIAL_DEBUG.println(command_packet.crc, HEX);
@@ -263,8 +263,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       }
       else
       {
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
+        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
+    
         memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
