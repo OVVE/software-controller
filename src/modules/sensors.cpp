@@ -310,6 +310,9 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
   if (!PT_SCHEDULE(sensorsBatteryThreadMain(&sensorsBatteryThread))) {
     PT_EXIT(pt);
   }
+  
+  // TODO: Mess with the units to make the graph scale nicely?
+  DEBUG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
 
   PT_RESTART(pt);
   PT_END(pt);
