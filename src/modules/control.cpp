@@ -166,7 +166,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_INHALATION) {
       // DEBUG_PRINT("CONTROL_INHALATION");
 
-      PT_WAIT_UNTIL(pt, motorHalCommand(15 + angle, speed) != HAL_IN_PROGRESS);
+      PT_WAIT_UNTIL(pt, motorHalCommand(3 + angle, speed) != HAL_IN_PROGRESS);
       control.state = CONTROL_BEGIN_HOLD_IN;
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
@@ -189,7 +189,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_EXHALATION) {
       // DEBUG_PRINT("CONTROL_EXHALATION");
 
-      PT_WAIT_UNTIL(pt, motorHalCommand(15, speed) != HAL_IN_PROGRESS);
+      PT_WAIT_UNTIL(pt, motorHalCommand(3, speed) != HAL_IN_PROGRESS);
 
       timerHalBegin(&controlTimer, 3 SEC);
       PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);

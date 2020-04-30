@@ -41,7 +41,7 @@
 // Motor Definitions
 //**************************************
 
-#define MOTOR_STEPS_PER_REVOLUTION 200
+// #define MOTOR_STEPS_PER_REVOLUTION 200
 
 // millidegrees of shaft rotation (including the gearbox) per motor step
 
@@ -55,7 +55,7 @@
 
 // stepperonline 23HS22-2804S-HG50
 // NEMA 23 15:1
-#define MOTOR_STEP_ANGLE 120
+// #define MOTOR_STEP_ANGLE 120
 
 // stepperonline 23HS30-2804S-HG10
 // NEMA 23 10:1
@@ -88,8 +88,11 @@
 // 6400
 // 8000
 // 12800
-#define MC_MICROSTEPS_PER_REVOLUTION 800
-#define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+// #define MC_MICROSTEPS_PER_REVOLUTION 800
+// #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+
+// Nanotec
+#define MC_MICROSTEPS_PER_STEP 4
 
 //**************************************
 // Motor State Machine Definitions
@@ -394,7 +397,7 @@ void motor_position_set(int8_t position)
     // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
 
     // Convert to millidegrees and account for direction.
-    motor_control.step_position_command = (int16_t) ((((int32_t) position)*1000)/MOTOR_STEP_ANGLE);
+    motor_control.step_position_command = (int16_t) ((((int32_t) position)*200*26)/360);
 
 }
 
@@ -411,7 +414,7 @@ void motor_position_set(int8_t position)
 void motor_speed_set(uint16_t speed)
 {
   // Convert from MRPM to frequency.
-  uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+  uint32_t frequency = ((((((uint32_t) speed)*200U*26U)/1000U)/60U)*MC_MICROSTEPS_PER_STEP);
 
   // Convert from frequency to counter value.
   motor_control.counter_TOP = (uint16_t) (1000000UL/frequency);
@@ -540,7 +543,7 @@ int8_t motorHalInit(void)
   // TODO: This value will vary depending upon the installation location of the
   // top limit switch, as well as the type of bag. Ultimately, the sensors
   // should be used to find the top of the bag.
-  motorHalCommand(15, 5000U);
+  motorHalCommand(3, 5000U);
   while (motorHalStatus() == HAL_IN_PROGRESS) {}
   delay(1000);
 
