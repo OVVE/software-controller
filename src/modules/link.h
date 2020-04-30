@@ -5,25 +5,24 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-
+// alarm bits to set that are triggered by the microcontroller
+// link.cpp should check modules and set these bits
 #define ALARM_ECU_POWER_LOSS              0x01
 #define ALARM_ECU_LOW_BATTERY             0x02 
-#define ALARM_ECU_LOSS_BREATH_INTEGRITY   0x04
-#define ALARM_ECU_HIGH_AIRWAY_PRESSURE    0x08
-#define ALARM_ECU_LOW_AIRWAY_PRESSURE     0x10
-#define ALARM_ECU_LOW_TIDAL_VOL_DELIVERED 0x20
-#define ALARM_ECU_APNEA                   0x40
-// bits 7 - 15 --
-#define ALARM_CRC_ERROR                   0x00010000
-#define ALARM_DROPPED_PACKET              0x00020000
-#define ALARM_SERIAL_COMM                 0x00040000
-#define ALARM_PACKET_VERSION              0x00080000
-// bits 20 - 23 --
-#define ALARM_UI_MODE_MISMATCH            0x01000000
-#define ALARM_UI_RESP_RATE_MISMATCH       0x02000000
-#define ALARM_UI_TIDAL_MISMATCH           0x04000000
-#define ALARM_UI_IE_RATIO_MISMATCH        0x08000000
-// bits 28 - 31 --
+#define ALARM_ECU_BAD_PRESSURE_SENSOR     0x04
+#define ALARM_ECU_BAD_FLOW_SENSOR         0x08
+#define ALARM_ECU_COMMUNICATION_FAILURE   0x10
+#define ALARM_ECU_HARDWARE_FAILURE        0x20
+#define ALARM_ECU_ESTOP_PRESSED           0x40
+#define ALARM_ECU_LOW_PRESSURE            0x100 
+#define ALARM_ECU_HIGH_VOLUME             0x200
+#define ALARM_ECU_LOW_VOLUME              0x400
+#define ALARM_ECU_HIGH_RESPIRATORY_RATE   0x800
+#define ALARM_ECU_LOW_RESPIRATORY_RATE    0x1000
+
+#define ALARM_UI_COMMUNICATION_FAILURE    0x8000
+#define ALARM_UI_HARDWARE_FAILURE         0x10000
+#define ALARM_UI_SETPOINT_MISMATCH        0x1000000
 
 // modes
 #define MODE_VC_CMV  0x00
