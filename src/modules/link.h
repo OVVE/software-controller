@@ -25,16 +25,34 @@
 #define ALARM_UI_IE_RATIO_MISMATCH        0x08000000
 // bits 28 - 31 --
 
-// bit mask
-#define MODE_NON_ASSIST  0x00
-#define MODE_ASSIST      0x01
-#define MODE_SIM         0x02
+// modes
+#define MODE_VC_CMV  0x00
+#define MODE_SIMV    0x01
 
 // toggle bit for start stop
 #define MODE_START_STOP  0x80
 
+// battery charging state bit
+#define BATTERY_CHARGING 0x80
 
 #define PACKET_VERSION 3
+
+// packet_type
+#define PACKET_TYPE_DATA 1
+#define PACKET_TYPE_COMMAND 2
+#define PACKET_TYPE_FIRMWARE 3
+
+// control state
+#define CONTROL_STATE_IDLE             0x00
+#define CONTROL_STATE_BEGIN_INHALATION 0x01
+#define CONTROL_STATE_INHALATION       0x02
+#define CONTROL_STATE_BEGIN_HOLD       0x03
+#define CONTROL_STATE_HOLD             0x04
+#define CONTROL_STATE_BEGIN_EXHALATION 0x05
+#define CONTROL_STATE_EXHALATION       0x06
+
+#define COMMAND_BIT_START 0x00
+#define COMMAND_BIT_FW    0x04
 
 typedef struct __attribute__((packed)) {
   uint16_t sequence_count;                   // bytes 0 - 1
