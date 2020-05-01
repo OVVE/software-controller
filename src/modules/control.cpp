@@ -28,6 +28,9 @@
 
 #define MIN_VELOCITY  2 // TODO: Fix this
 
+// Uncomment the following to enable the current closed loop control
+// #define CONTROL_CLOSED_LOOP
+
 
 // Public Variables
 struct control control = {
@@ -151,10 +154,18 @@ static int updateControl(void)
     float controlOutLimited;
 
     //TEMPORARY ASSIGNMENT. SHOULD BE STORED IN PARAMETERS
+    // TODO: Currently, enable open loop control if needed, disabling closed loop while in development
+#ifdef CONTROL_CLOSED_LOOP
     float Kf=0.9f;
     float Kp=1.0f;
     float Kd=0.8f;
     float Ki=.25f;
+#else
+    float Kf=1.0f;
+    float Kp=0.0f;
+    float Kd=0.0f;
+    float Ki=0.0f;
+#endif
     float KiMax=80.0f; //max speed adjustment because of I-part in % of nominalVelocity
     float controlMax=100.0f; //max speed adjustment of current target velocity
     
@@ -380,7 +391,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         // next control cycle; otherwise move on to the next steps in exhalation
         // TODO: Consider what a timeout here means, it means the motor wasn't
         //       able to get all the way back, should we really keep going?
-        if (!controlComplete && !checkInhalationTimeout()) {
+        if (!controlComplete && !checkExhalationTimeout()) {
           PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
         } else {
           break;
