@@ -161,11 +161,15 @@
 
 // TODO: Compute this dynamically based on maximum PWM frequency and control
 // loop frequency.
-#define MOTOR_CONTROL_STEP_ERROR 5
+#define MOTOR_CONTROL_STEP_ERROR 20
 
 // TODO: Naming?
 #define MOTOR_POSITION_INCREMENT_OPEN  false
 #define MOTOR_POSITION_INCREMENT_CLOSE true
+
+// TODO: MRPM
+#define MOTOR_SPEED_START 3000
+#define MOTOR_SPEED_STOP  8000
 
 //******************************************************************************
 // Motor Control Variables
@@ -179,13 +183,15 @@
 volatile int16_t motor_position; // Motor position in microsteps from zero.
 
 // Private
+static int16_t motor_speed;
+static int16_t motor_speed_command;
 static int16_t motor_position_command;
 
 static volatile bool motor_position_increment;
 
 // Motor State Machine Variables
 static uint8_t motor_state = MOTOR_STATE_NONE;
-static uint8_t motor_state_pending = MOTOR_STATE_NONE;
+static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
 
 //******************************************************************************
 // Timer 4 Configuration: Motor Movement and Position Tracking
@@ -212,7 +218,7 @@ static uint8_t motor_state_pending = MOTOR_STATE_NONE;
 #define TCCR4B_VALUE_DISABLED ((1<<WGM43) | (0<<WGM42))
 
 // CS3[2:0] = 0b010 (clk/8 prescaler)
-#define TCCR4B_VALUE_ENABLED = (TCCR4B_VALUE_DISABLED | (0<<CS42) | (1<<CS41) | (0<<CS40))
+#define TCCR4B_VALUE_ENABLED (TCCR4B_VALUE_DISABLED | (0<<CS42) | (1<<CS41) | (0<<CS40))
 
 // TODO Forward Declaration
 static void motor_state_register_pending(uint8_t next_state);
@@ -221,12 +227,12 @@ static void motor_state_register_pending(uint8_t next_state);
 void timer4_init()
 {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    TCCR4A = TCCR4A_value;
-    TCCR4B = TCCR4B_value_disabled;
+    TCCR4A = TCCR4A_VALUE;
+    TCCR4B = TCCR4B_VALUE_DISABLED;
     
     TCNT4 = 0;
     OCR4A = 100; // TODO: Decide on a good value to use here and document it.
-    OCR4B = MC_PULSE_DURATION; // TODO: microsecond to timer count conversion?
+    OCR4B = MC_STEP_PULSE_WIDTH; // TODO: microsecond to timer count conversion?
     
     // Enable interrupt at timer 4 BOTTOM.
     TIFR4 = _BV(TOV4); // Clear Timer 4 Overflow Flag
@@ -236,7 +242,7 @@ void timer4_init()
   // Initialize the timer and allow it to count up to TOP, at which point the
   // interrupt at TOP will disable the timer.
   motor_state_register_pending(MOTOR_STATE_OFF);
-  TCCR4B = TCCR4B_value_enabled;
+  TCCR4B = TCCR4B_VALUE_ENABLED;
 
   // TODO: Encapsulate this in a function.
   while (motor_state_pending != MOTOR_STATE_NONE) {}
@@ -245,12 +251,13 @@ void timer4_init()
 static inline void timer4_enable() {
   // TODO
   // Implement a macro to convert microseconds to timer values.
-  TCNT4 = MC_PULSE_DURATION + MC_DIRECTION_SETUP_TIME*2;
-  TCCR4B = TCCR4B_value_enabled;
+  TCNT4 = MC_STEP_PULSE_WIDTH + MC_DIRECTION_SETUP_TIME*2;
+  TCCR4B = TCCR4B_VALUE_ENABLED;
 }
 
-static inline void timer4_disable() {
-  TCCR4B = TCCR4B_value_disabled;
+static inline void timer4_disable()
+{
+  TCCR4B = TCCR4B_VALUE_DISABLED;
 }
 
 // Enable interrupt at Timer 4 TOP.
@@ -264,7 +271,7 @@ static inline void timer4_interrupt_TOP_enable()
   TIMSK4 |= _BV(OCIE4A);
 }
 
-// Disable interrupt at Timer 4 BOTTOM.
+// Disable interrupt at Timer 4 TOP.
 static inline void timer4_interrupt_TOP_disable()
 {
   // Clear Timer 4 Compare A Match Interrupt Enable
@@ -285,10 +292,6 @@ static inline void timer4_set_TOP(uint16_t counter_value)
 
 static inline void motor_pwm_enable()
 {
-  // TODO: refactor
-  timer4_set_TOP(motor_control.counter_TOP);
-  motor_control.counter_update = false;
-
   timer4_enable();
 }
 
@@ -297,19 +300,26 @@ static inline void motor_pwm_disable()
   timer4_disable();
 }
 
-/*
+static inline void motor_pwm_frequency_set(uint32_t frequency)
+{
+  // Convert from frequency to counter value.
+  // TODO static/#define timer4_frequency
+  timer4_set_TOP(((uint32_t) 1000000)/frequency);
+}
+
+
 // Enable interrupts on the phase of the PWM signal where there is no pulse.
-static inline void motor_pwm_phase_nopulse_interrupt_enable()
+static inline void motor_pwm_phase_interrupt_enable()
 {
   timer4_interrupt_TOP_enable();
 }
 
 // Disable interrupts on the phase of the PWM signal where there is no pulse.
-static inline void motor_pwm_phase_nopulse_interrupt_disable()
+static inline void motor_pwm_phase_interrupt_disable()
 {
   timer4_interrupt_TOP_disable();
 }
-*/
+
 
 //*****************************************************************************
 // Motor State Machine
@@ -369,7 +379,7 @@ static inline void motor_state_set_CLOSE()
 static void motor_state_register_pending(uint8_t next_state)
 {
   motor_state_pending = next_state;
-  timer4_interrupt_TOP_enable();
+  motor_pwm_phase_interrupt_enable();
 }
 
 // Installs a pending motor state update. It is expected that this function
@@ -384,7 +394,7 @@ static inline void motor_state_install_pending()
     // TODO: error
   }
 
-  timer4_interrupt_TOP_disable();
+  motor_pwm_phase_interrupt_disable();
   motor_state_pending = MOTOR_STATE_NONE;
 }
 
@@ -469,9 +479,10 @@ void motor_position_set_zero()
 // ---------
 // uint8_t position   The absolute position to which to move the motor.
 //                    units: degrees
-void motor_position_set(int8_t position)
+void motor_position_command_set(int8_t position)
 {
-    motor_position_command = (int16_t) ((((int32_t) position)*MOTOR_STEPS_PER_REVOLUTION)/DEGREES_PER_REVOLUTION);
+    DEBUG_PRINT("motor_position_command: %u", motor_position_command);
+    motor_position_command = (int16_t) (((((int32_t) position)*MOTOR_STEPS_PER_REVOLUTION)*MC_MICROSTEPS_PER_STEP)/DEGREES_PER_REVOLUTION);
 }
 
 //*****************************************************************************
@@ -486,20 +497,28 @@ void motor_position_set(int8_t position)
 //                  units: MPRM (milli-RPM)
 void motor_speed_set(uint16_t speed)
 {
+  DEBUG_PRINT("motor_speed_set: %u", speed);
+  motor_speed = speed;
+  
   // Convert from MRPM to frequency.
-  // uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
-
-  // uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+  uint32_t frequency = ((((uint32_t) speed)*MOTOR_STEPS_PER_REVOLUTION)*MC_MICROSTEPS_PER_STEP)/(((int32_t) 1000)*SECONDS_PER_MINUTE);
   
-  uint32_t frequency = 0;
+  motor_pwm_frequency_set(frequency);
 
-  DEBUG_PRINT("frequency: %d", frequency);
+  // DEBUG_PRINT("frequency: %d", frequency);
 
-  // Convert from frequency to counter value.
-  // TODO static/#define timer4_frequency
-  motor_control.counter_TOP = (uint16_t) (1000000UL/frequency);
-  
-  motor_control.counter_update = true;
+}
+
+void motor_speed_command_set(uint16_t speed_command)
+{
+  DEBUG_PRINT("motor_speed_command_set: %u", speed_command);
+  motor_speed_command = speed_command;
+}
+
+void motor_speed_set_zero()
+{
+  motor_speed = 0;
+  motor_speed_command = 0;
 }
 
 // Moves the motor to the home position (fully open).
@@ -508,16 +527,46 @@ void motor_home()
   // Move the motor far enough in the OPEN direction (more than the total
   // possible excursion) in order to guarantee that the top limit switch will
   // be tripped.
-  motor_position_set(-90);
+  motor_position_command_set(-90);
   motor_speed_set(5000UL);
 }
 
 static void motor_state_update()
 {
-  // TODO: Reading motor_position should be in a critical section.
-  int32_t motor_step_delta = motor_position_command - motor_position;
+  int32_t motor_position_delta = motor_position_command - motor_position;
 
-  if (motor_step_delta > MOTOR_CONTROL_STEP_ERROR) {
+  static bool skip = false;
+  if (!skip) {
+    if (ABS(motor_position_delta) < 0/* TODO */) {
+      skip = true;
+
+      while (motor_speed > MOTOR_SPEED_STOP) {
+        // Deceleration
+        // 20 RPM/s
+        motor_state_update();
+        delay(5);
+        motor_speed_set(MAX(motor_speed - 100, MOTOR_SPEED_STOP));
+      }
+      motor_speed_set_zero();
+
+      skip = false;
+    }
+    else if  (motor_speed < motor_speed_command) {
+      skip = true;
+      
+      while (motor_speed < motor_speed_command) {
+        // Acceleration
+        // 20 RPM/s
+        motor_state_update();
+        delay(5);
+        motor_speed_set(MIN(motor_speed + 1000, motor_speed_command));
+      }
+
+      skip = false;
+    }
+  }
+
+  if (motor_position_delta > MOTOR_CONTROL_STEP_ERROR) {
     if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
       // Do not move the motor in the CLOSE direction if the bottom limit
       // switch is tripped.
@@ -525,13 +574,14 @@ static void motor_state_update()
     } else {
       motor_state_transition(MOTOR_STATE_CLOSE);
     }
-  } else if (motor_step_delta < -MOTOR_CONTROL_STEP_ERROR) {
+  } else if (motor_position_delta < -MOTOR_CONTROL_STEP_ERROR) {
     if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED) {
       // Do not move the motor in the OPEN direction if the top limit switch is
       // tripped. There is no need to go through motor_state_transition()
       // because the zero reference point is set here.
       motor_state_set_HOLD();
       motor_position_set_zero();
+      motor_speed_set_zero();
     } else {
       motor_state_transition(MOTOR_STATE_OPEN);
     }
@@ -587,8 +637,14 @@ int8_t motorHalInit(void)
   pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
   pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
 
-  motor_position_set(INT8_MIN);
-  motor_speed_set(5000U);
+  delay(3000);
+
+  DEBUG_PRINT("Motor Command");
+
+  motorHalCommand(INT8_MIN, 5000);
+  while (motorHalStatus() == HAL_IN_PROGRESS) {}
+
+  while (true) {}
 
   while (true) {
     delay(3371);
@@ -624,12 +680,13 @@ int8_t motorHalInit(void)
   return HAL_OK;
 }
 
-// Absolute position, relative to the motor zero point.
-// Speed given in MRPM (millirevolutions per second).
-int8_t motorHalCommand(uint8_t position, uint16_t speed)
+// Position: Absolute position in degrees.
+// Speed MRPM (millirevolutions per second).
+int8_t motorHalCommand(int8_t position, uint16_t speed)
 {
-  motor_position_set(position);
-  motor_speed_set(speed);
+  motor_position_command_set(position);
+  motor_speed_set(MOTOR_SPEED_START);
+  motor_speed_command_set(speed);
   
   motor_state_update();
 

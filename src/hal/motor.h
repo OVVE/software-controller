@@ -19,11 +19,16 @@
 
 extern volatile int16_t motor_position;
 
+// TODO: Temporary
+#define ABS(N) ((N<0)?(-N):(N))
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
 // TODO: Doc
 int8_t motorHalInit(void);
 
 // TODO: Doc
-int8_t motorHalCommand(uint8_t position, uint16_t speed);
+int8_t motorHalCommand(int8_t position, uint16_t speed);
 
 // TODO: Doc
 int8_t motorHalStatus(void);
