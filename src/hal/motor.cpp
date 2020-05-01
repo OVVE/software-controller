@@ -9,7 +9,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-#define DEBUG
+// #define DEBUG
 #define DEBUG_MODULE "motor"
 #include "../util/debug.h"
 
@@ -168,7 +168,7 @@
 #define MOTOR_POSITION_INCREMENT_CLOSE true
 
 // TODO: MRPM
-#define MOTOR_SPEED_START 3000
+#define MOTOR_SPEED_START 8000
 #define MOTOR_SPEED_STOP  8000
 
 //******************************************************************************
@@ -559,7 +559,7 @@ static void motor_state_update()
         // 20 RPM/s
         motor_state_update();
         delay(5);
-        motor_speed_set(MIN(motor_speed + 1000, motor_speed_command));
+        motor_speed_set(MIN(motor_speed + 100, motor_speed_command));
       }
 
       skip = false;
@@ -637,6 +637,7 @@ int8_t motorHalInit(void)
   pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
   pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
 
+  /*
   delay(3000);
 
   DEBUG_PRINT("Motor Command");
@@ -668,12 +669,17 @@ int8_t motorHalInit(void)
     motorHalCommand(INT8_MAX, 10000U);
     while(motorHalStatus() == HAL_IN_PROGRESS) {}
   }
+  */
+  
+  motorHalCommand(INT8_MIN, 5000U);
+  while(motorHalStatus() == HAL_IN_PROGRESS) {}
+  delay(1000);
 
   // Move to the top of the bag.
   // TODO: This value will vary depending upon the installation location of the
   // top limit switch, as well as the type of bag. Ultimately, the sensors
   // should be used to find the top of the bag.
-  motorHalCommand(15, 5000U);
+  motorHalCommand(55, 30000U);
   while (motorHalStatus() == HAL_IN_PROGRESS) {}
   delay(1000);
 
@@ -685,7 +691,7 @@ int8_t motorHalInit(void)
 int8_t motorHalCommand(int8_t position, uint16_t speed)
 {
   motor_position_command_set(position);
-  motor_speed_set(MOTOR_SPEED_START);
+  motor_speed_set(MIN(speed, MOTOR_SPEED_START));
   motor_speed_command_set(speed);
   
   motor_state_update();
