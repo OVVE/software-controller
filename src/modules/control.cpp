@@ -68,6 +68,8 @@ static uint32_t breathTimerStateStart = 0;
 
 static struct metrics midControlTiming;
 static float controlI=0.0f;
+static float controlOutputFiltered=0.0f;
+
 
 //this is our initial guess scaling factor to match the trajectory to flow sensor values
 #define SCALING_FACTOR 1.89f
@@ -84,7 +86,7 @@ static void computeTrajectory()
   if (control.state == CONTROL_BEGIN_EXHALATION) {
 
     // Position information needs to be integrated to allow for adaptive positioning on exhalation
-    targetPosition = 5;
+    targetPosition = 20;
     rampTime = (totalBreathTime - targetInhalationTime) / (2.0f + trapezoidRatio);
     platTime = trapezoidRatio * rampTime;
     nomVelocity = abs((float)targetPosition - (float)currentPosition) * 1000.0f * 1000000.0f * 60.0f / ((float)(rampTime + platTime) * 360.0f);
@@ -149,12 +151,12 @@ static int updateControl(void)
     float controlOutLimited;
 
     //TEMPORARY ASSIGNMENT. SHOULD BE STORED IN PARAMETERS
-    float Kf=0.8f;
-    float Kp=0.1f;
-    float Ki=.01f;
-    float Kd=0.1f;
-    float KiMax=10.0f; //max speed adjustment because of I-part in % of nominalVelocity
-    float controlMax=20.0f; //max speed adjustment of current target velocity
+    float Kf=0.9f;
+    float Kp=1.0f;
+    float Kd=0.8f;
+    float Ki=.25f;
+    float KiMax=80.0f; //max speed adjustment because of I-part in % of nominalVelocity
+    float controlMax=100.0f; //max speed adjustment of current target velocity
     
 
    if (control.state == CONTROL_EXHALATION)
@@ -201,34 +203,46 @@ static int updateControl(void)
         controlI=(nomVelocity*KiMax/100.0f)/Ki;
 
     if ((Ki*controlI)<(-nomVelocity*KiMax/100.0f))
-        controlI=-(nomVelocity*KiMax/100.0f)/Ki;
+       controlI=-(nomVelocity*KiMax/100.0f)/Ki;
 
     //limit and output
 
     controlOut=Kp*controlP+Kd*controlD+Ki*controlI;
 
 
-    if (controlOut>(controlMax/100.0f*targetAirFlow))
-        controlOut=(controlMax/100.0f*targetAirFlow);
+    if (controlOut>(controlMax/100.0f*nomVelocity))
+        controlOut=(controlMax/100.0f*nomVelocity);
 
-    if (controlOut<-(controlMax/100.0f*targetAirFlow))
-        controlOut=-(controlMax/100.0f*targetAirFlow);
+    if (controlOut<-(controlMax/100.0f*nomVelocity))
+        controlOut=-(controlMax/100.0f*nomVelocity);
 
     //final control output is feed forward + limited controlOut
     controlOutLimited=Kf*targetAirFlow+controlOut;
 
     controlOutLimited*=SCALING_FACTOR;
 
-    // Send motor commands
-    motorHalCommand(targetPosition, controlOutLimited);
+    //IIR filter
+    controlOutputFiltered=0.9f*controlOutputFiltered+0.1f*controlOutLimited; 
 
+
+    //TODO: Remove this diry fix here. It needs to be replace with a better trajectory planning.
+    if (control.state == CONTROL_EXHALATION)
+    {
+      // Send motor commands
+      motorHalCommand(targetPosition, controlOutputFiltered);
+    }else
+    {
+      // Send motor commands
+      motorHalCommand(targetPosition*3, controlOutputFiltered);
+    }
+    
     lastFlowSensorInput=flowSensorInput;
 
     metricsStop(&midControlTiming);
 
     DEBUG_PRINT_EVERY(100,"Control Stats: Avg us: %u\n",midControlTiming.average);
 
-    DEBUG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)(Kd*controlD), (int32_t)(Ki*controlD));
+    DEBUG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)controlOutputFiltered, (int32_t)(Ki*controlD));
 
     // Return unfinished
     return 0;
@@ -297,6 +311,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       computeTrajectory();
 
       controlI=0.0f; //reset I-part
+      controlOutputFiltered=0.0f;
       control.state = CONTROL_INHALATION;
       
     } else if (control.state == CONTROL_INHALATION) {
