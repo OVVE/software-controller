@@ -13,14 +13,14 @@
 #define ALARM_PRIORITY_LOW      3
 
 struct alarmProperties {
-  int8_t   priority;
-  bool     preventWatchdog;
+  int8_t   priority : 4;
+  bool     preventWatchdog : 1;
   uint32_t suppressionTimeout;
 };
 
 struct alarm {
-  bool                          set;
-  bool                          suppressed;
+  bool                          set : 1;
+  bool                          suppressed : 1;
   const struct alarmProperties* properties;
   struct timer                  suppressionTimer;
   struct alarm*                 next;
