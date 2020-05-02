@@ -8,7 +8,8 @@
 #define PRESSURE_SENSOR_PIN 1
 
 //#define PRESSURE_SENSOR_MPXV7025
-#define PRESSURE_SENSOR_MPXV7007
+//#define PRESSURE_SENSOR_MPXV7007
+#define PRESSURE_SENSOR_SSCDRRN100MDAA5
 
 static int16_t reading;
 
@@ -48,6 +49,13 @@ int pressureSensorHalGetValue(int16_t* value)
   //                                   (reading * 17.1327 - 8771.9298) * 8 / 8  ; Help make multiplier error smaller
   //                                   (reading * 137.0614 - 70175.4386) / 8
   int32_t pascals = (((int32_t)reading * 137L) - 70175L)>>3; // convert to Pascals
+#elif defined(PRESSURE_SENSOR_SSCDRRN100MDAA5)
+  // For the SSCDRRN100MDAA5 pressure sensor: (reading - 0.1 * 1024) * (200 / (0.8 * 1024)) + (-100) = P in mbar
+  //                                          ((reading * 200 - 1024 * 20) / 0.8 / 1024 - 100) * 100 in Pa
+  //                                          (reading * 200 - 20480) * 125 / 1024 - 10000
+  //                                          (reading * 25000 - 2560000) / 1024 - 10240000 / 1024
+  //                                          (reading * 25000 - 12800000) / 1024
+  int32_t pascals = (((int32_t)reading * 25000L) - 12800000L)>>10;
 #endif
   int32_t u100umH2O = (pascals * 4177L)>>12;                  // convert Pascals to 0.1mmH2O
   *value = (int16_t)u100umH2O;                                // return as 16 bit signed int
