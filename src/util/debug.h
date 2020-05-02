@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include <HardwareSerial.h>
+#include <Arduino.h>	/* millis() */
 
 #ifndef DEBUG_MODULE
 #error "Cannot include debug.h without defining DEBUG_MODULE"
@@ -43,9 +44,11 @@
     static bool header = true;                                          \
     if (strcmp(DEBUG_PLOTTING, DEBUG_MODULE) == 0) {                    \
       if (header) {                                                     \
-        DEBUG_SERIAL_PORT.println(#__VA_ARGS__);                        \
+        DEBUG_SERIAL_PORT.println("ms," #__VA_ARGS__);                  \
         header = false;                                                 \
       }                                                                 \
+      DEBUG_SERIAL_PORT.print(millis());               			\
+      DEBUG_SERIAL_PORT.print(',');               			\
       int32_t _vars[] = { __VA_ARGS__ };                                \
       for (int i = 0; i < sizeof(_vars) / sizeof(int32_t); i++) {       \
         if (i > 0) DEBUG_SERIAL_PORT.print(",");                        \
