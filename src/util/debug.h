@@ -51,7 +51,7 @@
         if (i > 0) DEBUG_SERIAL_PORT.print(",");                        \
         DEBUG_SERIAL_PORT.print(_vars[i]);                              \
       }                                                                 \
-      DEBUG_SERIAL_PORT.print("\n");                                    \
+      DEBUG_SERIAL_PORT.println("");                                    \
     }                                                                   \
   } while (0);                                                          \
 
