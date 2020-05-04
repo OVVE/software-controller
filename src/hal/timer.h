@@ -3,6 +3,7 @@
 #define __TIMER_HAL_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "../hal/hal.h"
 
@@ -14,13 +15,14 @@
 struct timer {
   uint32_t start;
   uint32_t duration;
+  bool     periodic;
 };
 
 // TODO: Doc
 int timerHalInit(void);
 
 // TODO: Doc
-int timerHalBegin(struct timer* timer, uint32_t duration);
+int timerHalBegin(struct timer* timer, uint32_t duration, bool periodic);
 
 // TODO: Doc
 int timerHalRun(struct timer* timer);

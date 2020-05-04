@@ -8,9 +8,10 @@
 
 #include "../pt/pt.h"
 
-#include "../hal/sensor/battery.h"
-#include "../hal/sensor/sensor.h"
 #include "../hal/timer.h"
+#include "../hal/sensor/battery.h"
+#include "../hal/sensor/airflow.h"
+#include "../hal/sensor/pressure.h"
 
 #include "../modules/module.h"
 #include "../modules/control.h"
@@ -39,7 +40,9 @@
 //
 // Airflow Sensor Parameters
 //
-#define AIRFLOW_SAMPLING_PERIOD                  (10 MSEC)
+#define AIRFLOW_SAMPLING_PERIOD                  (5 MSEC)
+
+#define AIRFLOW_BIAS_SAMPLES                      32
 
 #define VOLUME_MINUTE_PERIOD                      (5 SEC)
 #define VOLUME_MINUTE_WINDOW                     (60 SEC) / VOLUME_MINUTE_PERIOD
@@ -68,155 +71,217 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   PT_BEGIN(pt);
 
   // Kick off sampling timer
-  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD);
+  timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, true);
   
-  int16_t pressure;
-  pressureSensorHalGetValue(&pressure);	// get pressure, in [0.1mmH2O]
+  while (1) {
+    // Fetch the latest sample from the sensor
+    PT_WAIT_UNTIL(pt, pressureSensorHalFetch() != HAL_IN_PROGRESS);
+    
+    int16_t pressure;
+    pressureSensorHalGetValue(&pressure); // get pressure, in [0.1mmH2O]
   
-  // Update public interface with the pressure value
-  sensors.currentPressure = pressure;
+    // Update public interface with the pressure value
+    sensors.currentPressure = pressure;
 
-  // Shift in new pressure
-  for (int i = PRESSURE_WINDOW - 1; i > 0; i--) {
-    previousPressure[i] = previousPressure[i - 1];
-  }
-  previousPressure[0] = pressure;
-  
-  // Derive Peak Pressure from pressure readings; updating the public value upon
-  // entry into CONTROL_HOLD_IN state
-  if ((control.state == CONTROL_HOLD_IN) && !setPeakPressure) {
-    sensors.peakPressure = currentMaxPressure;
-    currentMaxPressure = INT16_MIN;
-    setPeakPressure = true;
-  } else {
-    currentMaxPressure = max(currentMaxPressure, pressure);
-    if (control.state == CONTROL_EXHALATION) {
-      setPeakPressure = false;
+    // Shift in new pressure
+    for (int i = PRESSURE_WINDOW - 1; i > 0; i--) {
+      previousPressure[i] = previousPressure[i - 1];
     }
-  }
-  
-  // Derive Plateau Pressure from pressure readings during hold in; updating
-  // public value upon entry into CONTROL_EXHALATION state
-  if (control.state == CONTROL_HOLD_IN) {
-    plateauPressureSum += pressure;
-    plateauPressureSampleCount++;
-  } else if ((control.state == CONTROL_EXHALATION) &&
-             (plateauPressureSampleCount > 0)) {
-    sensors.plateauPressure = plateauPressureSum / plateauPressureSampleCount;
-    plateauPressureSum = 0;
-    plateauPressureSampleCount = 0;
-  }
-  
-  // Derive PEEP Pressure from pressure readings during exhalation after values
-  // have "stabilized" (ie, the difference of any one point from their average
-  // is less than some threshold)
-  if (control.state == CONTROL_EXHALATION) {
-    int32_t sum = 0;
-    for (int i = 0; i < PRESSURE_WINDOW; i++) {
-      sum += previousPressure[i];
-    }
+    previousPressure[0] = pressure;
     
-    int16_t average = sum / PRESSURE_WINDOW;
-    
-    bool flat = true;
-    for (int i = 0; i < PRESSURE_WINDOW; i++) {
-      if (abs(average - previousPressure[i]) > PEEP_PRESSURE_FLAT_THRESHOLD) {
-        flat = false;
+    // Derive Peak Pressure from pressure readings; updating the public value upon
+    // entry into CONTROL_HOLD_IN state
+    if ((control.state == CONTROL_HOLD_IN) && !setPeakPressure) {
+      sensors.peakPressure = currentMaxPressure;
+      currentMaxPressure = INT16_MIN;
+      setPeakPressure = true;
+    } else {
+      currentMaxPressure = max(currentMaxPressure, pressure);
+      if (control.state == CONTROL_EXHALATION) {
+        setPeakPressure = false;
       }
     }
     
-    // TODO: determine if we want this reading to update so long as it can, or
-    // measure once per breath, like other derived pressures
-    if (flat) {
-      sensors.peepPressure = pressure;
+    // Derive Plateau Pressure from pressure readings during hold in; updating
+    // public value upon entry into CONTROL_EXHALATION state
+    if (control.state == CONTROL_HOLD_IN) {
+      plateauPressureSum += pressure;
+      plateauPressureSampleCount++;
+    } else if ((control.state == CONTROL_EXHALATION) &&
+               (plateauPressureSampleCount > 0)) {
+      sensors.plateauPressure = plateauPressureSum / plateauPressureSampleCount;
+      plateauPressureSum = 0;
+      plateauPressureSampleCount = 0;
     }
-  }
-  
-  // Derive inhalation detection from pressure readings during exhalation by
-  // looking for a dip in pressure below the PEEP threshold (or below an
-  // absolute pressure threshold)
-  if ((control.state == CONTROL_EXHALATION) && !sensors.inhalationDetected) {
-    if ((pressure < INHALATION_DETECTION_ABSOLUTE_THRESHOLD) ||
-        (sensors.peepPressure - pressure > INHALATION_DETECTION_PEEP_THRESHOLD)) {
-      sensors.inhalationDetected = true;
-      inhalationTimeout = 0;
+    
+    // Derive PEEP Pressure from pressure readings during exhalation after values
+    // have "stabilized" (ie, the difference of any one point from their average
+    // is less than some threshold)
+    if (control.state == CONTROL_EXHALATION) {
+      int32_t sum = 0;
+      for (int i = 0; i < PRESSURE_WINDOW; i++) {
+        sum += previousPressure[i];
+      }
+      
+      int16_t average = sum / PRESSURE_WINDOW;
+      
+      bool flat = true;
+      for (int i = 0; i < PRESSURE_WINDOW; i++) {
+        if (abs(average - previousPressure[i]) > PEEP_PRESSURE_FLAT_THRESHOLD) {
+          flat = false;
+        }
+      }
+      
+      // TODO: determine if we want this reading to update so long as it can, or
+      // measure once per breath, like other derived pressures
+      if (flat) {
+        sensors.peepPressure = pressure;
+      }
     }
-  }
-  if (sensors.inhalationDetected &&
-      (inhalationTimeout++ == (uint8_t) (INHALATION_TIMEOUT / PRESSURE_SAMPLING_PERIOD))) {
-    sensors.inhalationDetected = false;
-  }
-  
-  DEBUG_PRINT_EVERY(200, "Pressure  = %c%u.%01u mmH2O",
-                    (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
+    
+    // Derive inhalation detection from pressure readings during exhalation by
+    // looking for a dip in pressure below the PEEP threshold (or below an
+    // absolute pressure threshold)
+    if ((control.state == CONTROL_EXHALATION) && !sensors.inhalationDetected) {
+      if ((pressure < INHALATION_DETECTION_ABSOLUTE_THRESHOLD) ||
+          (sensors.peepPressure - pressure > INHALATION_DETECTION_PEEP_THRESHOLD)) {
+        sensors.inhalationDetected = true;
+        inhalationTimeout = 0;
+      }
+    }
+    if (sensors.inhalationDetected &&
+        (inhalationTimeout++ == (uint8_t) (INHALATION_TIMEOUT / PRESSURE_SAMPLING_PERIOD))) {
+      sensors.inhalationDetected = false;
+    }
+    
+    DEBUG_PRINT_EVERY(100, "Pressure  = %c%u.%01u mmH2O",
+                      (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
 
-  PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer) != HAL_IN_PROGRESS);
-  PT_RESTART(pt);
+    // Ensure this threads cannot block if it somehow elapses the timer too fast
+    PT_YIELD(pt);
+
+    PT_WAIT_UNTIL(pt, timerHalRun(&pressureTimer) != HAL_IN_PROGRESS);
+  }
+  
+  // Should never reach here
   PT_END(pt);
 }
 
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
+  static int32_t airflowSum = 0;
+  static uint32_t previousSampleTime = 0;
   static bool setVolumeIn = false;
   static int16_t volumeMinuteWindow[VOLUME_MINUTE_WINDOW] = {0};
   static uint8_t volumeMinuteTimeout = 0;
   static int16_t maxVolume = INT16_MIN;
   static bool volumeReset = false;
-  
+  static int16_t airflowBias = 0;
+  static int airflowBiasCounter = AIRFLOW_BIAS_SAMPLES;
+
   PT_BEGIN(pt);
   
+  // Find the bias of the sensor
+  while (airflowBiasCounter--) {
+    PT_WAIT_UNTIL(pt, airflowSensorHalFetch() != HAL_IN_PROGRESS);
+    int16_t airflow;
+    airflowSensorHalGetValue(&airflow);
+    airflowSum += airflow;
+  }
+  
+  airflowBias = airflowSum / AIRFLOW_BIAS_SAMPLES;
+  airflowSum = 0;
+  
+  DEBUG_PRINT("Airflow bias = %c%u.%02u SLM",
+              (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
+
   // Kick off sampling timer
-  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD);
+  timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD, true);
   
-  int16_t airflow;
-  int16_t airvolume;
-  airflowSensorHalGetFlow(&airflow); // get airflow, in [0.1SLM]
-  airflowSensorHalGetVolume(&airvolume); // get airvolume, in [mL] (derived from volume)
-  
-  // Update public interface with the flow and volume values
-  sensors.currentFlow = airflow;
-  sensors.currentVolume = airvolume;
-  
-  // Derive Volume IN from current volume; updating the public value upon entry
-  // into CONTROL_HOLD_IN state
-  if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
-    sensors.volumeIn = airvolume;
-    setVolumeIn = true;
-  } else if (control.state == CONTROL_EXHALATION) {
-    setVolumeIn = false;
-  }
-  
-  // Volume OUT cannot be derived from flow sensor due to position and direction
-  
-  // Derive Volume/min from current volume by remembering the max volume over
-  // last minute volume period and shifting it into the window, updating the
-  // minute volume by subtracting out the old value and adding in the new one
-  maxVolume = max(maxVolume, airvolume);
-  if (volumeMinuteTimeout++ == (uint8_t) (VOLUME_MINUTE_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
-    sensors.volumePerMinute -= volumeMinuteWindow[VOLUME_MINUTE_WINDOW - 1];
-    sensors.volumePerMinute += maxVolume;
-    for (int i = VOLUME_MINUTE_WINDOW - 1; i > 0; i--) {
-      volumeMinuteWindow[i] = volumeMinuteWindow[i - 1];
+  while (1) {
+    // Fetch the latest sample from the sensor
+    PT_WAIT_UNTIL(pt, airflowSensorHalFetch() != HAL_IN_PROGRESS);
+    
+    // Calculate dt from the current time from the ideal sample time against
+    // the previous amount off of the ideal sample time
+    uint32_t currentSampleTime;
+    uint32_t dt;
+    
+    currentSampleTime = timerHalCurrent(&airflowTimer);
+    dt = AIRFLOW_SAMPLING_PERIOD + currentSampleTime - previousSampleTime;
+    previousSampleTime = currentSampleTime;
+    
+    int16_t airflow;
+    int16_t airvolume;
+    airflowSensorHalGetValue(&airflow); // get airflow, in [0.1SLM]
+    
+    // Apply the bias to the flow reading
+    airflow -= airflowBias;
+
+    // Integrate the airflow to get the volume
+    // In order to preserve precision of the volume, the acculumator should be in
+    // units on the order of 0.001mL, since the longest breath cycle is 6 seconds 
+    // (5[bpm], 1:1I:E = 12[sec/breath] / 2 = 6[sec/breath] for inhalation/exhalation stages)
+    // Over 6 seconds, a sampling rate of 200[Hz] means 1200 samples and if the calculation
+    // error is about 1 unit off every time, units of 0.001[mL] means a difference of only
+    // 1.2[mL] over the course of a breath (1200[samples] * 0.001[mL] = 1.2[mL]).
+    // From 0.01[SLM] flow to 0.001[mL] volume:
+    //  Vol = Flow * dt
+    //      = (Flow[SLM] / (60[sec/min]) * (10000[0.001mL/0.01L])) * ((dt[usec]) / (1000000[usec/sec]))
+    //      = Flow * dt * 10000 / 1000000 / 60
+    //      = Flow * dt / 6000
+    airflowSum += ((int32_t) airflow) * ((int32_t) dt) / 6000L; // airflowSum in [0.001mL]
+    airvolume = airflowSum / 1000L; // airflow in [mL]
+    
+    // Update public interface with the flow and volume values
+    sensors.currentFlow = airflow;
+    sensors.currentVolume = airvolume;
+    
+    // Derive Volume IN from current volume; updating the public value upon entry
+    // into CONTROL_HOLD_IN state
+    if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
+      sensors.volumeIn = airvolume;
+      setVolumeIn = true;
+    } else if (control.state == CONTROL_EXHALATION) {
+      setVolumeIn = false;
     }
-    volumeMinuteWindow[0] = maxVolume;
-    maxVolume = INT16_MIN;
+    
+    // Volume OUT cannot be derived from flow sensor due to position and direction
+    
+    // Derive Volume/min from current volume by remembering the max volume over
+    // last minute volume period and shifting it into the window, updating the
+    // minute volume by subtracting out the old value and adding in the new one
+    maxVolume = max(maxVolume, airvolume);
+    if (volumeMinuteTimeout++ == (uint8_t) (VOLUME_MINUTE_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
+      sensors.volumePerMinute -= volumeMinuteWindow[VOLUME_MINUTE_WINDOW - 1];
+      sensors.volumePerMinute += maxVolume;
+      for (int i = VOLUME_MINUTE_WINDOW - 1; i > 0; i--) {
+        volumeMinuteWindow[i] = volumeMinuteWindow[i - 1];
+      }
+      volumeMinuteWindow[0] = maxVolume;
+      maxVolume = INT16_MIN;
+    }
+
+    // Determine if its time to reset the volume integrator, do it once in exhalation
+    if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
+      DEBUG_PRINT("*** Reset Volume ***");
+      airflowSum = 0;
+      volumeReset = true;
+    } else if (control.state == CONTROL_INHALATION) {
+      volumeReset = false;
+    }
+    
+    DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
+                      (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
+    DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
+    
+    // Ensure this threads cannot block if it somehow elapses the timer too fast
+    PT_YIELD(pt);
+    
+    PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer) != HAL_IN_PROGRESS);
   }
-  
-  // Determine if its time to reset the volume integrator, do it once in exhalation
-  if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
-    DEBUG_PRINT("*** Reset Volume ***");
-    airflowSensorHalResetVolume();
-    volumeReset = true;
-  } else if (control.state == CONTROL_INHALATION) {
-    volumeReset = false;
-  }
-  
-  DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
-                    (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
-  DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
-  
-  PT_WAIT_UNTIL(pt, timerHalRun(&airflowTimer) != HAL_IN_PROGRESS);
-  PT_RESTART(pt);
+
+  // Should never reach here
   PT_END(pt);
 }
 
@@ -245,6 +310,9 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
   if (!PT_SCHEDULE(sensorsBatteryThreadMain(&sensorsBatteryThread))) {
     PT_EXIT(pt);
   }
+  
+  // TODO: Mess with the units to make the graph scale nicely?
+  DEBUG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
 
   PT_RESTART(pt);
   PT_END(pt);
@@ -253,7 +321,10 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
 int sensorsModuleInit(void)
 {
   // TODO: Improve error propagation for all hal init failures
-  if (sensorHalInit() != HAL_OK) {
+  if (pressureSensorHalInit() != HAL_OK) {
+    return MODULE_FAIL;
+  }
+  if (airflowSensorHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
   if (batterySensorHalInit() != HAL_OK) {

@@ -1,9 +1,7 @@
-
 #include "../hal/hal.h"
 #include "../hal/motor.h"
 
 #include <assert.h>
-#include <stdint.h>
 #include <util/atomic.h>
 
 #include "Arduino.h"
@@ -11,7 +9,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-// #define DEBUG
+#define DEBUG
 #define DEBUG_MODULE "motor"
 #include "../util/debug.h"
 
@@ -23,6 +21,9 @@
 #define PIN_MOTOR_PWM       7 // Each pulse moves the motor by a (micro)step.
 #define PIN_MOTOR_ENABLE    8 // Enable locks the motor in place when it is not moving, which consumes power.
 #define PIN_MOTOR_DIRECTION 9
+
+#define PIN_MOTOR_ENABLE_FALSE LOW
+#define PIN_MOTOR_ENABLE_TRUE  HIGH
 
 #define PIN_MOTOR_DIRECTION_OPEN  LOW
 #define PIN_MOTOR_DIRECTION_CLOSE HIGH
@@ -39,6 +40,8 @@
 //**************************************
 // Motor Definitions
 //**************************************
+
+#define MOTOR_STEPS_PER_REVOLUTION 200
 
 // millidegrees of shaft rotation (including the gearbox) per motor step
 
@@ -74,42 +77,55 @@
 #define MC_MICROSTEP_RESOLUTION 400
 #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEP_RESOLUTION/100)
 
+// stepperonline DM332T
+// Pulse/rev
+// The DM332T supports the following settings:
+//  400 (half steps)
+//  800 (quarter steps)
+// 1600 (eigth steps)
+// 3200 (sixteenth steps)
+// 4000
+// 6400
+// 8000
+// 12800
+// #define MC_MICROSTEPS_PER_REVOLUTION 800
+// #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+
 //**************************************
-// Motor Control Definitions
+// Motor State Machine Definitions
 //**************************************
 #define MOTOR_STATE_OFF   0
 #define MOTOR_STATE_HOLD  1
 #define MOTOR_STATE_OPEN  2
 #define MOTOR_STATE_CLOSE 3
+#define MOTOR_STATE_NONE  UINT8_MAX
 
-#define MOTOR_DIRECTION_OPEN   -1
-#define MOTOR_DIRECTION_CLOSE   1
+//**************************************
+// Motor Control Definitions
+//**************************************
 
-// TODO
-// This value should be derived from Timer 3 and Timer 4 frequencies.
+// TODO: Update this based on maximum PWM frequency and control loop frequency.
 #define MOTOR_CONTROL_STEP_ERROR 5
 
 //**************************************
 // Motor Control Variables
 //**************************************
-
-// Staging area for motor move commands.
-static struct {
-  bool    valid = false;
-  uint8_t direction = 0;
-  uint8_t distance = 0;
-} motor_move_command;
-
 static volatile struct {
-  int16_t step_command = 0;
-  int16_t step_position = 0;
-  int8_t  microstep_position = 0;
+  // Precomputed value so that we can minimize the amount of math operations
+  // inside of an ISR.
+  bool     counter_update;
+  uint16_t counter_TOP;
+
+  int16_t  step_position_command;
+  int16_t  step_position;
+  int8_t   microstep_position;
 } motor_control;
 
-// Motor State Machine
+//**************************************
+// Motor State Machine Variables
+//**************************************
 static volatile uint8_t motor_state = MOTOR_STATE_OFF;
-
-static volatile bool motor_busy = false; 
+static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
 
 //*****************************************************************************
 // Timer 3 Configuration: Motor State Control
@@ -124,7 +140,7 @@ void timer3_setup() {
   TCNT3 = 0;
   // OCR3A = 20000; // 50 Hz (1,000,000 / 20,000 = 50)
   OCR3A = 10000; // 100 Hz (1,000,000 / 10,000 = 100)
-  TIMSK3 = (1<<OCIE3A);
+  TIMSK3 = (1<<TOIE3);
   TCCR3B |= (0<<CS32) | (1<<CS31) | (0<<CS30);
 }
 
@@ -138,15 +154,15 @@ void timer3_setup() {
 // motor position.
 //
 // WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
-// COM4B[1:0] = 0b10 (Enable PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
+// COM4B[1:0] = 0b10 (Enable non-inverting PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
 // CS3[2:0] = 0b010 (clk/8 prescaler)
 //
 // Create values for the control registers such that the timer can be enabled
 // and disabled dynamically.
 //*****************************************************************************
 static uint8_t TCCR4A_value = (1<<COM4B1) | (0<<COM4B0) | (0<<WGM41) | (1<<WGM40);
-static uint8_t TCCR4B_value_disabled = (1<<WGM43)  | (0<<WGM42);
-static uint8_t TCCR4B_value_enabled = TCCR4B_value_disabled | (0<<CS42)   | (1<<CS41)  | (0<<CS40);
+static uint8_t TCCR4B_value_disabled = (1<<WGM43) | (0<<WGM42);
+static uint8_t TCCR4B_value_enabled = TCCR4B_value_disabled | (0<<CS42) | (1<<CS41) | (0<<CS40);
 
 void timer4_setup()
 {
@@ -154,84 +170,198 @@ void timer4_setup()
   TCCR4B = TCCR4B_value_disabled;
   TCNT4 = 0;
   
-  // TODO
+  // TODO: Set defaults.
   OCR4A = 625;
   OCR4B = OCR4A/2; // 50% duty cycle
 
-  TIMSK4 = (1<<OCIE4A);
+  TIMSK4 = (1<<OCIE4A); // Enable interrupt at TOP.
 }
 
-void timer4_enable() {
+static inline void timer4_enable() {
   TCCR4B = TCCR4B_value_enabled;
 }
 
-void timer4_disable() {
+static inline void timer4_disable() {
   TCCR4B = TCCR4B_value_disabled;
+  TCNT4  = 0; // TODO: Does TCNT need to be written to zero after OCR4A/OCR4B get written in order to latch in their values?
 }
 
-
-//*****************************************************************************
-// Motor State Control
-//*****************************************************************************
-
-void motor_pwm_enable()
+static inline void timer4_interrupt_BOTTOM_enable()
 {
+  TIFR4 = _BV(TOV4); // Clear the Timer 4 Overflow Flag.
+  TIMSK4 |= _BV(TOIE4); // Set the Timer 4 Overflow Interrupt Enable.
+}
+
+static inline void timer4_interrupt_BOTTOM_disable()
+{
+  TIMSK4 &= ~_BV(TOIE4); // Clear the Timer 4 Overflow Interrupt Enable.
+}
+
+static inline void timer4_set_TOP(uint16_t counter_value)
+{
+  OCR4A = counter_value;
+  OCR4B = counter_value/2; // 50% duty cycle
+}
+
+//*****************************************************************************
+// Motor PWM Control
+//*****************************************************************************
+
+static inline void motor_pwm_enable()
+{
+  timer4_set_TOP(motor_control.counter_TOP);
+  motor_control.counter_update = false;
   timer4_enable();
 }
 
-void motor_pwm_disable()
+static inline void motor_pwm_disable()
 {
   timer4_disable();
 }
 
-// Manages the motor state machine.
-void set_motor_state(uint8_t next_state)
+static inline void motor_pwm_phase_interrupt_enable()
+{
+  timer4_interrupt_BOTTOM_enable();
+}
+
+static inline void motor_pwm_phase_interrupt_disable()
+{
+  timer4_interrupt_BOTTOM_disable();
+}
+
+//*****************************************************************************
+// Motor State Machine
+//*****************************************************************************
+
+// Sets the motor state machine to the MOTOR_STATE_OFF state, and configures
+// its outputs accordingly.
+static void motor_state_set_OFF()
+{
+  DEBUG_PRINT("MOTOR_STATE_OFF");
+  motor_pwm_disable();
+  digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_FALSE);
+
+  motor_state = MOTOR_STATE_OFF;
+}
+
+// Sets the motor state machine to the MOTOR_STATE_HOLD state, and configures
+// its outputs accordingly.
+static void motor_state_set_HOLD()
+{
+  DEBUG_PRINT("MOTOR_STATE_HOLD");
+  motor_pwm_disable();
+  digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_TRUE);
+
+  motor_state = MOTOR_STATE_HOLD;
+}
+
+// Sets the motor state machine to the MOTOR_STATE_OPEN state, and configures
+// its outputs accordingly.
+static inline void motor_state_set_OPEN()
+{
+  DEBUG_PRINT("MOTOR_STATE_OPEN");
+  digitalWrite(PIN_MOTOR_DIRECTION, PIN_MOTOR_DIRECTION_OPEN);
+  digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_TRUE);
+  motor_pwm_enable();
+  
+  motor_state = MOTOR_STATE_OPEN;
+}
+
+// Sets the motor state machine to the MOTOR_STATE_CLOSE state, and configures
+// its outputs accordingly.
+static inline void motor_state_set_CLOSE()
+{
+  DEBUG_PRINT("MOTOR_STATE_CLOSE");
+  digitalWrite(PIN_MOTOR_DIRECTION, PIN_MOTOR_DIRECTION_CLOSE);
+  digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_TRUE);
+  motor_pwm_enable();
+  
+  motor_state = MOTOR_STATE_CLOSE;
+}
+
+// Registers a provided motor state as pending to be installed in the next
+// available phase window of the PWM signal.
+static void motor_state_register_pending(uint8_t next_state)
+{
+  motor_state_pending = next_state;
+  motor_pwm_phase_interrupt_enable();
+}
+
+// Installs a pending motor state update. It is expected that this function
+// will only be called within the correct phase window of the PWM signal.
+static void motor_state_install_pending()
+{
+  if (motor_state_pending == MOTOR_STATE_OFF) {
+    motor_state_set_OFF();
+  } else if (motor_state_pending == MOTOR_STATE_HOLD) {
+    motor_state_set_HOLD();
+  } else {
+    // TODO: error
+  }
+
+  motor_pwm_phase_interrupt_disable();
+  motor_state_pending = MOTOR_STATE_NONE;
+}
+
+// Determines whether the current motor state is a moving state.
+static bool motor_state_moving()
+{
+  return ((motor_state == MOTOR_STATE_OPEN) ||
+          (motor_state == MOTOR_STATE_CLOSE));
+}
+
+// Manages motor state machine transitions.
+//
+// A transition from a non-moving state to any other state is made immediately
+// via motor_state_set().
+//
+// A transition from a moving state to a non-moving state is registered as
+// pending to be installed in the next available phase window of the PWM signal
+// via motor_state_register_pending().
+//
+// A transition from a moving state directly to another moving state is treated
+// as an error.
+void motor_state_transition(uint8_t next_state)
 {
   if (motor_state == next_state) {
     return;
   }
-
-  if (next_state == MOTOR_STATE_OFF) {
-    motor_pwm_disable();
-    digitalWrite(PIN_MOTOR_ENABLE, LOW);
-    motor_busy = false;
-  } else if (next_state == MOTOR_STATE_HOLD) {
-    motor_pwm_disable();
-    digitalWrite(PIN_MOTOR_ENABLE, HIGH);
-    motor_busy = false;
-  } else if (next_state == MOTOR_STATE_OPEN) {
-    // TODO
-    /*
-    if (motor_state == MOTOR_STATE_CLOSE) {
-      // Should going directly from the CLOSE state to the OPEN state with no
-      // intermediate state transition constitute an error?
-      //
-      // Not sure if restoring interrupt state is necessary here.
-      assert(motor_state != MOTOR_STATE_CLOSE);
+ 
+  if (motor_state_pending != MOTOR_STATE_NONE) {
+    if (next_state != motor_state_pending) {
+      // TODO: error
+    } else {
+      return;
     }
-    */
-
-    digitalWrite(PIN_MOTOR_DIRECTION, PIN_MOTOR_DIRECTION_OPEN);
-    digitalWrite(PIN_MOTOR_ENABLE, HIGH);
-    motor_pwm_enable();
-  } else if (next_state == MOTOR_STATE_CLOSE) {
-    // TODO
-    /*
-    if (motor_state == MOTOR_STATE_OPEN) {
-      // Should going directly from the OPEN state to the CLOSE state with no
-      // intermediate state transition be an error?
-
-      // Not sure if restoring interrupt state is necessary here.
-      assert(motor_state != MOTOR_STATE_OPEN);
-    }
-    */
-
-    digitalWrite(PIN_MOTOR_DIRECTION, PIN_MOTOR_DIRECTION_CLOSE);
-    digitalWrite(PIN_MOTOR_ENABLE, HIGH);
-    motor_pwm_enable();
   }
 
-  motor_state = next_state;
+  if (next_state == MOTOR_STATE_OFF) {
+    if (motor_state_moving()) {
+      motor_state_register_pending(MOTOR_STATE_OFF);
+    } else {
+      motor_state_set_OFF();
+    }
+  } else if (next_state == MOTOR_STATE_HOLD) {
+    if (motor_state_moving()) {
+      motor_state_register_pending(MOTOR_STATE_HOLD);
+    } else {
+      motor_state_set_HOLD();
+    }
+  } else if (next_state == MOTOR_STATE_OPEN) {
+    if (motor_state == MOTOR_STATE_CLOSE) {
+      // assert(motor_state != MOTOR_STATE_CLOSE);
+      // TODO: error
+    }
+    motor_state_set_OPEN();
+  } else if (next_state == MOTOR_STATE_CLOSE) {
+    if (motor_state == MOTOR_STATE_OPEN) {
+      // assert(motor_state != MOTOR_STATE_OPEN);
+      // TODO: error
+    }
+    motor_state_set_CLOSE();
+  } else {
+    // TODO: error
+  }
 }
 
 //*****************************************************************************
@@ -239,34 +369,23 @@ void set_motor_state(uint8_t next_state)
 //*****************************************************************************
 
 // Set the current position as the zero point.
-void motor_position_zero()
+void motor_position_set_zero()
 {
   assert((motor_state != MOTOR_STATE_OPEN) && (motor_state != MOTOR_STATE_CLOSE));
 
-  motor_control.microstep_position = 0;
+  motor_control.step_position_command = 0;
   motor_control.step_position = 0;
-  motor_control.step_command = 0;
+  motor_control.microstep_position = 0;
 }
 
-// Moves the motor to an angle relative to its current position.
+// Sets the motor command positon.
 //
-// Parameters
-// ----------
-// uint8_t angle      The angle (in degrees) to move the motor.
-// int8_t  direction  The direction to move the motor. One of:
-//                      * MOTOR_DIRECTION_OPEN
-//                      * MOTOR_DIRECTION_CLOSE
-void motor_move(uint8_t angle, int8_t direction)
+// Parameter
+// ---------
+// uint8_t position   The absolute position to which to move the motor.
+//                    units: degrees
+void motor_position_set(int8_t position)
 {
-  // TODO: Do we want to have assertions? How are they implemented in this
-  // system? (i.e. Do they cause a watchdog reset, print a debug message to the
-  // console, etc.)
-  assert((direction == MOTOR_DIRECTION_OPEN) ||
-         (direction == MOTOR_DIRECTION_CLOSE));
-
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    motor_busy = true;
-    
 
     // Deriving motor_control.step_command from motor_control.step_position can
     // cause error to accumulate from movement to movement. If
@@ -275,8 +394,29 @@ void motor_move(uint8_t angle, int8_t direction)
     // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
 
     // Convert to millidegrees and account for direction.
-    motor_control.step_command += (int16_t) (direction*((((int32_t) angle)*1000)/MOTOR_STEP_ANGLE));
-  }
+    motor_control.step_position_command = (int16_t) ((((int32_t) position)*1000)/MOTOR_STEP_ANGLE);
+
+}
+
+//*****************************************************************************
+// Motor Speed Control
+//*****************************************************************************
+
+// Sets the motor command speed.
+//
+// Parameter
+// ---------
+// uint8_t  speed   The speed at which to move the motor.
+//                  units: MPRM (milli-RPM)
+void motor_speed_set(uint16_t speed)
+{
+  // Convert from MRPM to frequency.
+  uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+
+  // Convert from frequency to counter value.
+  motor_control.counter_TOP = (uint16_t) (1000000UL/frequency);
+  
+  motor_control.counter_update = true;
 }
 
 // Moves the motor to the home position (fully open).
@@ -285,53 +425,43 @@ void motor_home()
   // Move the motor far enough in the OPEN direction (more than the total
   // possible excursion) in order to guarantee that the top limit switch will
   // be tripped.
-  motor_move(180, MOTOR_DIRECTION_OPEN);
+  motor_position_set(-90);
+  motor_speed_set(5000UL);
 }
 
-// Moves the motor to the away position (fully closed).
-void motor_away() {
-  // Move the motor far enough in the CLOSE direction (more than the total
-  // possible excursion) in order to guarantee that the bottom limit switch
-  // will be tripped.
-  motor_move(180, MOTOR_DIRECTION_CLOSE);
-}
-
-//*****************************************************************************
-// Interrupt Service Routines
-//*****************************************************************************
-
-// Motor State Control ISR
-static inline void motor_state_control_ISR()
+static void motor_state_update()
 {
-  int32_t motor_step_delta = motor_control.step_command - motor_control.step_position;
+  int32_t motor_step_delta = motor_control.step_position_command - motor_control.step_position;
 
   if (motor_step_delta > MOTOR_CONTROL_STEP_ERROR) {
     if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
-      // Do not move the motor in the CLOSE direction if the bottom limit switch is tripped.
-      set_motor_state(MOTOR_STATE_HOLD);
+      // Do not move the motor in the CLOSE direction if the bottom limit
+      // switch is tripped.
+      motor_state_transition(MOTOR_STATE_HOLD);
     } else {
-      set_motor_state(MOTOR_STATE_CLOSE);
+      motor_state_transition(MOTOR_STATE_CLOSE);
     }
   } else if (motor_step_delta < -MOTOR_CONTROL_STEP_ERROR) {
     if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED) {
-      // Do not move the motor in the OPEN direction if the top limit switch is tripped.
-      set_motor_state(MOTOR_STATE_HOLD);
-      motor_position_zero();
+      // Do not move the motor in the OPEN direction if the top limit switch is
+      // tripped. There is no need to go through motor_state_transition()
+      // because the zero reference point is set here.
+      motor_state_set_HOLD();
+      motor_position_set_zero();
     } else {
-      set_motor_state(MOTOR_STATE_OPEN);
+      motor_state_transition(MOTOR_STATE_OPEN);
     }
   } else {
     if ((motor_state == MOTOR_STATE_OPEN) ||
         (motor_state == MOTOR_STATE_CLOSE)) {
       // Hold the motor in place in order to maintain the correct position
       // without having to zero the motor again.
-      set_motor_state(MOTOR_STATE_HOLD);
+      motor_state_transition(MOTOR_STATE_HOLD);
     }
   }
 }
 
-// Motor Position Tracking ISR
-static inline void motor_position_tracking_ISR()
+static inline void motor_position_update()
 {
   if (motor_state == MOTOR_STATE_OPEN) {
     if (--motor_control.microstep_position <= -MC_MICROSTEPS_PER_STEP) {
@@ -343,26 +473,49 @@ static inline void motor_position_tracking_ISR()
       motor_control.step_position++;
       motor_control.microstep_position = 0;
     }
+  } else {
+    static uint16_t error_count = 0;
+    DEBUG_PRINT("motor_position_update ERROR %d", ++error_count);
+    // TODO: error
   }
 }
 
-ISR(TIMER3_COMPA_vect)
+//*****************************************************************************
+// Interrupt Service Routines
+//*****************************************************************************
+
+// Timer 3 BOTTOM
+ISR(TIMER3_OVF_vect)
 {
-  motor_state_control_ISR();
+  // motor_state_update();
 }
 
+// Timer 4 BOTTOM
+ISR(TIMER4_OVF_vect) {
+  motor_state_install_pending();
+}
+
+// Timer 4 TOP
 ISR(TIMER4_COMPA_vect)
 {
-  motor_position_tracking_ISR();
+  if (motor_control.counter_update) {
+    timer4_set_TOP(motor_control.counter_TOP);
+    motor_control.counter_update = false;
+  }
+
+  motor_position_update();
 }
+
 
 //*****************************************************************************
 // motorHal Interface Implementation
 //*****************************************************************************
-int motorHalInit(void)
+int8_t motorHalInit(void)
 {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    timer3_setup();
+    // TODO: Remove/relocate Timer 3
+    // timer3_setup();
+    
     timer4_setup();
 
     // Motor Pin Configuration
@@ -379,47 +532,42 @@ int motorHalInit(void)
   // avoided during WDT reset.
 
   // Move the motor to the home position to zero the motor position.
-  motor_home();
-  while (motor_busy) {}
+  motorHalCommand(INT8_MIN, 5000U);
+  while(motorHalStatus() == HAL_IN_PROGRESS) {}
   delay(1000);
 
   // Move to the top of the bag.
   // TODO: This value will vary depending upon the installation location of the
   // top limit switch, as well as the type of bag. Ultimately, the sensors
   // should be used to find the top of the bag.
-  motor_move(15, MOTOR_DIRECTION_CLOSE);
-  while (motor_busy) {} 
+  motorHalCommand(15, 5000U);
+  while (motorHalStatus() == HAL_IN_PROGRESS) {}
   delay(1000);
 
   return HAL_OK;
 }
 
-// TODO: Implement duration.
-int motorHalBegin(unsigned int direction, unsigned int distance, unsigned int duration)
+// Absolute position, relative to the motor zero point.
+// Speed given in MRPM (millirevolutions per second).
+int8_t motorHalCommand(uint8_t position, uint16_t speed)
 {
-  motor_move_command.distance = distance;
-
-  if (direction == MOTOR_HAL_DIRECTION_INHALATION) {
-    motor_move_command.direction = MOTOR_DIRECTION_CLOSE;
-  } else if (direction == MOTOR_HAL_DIRECTION_EXHALATION) {
-    motor_move_command.direction = MOTOR_DIRECTION_OPEN;
-  } else {
-    return HAL_FAIL;
-  }
-
-  motor_move_command.valid = true;
+  motor_position_set(position);
+  motor_speed_set(speed);
   
-  return HAL_OK;
+  motor_state_update();
+
+  if (motor_state_moving()) {
+    return HAL_IN_PROGRESS;
+  } else {
+    return HAL_OK;
+  }
 }
 
-int motorHalRun(void)
+int8_t motorHalStatus(void)
 {
-  if (motor_move_command.valid) {
-    motor_move(motor_move_command.distance, motor_move_command.direction);
-    motor_move_command.valid = false;
-  }
+  motor_state_update();
 
-  if (motor_busy) {
+  if (motor_state_moving()) {
     return HAL_IN_PROGRESS;
   } else {
     return HAL_OK;

@@ -26,3 +26,26 @@ Bug fixes
 - Urgent bug fixes may be done from ‘master’ while development has continued on ‘develop’
 - In this case, check out a bug fix branch from ‘master’
 - Merge the fix back into ‘master’ AND ‘develop’
+
+
+Plotting
+
+- if you #define src/util/debug.h:DEBUG_PLOTTING to "control"
+  (real) or "sensors" (simulated values), the controller will print
+  sampled data to the debug port in the following format::
+
+    ms,FIELDA,FIELDB,...\r
+    MS1,VALA1,VALB1,...\r
+    MS2,VALA2,VALB2,...\r
+    MS3,VALA3,VALB3,...\r
+
+  Where the first line are the header names with ms being timestamps
+  in milliseconds.
+
+  This can be visualized with the arduino plotter or with tools such
+  as kst2 (eg: in Linux -- note you might have to edit the beggining
+  of the file to remove any leftover output before flashing until the
+  headers so kst2 can parse it correctly)::
+
+    $ cat /dev/ttyACM0 > file.txt
+    $ kst2 file.txt
