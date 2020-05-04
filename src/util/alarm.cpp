@@ -54,7 +54,8 @@ void alarmSuppress(struct alarm* alarm)
   alarm->suppressed = true;
   alarm->set = false;
   timerHalBegin(&(alarm->suppressionTimer),
-                alarm->properties->suppressionTimeout);
+                alarm->properties->suppressionTimeout,
+                false);
 
   return;
 }

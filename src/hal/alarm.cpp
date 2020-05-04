@@ -55,7 +55,7 @@ int alarmHalRing(unsigned int pattern)
       if (timerHalRun(&timer) != HAL_IN_PROGRESS) {
         noTone(ALARM_PIN);
         alarmOn = false;
-        timerHalBegin(&timer, alarmTime);
+        timerHalBegin(&timer, alarmTime, false);
       }
     }
   } else {
@@ -68,7 +68,7 @@ int alarmHalRing(unsigned int pattern)
       if (timerHalRun(&timer) != HAL_IN_PROGRESS) {
         tone(ALARM_PIN, ALARM_FREQUENCY);
         alarmOn = true;
-        timerHalBegin(&timer, alarmTime);
+        timerHalBegin(&timer, alarmTime, false);
       }
     }
   }
