@@ -51,11 +51,13 @@
 
 // stepperonline 
 // NEMA 23 20:1
-// #define MOTOR_STEP_ANGLE 90
+#define MOTOR_STEP_ANGLE 90
+#define MOTOR_SPEED_MIN 400
+#define MOTOR_SPEED_MAX 65535
 
 // stepperonline 23HS22-2804S-HG50
 // NEMA 23 15:1
-#define MOTOR_STEP_ANGLE 120
+//#define MOTOR_STEP_ANGLE 120
 
 // stepperonline 23HS30-2804S-HG10
 // NEMA 23 10:1
@@ -107,6 +109,8 @@
 // TODO: Update this based on maximum PWM frequency and control loop frequency.
 #define MOTOR_CONTROL_STEP_ERROR 5
 
+
+
 //**************************************
 // Motor Control Variables
 //**************************************
@@ -116,9 +120,9 @@ static volatile struct {
   bool     counter_update;
   uint16_t counter_TOP;
 
-  int16_t  step_position_command;
-  int16_t  step_position;
+  int32_t  step_position;
   int8_t   microstep_position;
+  uint8_t  direction;
 } motor_control;
 
 //**************************************
@@ -373,29 +377,8 @@ void motor_position_set_zero()
 {
   assert((motor_state != MOTOR_STATE_OPEN) && (motor_state != MOTOR_STATE_CLOSE));
 
-  motor_control.step_position_command = 0;
   motor_control.step_position = 0;
   motor_control.microstep_position = 0;
-}
-
-// Sets the motor command positon.
-//
-// Parameter
-// ---------
-// uint8_t position   The absolute position to which to move the motor.
-//                    units: degrees
-void motor_position_set(int8_t position)
-{
-
-    // Deriving motor_control.step_command from motor_control.step_position can
-    // cause error to accumulate from movement to movement. If
-    // motor_step_position is to be used for position control, then it needs  to
-    // be updated atomically in the motor position tracking ISR.
-    // motor_control.step_command = motor_control.step_position + direction*((angle*1000)/MOTOR_STEP_ANGLE);
-
-    // Convert to millidegrees and account for direction.
-    motor_control.step_position_command = (int16_t) ((((int32_t) position)*1000)/MOTOR_STEP_ANGLE);
-
 }
 
 //*****************************************************************************
@@ -408,10 +391,27 @@ void motor_position_set(int8_t position)
 // ---------
 // uint8_t  speed   The speed at which to move the motor.
 //                  units: MPRM (milli-RPM)
+
+
 void motor_speed_set(uint16_t speed)
 {
+
+
+  if (speed>MOTOR_SPEED_MAX)
+    speed=MOTOR_SPEED_MAX;
+
+  if (speed<MOTOR_SPEED_MIN)
+    speed=MOTOR_SPEED_MIN;
+
   // Convert from MRPM to frequency.
-  uint32_t frequency = (((((uint32_t) speed)*360U)/60U)/((uint8_t) MOTOR_STEP_ANGLE))*((uint8_t) MC_MICROSTEPS_PER_STEP);
+  uint32_t frequency = ((((uint32_t) MC_MICROSTEPS_PER_STEP)*((((uint32_t) speed)*360U)/60U))/((uint32_t) MOTOR_STEP_ANGLE));
+
+  //make sure register values are in meaningful range
+  if (frequency<16)
+    frequency=16;
+
+  if (frequency>1000000UL)
+    frequency=1000000UL;
 
   // Convert from frequency to counter value.
   motor_control.counter_TOP = (uint16_t) (1000000UL/frequency);
@@ -419,21 +419,9 @@ void motor_speed_set(uint16_t speed)
   motor_control.counter_update = true;
 }
 
-// Moves the motor to the home position (fully open).
-void motor_home()
-{
-  // Move the motor far enough in the OPEN direction (more than the total
-  // possible excursion) in order to guarantee that the top limit switch will
-  // be tripped.
-  motor_position_set(-90);
-  motor_speed_set(5000UL);
-}
-
 static void motor_state_update()
 {
-  int32_t motor_step_delta = motor_control.step_position_command - motor_control.step_position;
-
-  if (motor_step_delta > MOTOR_CONTROL_STEP_ERROR) {
+  if (motor_control.direction == MOTOR_DIR_CLOSE) {
     if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
       // Do not move the motor in the CLOSE direction if the bottom limit
       // switch is tripped.
@@ -441,7 +429,7 @@ static void motor_state_update()
     } else {
       motor_state_transition(MOTOR_STATE_CLOSE);
     }
-  } else if (motor_step_delta < -MOTOR_CONTROL_STEP_ERROR) {
+  } else if (motor_control.direction == MOTOR_DIR_OPEN) {
     if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED) {
       // Do not move the motor in the OPEN direction if the top limit switch is
       // tripped. There is no need to go through motor_state_transition()
@@ -532,45 +520,59 @@ int8_t motorHalInit(void)
   // avoided during WDT reset.
 
   // Move the motor to the home position to zero the motor position.
-  motorHalCommand(INT8_MIN, 5000U);
-  while(motorHalStatus() == HAL_IN_PROGRESS) {}
+  motorHalCommand(MOTOR_DIR_OPEN, 5000U);
+  do
+  {
+    motor_state_update();
+  } while (motor_state_moving());
+  
   delay(1000);
 
   // Move to the top of the bag.
   // TODO: This value will vary depending upon the installation location of the
   // top limit switch, as well as the type of bag. Ultimately, the sensors
   // should be used to find the top of the bag.
-  motorHalCommand(15, 5000U);
-  while (motorHalStatus() == HAL_IN_PROGRESS) {}
+  motorHalCommand(MOTOR_DIR_CLOSE, 5000U);
+  do
+  {
+    motor_state_update();
+  } while ((motorHalGetPosition()<MOTOR_INIT_POSITION) && (motorHalGetStatus()==MOTOR_STATUS_MOVING));
+  
+  motorHalCommand(MOTOR_DIR_STOP, 0U);
   delay(1000);
 
   return HAL_OK;
 }
 
-// Absolute position, relative to the motor zero point.
+// DIR in MOTOR_DIR_OPEN or MOTOR_DIR_CLOSE
 // Speed given in MRPM (millirevolutions per second).
-int8_t motorHalCommand(uint8_t position, uint16_t speed)
+int8_t motorHalCommand(uint8_t dir, uint16_t speed)
 {
-  motor_position_set(position);
-  motor_speed_set(speed);
-  
-  motor_state_update();
-
-  if (motor_state_moving()) {
-    return HAL_IN_PROGRESS;
-  } else {
-    return HAL_OK;
+  if (speed)
+  {
+    motor_control.direction=dir;
+    motor_speed_set(speed);
   }
+  else
+  {
+    motor_control.direction=MOTOR_DIR_STOP;      
+  }
+
+  motor_state_update();
 }
 
-int8_t motorHalStatus(void)
+int32_t motorHalGetPosition(void)
 {
-  motor_state_update();
-
-  if (motor_state_moving()) {
-    return HAL_IN_PROGRESS;
-  } else {
-    return HAL_OK;
-  }
+    return motor_control.step_position*MOTOR_STEP_ANGLE; //in mdeg
 }
 
+int8_t motorHalGetStatus(void)
+{
+  if (motor_state_moving())
+    return MOTOR_STATUS_MOVING;
+  else if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED)
+    return MOTOR_STATUS_SWITCH_TRIPPED_TOP;
+  else if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED)
+    return MOTOR_STATUS_SWITCH_TRIPPED_BOTTOM;  
+    
+}
