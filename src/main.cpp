@@ -38,7 +38,6 @@ void mainSetup(void)
   // TODO: Handle failure conditions
   // TODO: refactor all HAL initiailization functions here, since more than one
   //       module might be using a single HAL (like timer)
-  watchdogHalInit();
 
   timerHalInit();
   alarmHalInit();
@@ -59,6 +58,12 @@ void mainSetup(void)
   metricsReset(&parametersModuleMetrics);
   metricsReset(&linkModuleMetrics);
 #endif
+
+  // TODO: For now, move the watchdog initialization here; this will need to go
+  //       back to the top of setup to allow the watchdog to prevent HAL/module
+  //       initialization from hanging, but theres a bunch of stuff that needs
+  //       to be refactored to allow this right now (namely, the motor HAL)
+  watchdogHalInit();
   DEBUG_PRINT("setup done");
 }
 
