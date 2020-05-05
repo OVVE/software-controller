@@ -13,7 +13,7 @@
 #define MOTOR_STATUS_SWITCH_TRIPPED_BOTTOM 1
 #define MOTOR_STATUS_SWITCH_TRIPPED_TOP 2
 
-#define MOTOR_INIT_POSITION 25000 //in mDeg
+#define MOTOR_INIT_POSITION 2000 //in mDeg
 
 // TODO: Doc
 int8_t motorHalInit(void);
