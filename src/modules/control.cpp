@@ -26,6 +26,8 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
+#define MAX_PEAK_PRESSURE 38.0f
+
 // Uncomment the following to enable the current closed loop control
  #define CONTROL_CLOSED_LOOP
 
@@ -42,6 +44,8 @@ static struct timer controlTimer;
 static uint32_t targetVolume=500;
 static uint32_t totalBreathTime;
 static uint32_t targetInhalationTime;
+static uint32_t targetHoldTime;
+static uint32_t targetExhalationTime;
 
 static uint32_t measuredInhalationTime;
 static uint32_t measuredExhalationTime;
@@ -109,7 +113,7 @@ static float inhalationTrajectoryInitialFlow=1.0f; //flow calculation based on s
 static float inhalationTrajectoryLastVolume=0.0f; //volume delivered in last cycle
 static float inhalationTrajectoryCurrentTimeInCycle=0.0f; //0..1
 
-#define INITIAL_FLOW_SAFETY_FACTOR 0.3f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
+#define INITIAL_FLOW_SAFETY_FACTOR 0.5f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
 float initialFlow()
 {
   float timeInS=(float)targetInhalationTime/(float)(1.0f SEC);
@@ -130,12 +134,7 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
 {
   //only modify inhalationTrajectory if we see a difference >INHALATION_TRAJECTORY_PRESSURE_DIFFERENCE_DEADZONE, otherwise drag slowly bag to normal
 
-  //TODO: Fix plateau sensor reading
-  //we sometimes get negative plateau values -> filter them for now
-  if ((sensors.peakPressure<0) || (sensors.plateauPressure<0))
-    return;
-
-
+  
   if (sensors.peakPressure-sensors.plateauPressure>INHALATION_TRAJECTORY_PRESSURE_DIFFERENCE_DEADZONE)
   {
     float diff=sensors.peakPressure-sensors.plateauPressure;
@@ -148,10 +147,10 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
 
     //currently deactivated here
     //scale up start
-    //inhalationTrajectoryStartFlow*=newScale;
+    inhalationTrajectoryStartFlow*=newScale;
 
     //scale down end
-    //inhalationTrajectoryEndFlow/=newScale;
+    inhalationTrajectoryEndFlow/=newScale;
   }else
   {
     float newScale=(1.0f-(INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE/100.0f)); 
@@ -160,14 +159,14 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
 
     //currently deactivated here
     //scale up start
-    //inhalationTrajectoryStartFlow*=newScale;
+    inhalationTrajectoryStartFlow*=newScale;
 
     //scale down end
-    //inhalationTrajectoryEndFlow/=newScale;
+    inhalationTrajectoryEndFlow/=newScale;
   }
 }
 
-#define INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE 10.0f //in %
+#define INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE 8.0f //in %
 
 float inhalationTrajectoryUpdateVolumeScale(void)
 {
@@ -233,8 +232,10 @@ static int generateFlowInhalationTrajectory(uint8_t init)
  
   // TODO: Actually sync up with how ie is supposed to be represented
   //       for next, fix IE at 1:1.5 (1 / 2.5 = 0x0066)
-     
-  parameters.ieRatioRequested = 0x0066;
+  
+  //catch old UIs which are not setting IE ratio correctly
+  if (!parameters.ieRatioRequested)
+    parameters.ieRatioRequested = 0x0066;
   
   if (init)
   {
@@ -242,6 +243,8 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     // Collect all set points from parameters
     totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
     targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
+    targetHoldTime = HOLD_TIME; // fixed value
+    
     targetVolume = parameters.volumeRequested;
     
 
@@ -271,7 +274,8 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
     targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
     targetVolume = parameters.volumeRequested;
-
+    targetHoldTime = HOLD_TIME; // fixed value
+    
     inhalationTrajectoryLastVolume=(float)sensors.volumeIn;
 
     if (!initialCycleCnt)
@@ -331,7 +335,27 @@ static int generateFlowInhalationTrajectory(uint8_t init)
 
   targetAirFlow*=10.0f; 
 
- 
+  //scale down target airflow if we are above our tidal volume target
+#define INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT 10.0f // in %
+  if (sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(2.0f*100.0f))) //start to scale down at half of target overshoot
+  {
+    targetAirFlow*=(sensors.currentVolume-targetVolume)/(targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(2.0f*100.0f)));
+  }
+
+  //dynamically limit to max pressure
+  if ((float)sensors.currentPressure/100.f>(0.1f*MAX_PEAK_PRESSURE))
+  {
+
+    float pressure=sensors.currentPressure/100.f;
+
+    if (pressure>MAX_PEAK_PRESSURE)
+      pressure=MAX_PEAK_PRESSURE;
+
+
+    targetAirFlow*=(MAX_PEAK_PRESSURE-pressure)/(0.1f*MAX_PEAK_PRESSURE);
+
+  }
+
    DEBUG_PRINT_EVERY(10, "Inh Trj: Target Velocity: %lu", 
     (uint32_t)targetAirFlow);
 
@@ -575,7 +599,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       DEBUG_PRINT("state: CONTROL_BEGIN_HOLD_IN");
 
       // Setup the hold timer
-      timerHalBegin(&controlTimer, HOLD_TIME, false);
+      timerHalBegin(&controlTimer, targetHoldTime, false);
       
       motorHalCommand(MOTOR_DIR_STOP, 0U);
       
@@ -631,7 +655,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       // Calculate and update the measured times
       uint32_t currentBreathTime = timerHalCurrent(&breathTimer);
-      measuredExhalationTime = currentBreathTime - HOLD_TIME - measuredInhalationTime;
+      measuredExhalationTime = currentBreathTime - targetHoldTime - measuredInhalationTime;
       control.ieRatioMeasured = (measuredExhalationTime << 8) / measuredInhalationTime; // TODO: address fixed point math
       control.respirationRateMeasured = (60 SEC) / (currentBreathTime USEC);
       control.breathCount++;
