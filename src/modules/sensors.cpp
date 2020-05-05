@@ -63,7 +63,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   static int16_t currentMaxPressure = INT16_MIN;
   static bool setPeakPressure = false;
-  static int16_t plateauPressureSum = 0;
+  static int32_t plateauPressureSum = 0;
   static int8_t plateauPressureSampleCount = 0;
   static int16_t previousPressure[PRESSURE_WINDOW];
   static uint8_t inhalationTimeout = 0;
@@ -109,7 +109,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       plateauPressureSampleCount++;
     } else if ((control.state == CONTROL_EXHALATION) &&
                (plateauPressureSampleCount > 0)) {
-      sensors.plateauPressure = plateauPressureSum / plateauPressureSampleCount;
+      sensors.plateauPressure = plateauPressureSum / (int32_t)plateauPressureSampleCount;
       plateauPressureSum = 0;
       plateauPressureSampleCount = 0;
     }
