@@ -18,13 +18,6 @@
 #define DEBUG_SERIAL_PORT Serial
 #endif
 
-// In order to enable the standard Arduino Serial Plotter, all other types of
-// messages must be disabled and only a single module can plot a single set
-// of variables at one time. As such, to use the DEBUG_PLOT macro, define
-// DEBUG_PLOTTING here with the module name (DEBUG_MODULE) to be plotted,
-// example commented out below:
-// #define DEBUG_PLOTTING "control"
-
 // Initial setup of debug; only to be used once
 #define DEBUG_BEGIN DEBUG_SERIAL_PORT.begin(230400)
 

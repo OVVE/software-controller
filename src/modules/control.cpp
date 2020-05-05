@@ -6,6 +6,8 @@
 
 #include "../pt/pt.h"
 
+#include "../config.h"
+
 #include "../hal/motor.h"
 #include "../hal/timer.h"
 
@@ -16,9 +18,10 @@
 
 #include "../util/metrics.h"
 
-#define DEBUG
+#ifdef DEBUG_CONTROL_MODULE
 #define DEBUG_MODULE "control"
 #include "../util/debug.h"
+#endif
 
 #define CONTROL_LOOP_PERIOD (10 MSEC)
 

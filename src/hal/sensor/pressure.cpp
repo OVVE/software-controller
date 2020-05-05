@@ -1,15 +1,13 @@
 
 #include <stdint.h>
 
+#include "../../config.h"
+
 #include "../../hal/hal.h"
 #include "../../hal/sensor/adc.h"
 #include "../../hal/sensor/pressure.h"
 
 #define PRESSURE_SENSOR_PIN 1
-
-//#define PRESSURE_SENSOR_MPXV7025
-//#define PRESSURE_SENSOR_MPXV7007
-#define PRESSURE_SENSOR_SSCDRRN100MDAA5
 
 static int16_t reading;
 
