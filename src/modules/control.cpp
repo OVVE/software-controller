@@ -4,6 +4,7 @@
 
 #include "../pt/pt.h"
 
+#include "../hal/buzzer.h"
 #include "../hal/motor.h"
 #include "../hal/timer.h"
 
@@ -116,6 +117,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
 int controlModuleInit(void)
 {
+  if (buzzerHalInit() != HAL_OK) {
+    return MODULE_FAIL;
+  }
+
   if (motorHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
