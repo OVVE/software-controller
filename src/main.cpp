@@ -1,4 +1,6 @@
 
+#include "config.h"
+
 #include "hal/alarm.h"
 #include "hal/timer.h"
 #include "hal/watchdog.h"
@@ -12,13 +14,12 @@
 #include "util/alarm.h"
 #include "util/metrics.h"
 
-#define DEBUG
+#ifdef DEBUG_MAIN_LOOP
 #define DEBUG_MODULE "main"
 #include "util/debug.h"
+#endif
 
-#define MAIN_METRICS
-
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
 static struct metrics mainLoopMetrics;
 static struct metrics scheduleMetrics;
 static struct metrics controlModuleMetrics;
@@ -50,7 +51,7 @@ void mainSetup(void)
   parametersModuleInit();
   linkModuleInit();
 
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsReset(&mainLoopMetrics);
   metricsReset(&scheduleMetrics);
   metricsReset(&controlModuleMetrics);
@@ -69,49 +70,49 @@ void mainSetup(void)
 
 void mainLoop(void)
 {
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStart(&mainLoopMetrics);
   metricsStart(&scheduleMetrics);
 #endif
 
   // Run all modules in RR; take specified actions in the event of failure
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStart(&controlModuleMetrics);
 #endif
   if (controlModuleRun() != MODULE_OK) {
     // TODO: control module exited, trigger severe error
   }
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&controlModuleMetrics);
 #endif
   
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStart(&sensorsModuleMetrics);
 #endif
   if (sensorsModuleRun() != MODULE_OK) {
     // TODO: sensor module exited, trigger severe error  
   }
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&sensorsModuleMetrics);
 #endif
 
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStart(&parametersModuleMetrics);
 #endif
   if (parametersModuleRun() != MODULE_OK) {
     // TODO: parameters module exited, attempt recovery
   }
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&parametersModuleMetrics);
 #endif
 
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStart(&linkModuleMetrics);
 #endif
   if (linkModuleRun() != MODULE_OK) {
     // TODO: link module exited, attempt recovery
   }
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&linkModuleMetrics);
 #endif
 
@@ -142,7 +143,7 @@ void mainLoop(void)
     alarmHalRing(ALARM_HAL_OFF);
   }
 
-#ifdef MAIN_METRICS
+#ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&scheduleMetrics);
   DEBUG_PRINT_EVERY(25000, "Runtime Metrics:");
   DEBUG_PRINT_EVERY(25000, " Main loop:  %10lu us : %10lu us : %10lu us",

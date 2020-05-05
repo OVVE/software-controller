@@ -1,6 +1,8 @@
 
 #include <stdint.h>
 
+#include "../../config.h"
+
 #include "../../hal/hal.h"
 #include "../../hal/sensor/adc.h"
 #include "../../hal/sensor/airflow.h"

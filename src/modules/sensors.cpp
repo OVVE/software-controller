@@ -8,6 +8,8 @@
 
 #include "../pt/pt.h"
 
+#include "../config.h"
+
 #include "../hal/timer.h"
 #include "../hal/sensor/battery.h"
 #include "../hal/sensor/airflow.h"
@@ -19,9 +21,10 @@
 
 #include "../util/utils.h"
 
-#define DEBUG
-#define DEBUG_MODULE "sensor"
+#ifdef DEBUG_SENSORS_MODULE
+#define DEBUG_MODULE "sensors"
 #include "../util/debug.h"
+#endif
 
 // 
 // Pressure Sensor Parameters

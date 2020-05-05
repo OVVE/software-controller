@@ -1,3 +1,5 @@
+#include "../config.h"
+
 #include "../hal/hal.h"
 #include "../hal/motor.h"
 
@@ -9,9 +11,10 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-#define DEBUG
+#ifdef DEBUG_MOTOR_HAL
 #define DEBUG_MODULE "motor"
 #include "../util/debug.h"
+#endif
 
 
 //THIS IS FOR MOTOR ACCELERATION TEST PURPOSES ONLY! DO NOT ACTIVATE UNLESS YOU KNOW WHAT YOU'RE DOING!!!
@@ -47,15 +50,7 @@
 
 #define MOTOR_STEPS_PER_REVOLUTION 200
 
-// millidegrees of shaft rotation (including the gearbox) per motor step
-
-// stepperonline 23HS22-2804S-HG50
-// NEMA 23 50:1
-// #define MOTOR_STEP_ANGLE 36
-
-// stepperonline 
-// NEMA 23 20:1
-#define MOTOR_STEP_ANGLE 90
+// TODO: These are probably per motor, please move them and update them accordingly
 #define MOTOR_SPEED_MIN 400
 #define MOTOR_SPEED_MAX 65535
 #define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING 200
@@ -63,13 +58,29 @@
 #define MAX_MOTOR_SPEED_CLOSING                12000
 #define MAX_MOTOR_SPEED_OPENING                25000
 
+// millidegrees of shaft rotation (including the gearbox) per motor step
+
+// stepperonline 23HS22-2804S-HG50
+// NEMA 23 50:1
+#if defined(MOTOR_23HS22_2804S_HG50_50_1)
+#define MOTOR_STEP_ANGLE 36
+
+// stepperonline 
+// NEMA 23 20:1
+#elif defined(MOTOR_23HS22_2804S_HG50_20_1)
+#define MOTOR_STEP_ANGLE 90
+
 // stepperonline 23HS22-2804S-HG50
 // NEMA 23 15:1
-//#define MOTOR_STEP_ANGLE 120
+#elif defined(MOTOR_23HS22_2804S_HG50_15_1)
+#define MOTOR_STEP_ANGLE 120
 
 // stepperonline 23HS30-2804S-HG10
 // NEMA 23 10:1
-// #define MOTOR_STEP_ANGLE 180
+#elif defined(MOTOR_23HS30_2804S_HG10_10_1)
+#define MOTOR_STEP_ANGLE 180
+
+#endif
 
 
 //**************************************
@@ -84,6 +95,7 @@
 //  400 (quarter steps)
 //  800 (eigth steps)
 // 1600 (sixteenth steps)
+#if defined(MOTOR_CONTROLLER_ISD08)
 #define MC_MICROSTEP_RESOLUTION 400
 #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEP_RESOLUTION/100)
 
@@ -98,8 +110,11 @@
 // 6400
 // 8000
 // 12800
-// #define MC_MICROSTEPS_PER_REVOLUTION 800
-// #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+#elif defined(MOTOR_CONTROLLER_DM332T)
+#define MC_MICROSTEPS_PER_REVOLUTION 800
+#define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/MOTOR_STEPS_PER_REVOLUTION)
+
+#endif
 
 //**************************************
 // Motor State Machine Definitions
