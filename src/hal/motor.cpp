@@ -31,7 +31,7 @@
 // Limit Switch Pins
 // 
 // Connect C (common) to ground and NC (normally closed) to the specified pin,
-// which configured to pull-up mode.
+// which is configured to pull-up mode.
 #define PIN_LIMIT_BOTTOM 5
 #define PIN_LIMIT_TOP    6
 
@@ -63,12 +63,8 @@
 // NEMA 23, 56 mm ,Gear Ratio 50:1
 #define MOTOR_STEPS_PER_REVOLUTION (50*200)
 #else
-  #error No motor has been selected (see motor.h).
+#error No motor has been selected (see motor.h).
 #endif
-
-#define SECONDS_PER_MINUTE 60
-
-#define DEGREES_PER_REVOLUTION 360
 
 //******************************************************************************
 // Motor Controller Definitions
@@ -106,9 +102,9 @@
 // MC_OBJECT_2057 and MC_OBJECT_2058 are configured above for quarter steps.
 #define MC_MICROSTEPS_PER_STEP (512/(MC_OBJECT_2057/MC_OBJECT_2058))
 
-#define MC_DIRECTION_SETUP_TIME 35
+#define MC_DIRECTION_SETUP_TIME 35 // us
 #define MC_STEP_PULSE_HIGH
-#define MC_STEP_PULSE_WIDTH 16
+#define MC_STEP_PULSE_WIDTH 16 // us
 #elif defined MOTOR_CONTROLLER_STEPPERONLINE_ISD08
 // stepperonline ISD08
 // Microstep Resolution
@@ -121,9 +117,9 @@
 #define MC_MICROSTEP_RESOLUTION 400
 #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEP_RESOLUTION/100)
 
-#define MC_DIRECTION_SETUP_TIME 35
+#define MC_DIRECTION_SETUP_TIME 35 // us
 #define MC_STEP_PULSE_LOW
-#define MC_STEP_PULSE_WIDTH 16
+#define MC_STEP_PULSE_WIDTH 16 // us
 #elif defined MOTOR_CONTROLLER_STEPPERONLINE_DM332T
 // stepperonline DM332T
 // Pulse/rev
@@ -139,11 +135,11 @@
 #define MC_MICROSTEPS_PER_REVOLUTION 800
 #define MC_MICROSTEPS_PER_STEP (MC_MICROSTEPS_PER_REVOLUTION/200)
 
-#define MC_DIRECTION_SETUP_TIME 35
+#define MC_DIRECTION_SETUP_TIME 35 // us
 #define MC_STEP_PULSE_LOW
-#define MC_STEP_PULSE_WIDTH 16
+#define MC_STEP_PULSE_WIDTH 16 // us
 #else
-  #error No motor controller has been selected (see motor.h).
+#error No motor controller has been selected (see motor.h).
 #endif
 
 //******************************************************************************
@@ -159,17 +155,9 @@
 // Motor Control Definitions
 //******************************************************************************
 
-// TODO: Compute this dynamically based on maximum PWM frequency and control
-// loop frequency.
-#define MOTOR_CONTROL_STEP_ERROR 20
-
-// TODO: Naming?
+// TODO: Revise this mechanism.
 #define MOTOR_POSITION_INCREMENT_OPEN  false
 #define MOTOR_POSITION_INCREMENT_CLOSE true
-
-// TODO: MRPM
-#define MOTOR_SPEED_START 8000
-#define MOTOR_SPEED_STOP  8000
 
 //******************************************************************************
 // Motor Control Variables
@@ -177,15 +165,13 @@
 
 // Public
 // TODO: Detect potential overflow in this variable.
-// TODO
-// It's okay to read this variable outside of a critical section, as long as we
-// assume that it can never overflow.
-volatile int16_t motor_position; // Motor position in microsteps from zero.
+// TODO: It's okay to read this variable outside of a critical section, as long
+// as we assume that it can never overflow.
+volatile int16_t motor_position; // Motor position in microsteps.
 
 // Private
 static int16_t motor_speed;
 static int16_t motor_speed_command;
-static int16_t motor_position_command;
 
 static volatile bool motor_position_increment;
 
@@ -212,7 +198,7 @@ static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
 // COM4B[1:0] = 0b11 (Enable inverting PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
 #define TCCR4A_VALUE ((1<<COM4B1) | (1<<COM4B0) | (0<<WGM41) | (1<<WGM40))
 #else
-  #error No motor controller step pulse convention has been defined.
+#error No motor controller step pulse convention has been defined.
 #endif
 
 #define TCCR4B_VALUE_DISABLED ((1<<WGM43) | (0<<WGM42))
@@ -220,10 +206,11 @@ static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
 // CS3[2:0] = 0b010 (clk/8 prescaler)
 #define TCCR4B_VALUE_ENABLED (TCCR4B_VALUE_DISABLED | (0<<CS42) | (1<<CS41) | (0<<CS40))
 
-// TODO Forward Declaration
+// TODO
+// Forward Declaration
 static void motor_state_register_pending(uint8_t next_state);
 
-// TODO: This function can be called by WDT reset.
+// TODO: Document that this function can be called by WDT reset.
 void timer4_init()
 {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -286,9 +273,9 @@ static inline void timer4_set_TOP(uint16_t counter_value)
   OCR4A = counter_value;
 }
 
-//*****************************************************************************
+//******************************************************************************
 // Motor PWM Control
-//*****************************************************************************
+//******************************************************************************
 
 static inline void motor_pwm_enable()
 {
@@ -302,11 +289,12 @@ static inline void motor_pwm_disable()
 
 static inline void motor_pwm_frequency_set(uint32_t frequency)
 {
+  // TODO Resolve divide by zero error.
+
   // Convert from frequency to counter value.
   // TODO static/#define timer4_frequency
   timer4_set_TOP(((uint32_t) 1000000)/frequency);
 }
-
 
 // Enable interrupts on the phase of the PWM signal where there is no pulse.
 static inline void motor_pwm_phase_interrupt_enable()
@@ -320,10 +308,9 @@ static inline void motor_pwm_phase_interrupt_disable()
   timer4_interrupt_TOP_disable();
 }
 
-
-//*****************************************************************************
+//******************************************************************************
 // Motor State Machine
-//*****************************************************************************
+//******************************************************************************
 
 // Sets the motor state machine to the MOTOR_STATE_OFF state, and configures
 // its outputs accordingly.
@@ -459,9 +446,9 @@ void motor_state_transition(uint8_t next_state)
   }
 }
 
-//*****************************************************************************
-// Motor Position Control
-//*****************************************************************************
+//******************************************************************************
+// Motor Position Tracking
+//******************************************************************************
 
 // Set the current position as the zero point.
 void motor_position_set_zero()
@@ -470,24 +457,11 @@ void motor_position_set_zero()
 
   // TODO: Check for critical section.
   motor_position = 0;
-  motor_position_command = 0;
 }
 
-// Sets the motor command positon.
-//
-// Parameter
-// ---------
-// uint8_t position   The absolute position to which to move the motor.
-//                    units: degrees
-void motor_position_command_set(int8_t position)
-{
-    DEBUG_PRINT("motor_position_command: %u", motor_position_command);
-    motor_position_command = (int16_t) (((((int32_t) position)*MOTOR_STEPS_PER_REVOLUTION)*MC_MICROSTEPS_PER_STEP)/DEGREES_PER_REVOLUTION);
-}
-
-//*****************************************************************************
+//******************************************************************************
 // Motor Speed Control
-//*****************************************************************************
+//******************************************************************************
 
 // Sets the motor command speed.
 //
@@ -497,6 +471,11 @@ void motor_position_command_set(int8_t position)
 //                  units: MPRM (milli-RPM)
 void motor_speed_set(uint16_t speed)
 {
+  // TODO: bounds check on speed
+  if (speed == 0) {
+    // motor_state
+  }
+
   DEBUG_PRINT("motor_speed_set: %u", speed);
   motor_speed = speed;
   
@@ -521,15 +500,7 @@ void motor_speed_set_zero()
   motor_speed_command = 0;
 }
 
-// Moves the motor to the home position (fully open).
-void motor_home()
-{
-  // Move the motor far enough in the OPEN direction (more than the total
-  // possible excursion) in order to guarantee that the top limit switch will
-  // be tripped.
-  motor_position_command_set(-90);
-  motor_speed_set(5000UL);
-}
+//******************************************************************************
 
 static void motor_state_update()
 {
@@ -595,9 +566,9 @@ static void motor_state_update()
   }
 }
 
-//*****************************************************************************
+//******************************************************************************
 // Interrupt Service Routines
-//*****************************************************************************
+//******************************************************************************
 
 // Timer 4 BOTTOM
 ISR(TIMER4_OVF_vect) {
@@ -614,81 +585,34 @@ ISR(TIMER4_OVF_vect) {
 ISR(TIMER4_COMPA_vect)
 {
   motor_state_install_pending();
-  DEBUG_PRINT("Timer 4 TOP - TCNT4: %u", TCNT4);
 }
 
-//*****************************************************************************
+//******************************************************************************
 // motorHal Interface Implementation
-//*****************************************************************************
+//******************************************************************************
 int8_t motorHalInit(void)
 {
   // PWM Signal Setup
-  // Configure the PWM pin as an input during timer initialization in order to
+  // Configure the step pin as an input during timer initialization in order to
   // prevent glitches on the output PWM signal.
   pinMode(PIN_MOTOR_STEP, INPUT);
-  timer4_init();
+  timer4_init(); // TODO: PWM/state init, since this also sets up the initial state.
   
   // Motor Pin Configuration
-  pinMode(PIN_MOTOR_STEP, OUTPUT);
-  pinMode(PIN_MOTOR_ENABLE, OUTPUT);
   pinMode(PIN_MOTOR_DIRECTION, OUTPUT);
+  pinMode(PIN_MOTOR_ENABLE, OUTPUT);
+  pinMode(PIN_MOTOR_STEP, OUTPUT);
 
   // Limit Switch Pin Configuration
   pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
   pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
 
-  /*
-  delay(3000);
-
-  DEBUG_PRINT("Motor Command");
-
-  motorHalCommand(INT8_MIN, 5000);
-  while (motorHalStatus() == HAL_IN_PROGRESS) {}
-
-  while (true) {}
-
-  while (true) {
-    delay(3371);
-    DEBUG_PRINT("timer4_enable");
-    timer4_enable();
-    delay(3637);
-    timer4_disable();
-    DEBUG_PRINT("timer4_disable, TCNT4: %d", TCNT4);
-  }
-
-  // TODO The following code has a few long pauses, which may want to be
-  // avoided during WDT reset.
-
-  // Move the motor to the home position to zero the motor position.
-  
-  while (true) {
-    delay(10000);
-    motorHalCommand(INT8_MIN, 5000U);
-    while(motorHalStatus() == HAL_IN_PROGRESS) {}
-    delay(10000);
-    motorHalCommand(INT8_MAX, 10000U);
-    while(motorHalStatus() == HAL_IN_PROGRESS) {}
-  }
-  */
-  
-  motorHalCommand(INT8_MIN, 5000U);
-  while(motorHalStatus() == HAL_IN_PROGRESS) {}
-  delay(1000);
-
-  // Move to the top of the bag.
-  // TODO: This value will vary depending upon the installation location of the
-  // top limit switch, as well as the type of bag. Ultimately, the sensors
-  // should be used to find the top of the bag.
-  motorHalCommand(55, 30000U);
-  while (motorHalStatus() == HAL_IN_PROGRESS) {}
-  delay(1000);
-
   return HAL_OK;
 }
 
-// Position: Absolute position in degrees.
 // Speed MRPM (millirevolutions per second).
-int8_t motorHalCommand(int8_t position, uint16_t speed)
+// TODO signed value for speed, or additional variable for direction? 
+int8_t motorHalCommand(uint16_t speed)
 {
   motor_position_command_set(position);
   motor_speed_set(MIN(speed, MOTOR_SPEED_START));

@@ -17,12 +17,11 @@
 // #define MOTOR_CONTROLLER_STEPPERONLINE_ISD08
 // #define MOTOR_CONTROLLER_STEPPERONLINE_DM332T
 
-extern volatile int16_t motor_position;
+// General Definitions
+#define DEGREES_PER_REVOLUTION 360
+#define SECONDS_PER_MINUTE 60
 
-// TODO: Temporary
-#define ABS(N) ((N<0)?(-N):(N))
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
+extern volatile int16_t motor_position;
 
 // TODO: Doc
 int8_t motorHalInit(void);
