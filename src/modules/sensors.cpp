@@ -59,6 +59,11 @@ static struct pt sensorsBatteryThread;
 static struct timer pressureTimer;
 static struct timer airflowTimer;
 
+#define SENSORS_PEEP_AVG_CNT 8
+static uint8_t peepPressureSumCnt;
+static uint8_t peepPressureSumPos;
+static int32_t peepPressureHistoryBuffer[SENSORS_PEEP_AVG_CNT];
+
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   static int16_t currentMaxPressure = INT16_MIN;
@@ -114,10 +119,48 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       plateauPressureSampleCount = 0;
     }
     
+
+    // Take the last 8 pressure values BEFORE we do the next breathing cycle. This should be a good average of our PEEP pressure.
+
+    if (control.state == CONTROL_INHALATION)
+    {
+      //reset values
+      if (peepPressureSumCnt)
+      {
+        static int32_t peepPressureSum; 
+        //calculate values and reset
+
+        peepPressureSum=0;
+        
+        for (uint8_t i=0;i<SENSORS_PEEP_AVG_CNT;i++)
+        {
+          peepPressureSum+=peepPressureHistoryBuffer[i];
+        }
+        
+        sensors.peepPressure = peepPressureSum/peepPressureSumCnt;
+
+        for (uint8_t i=0;i<SENSORS_PEEP_AVG_CNT;i++)
+          peepPressureHistoryBuffer[i]=0;
+
+        peepPressureSumCnt=0;
+        peepPressureSum=0;
+        peepPressureSumPos=0;
+      }
+    }else if (control.state == CONTROL_EXHALATION)
+    {
+      peepPressureHistoryBuffer[peepPressureSumPos]=pressure;
+
+      peepPressureSumPos++;
+      peepPressureSumPos%=SENSORS_PEEP_AVG_CNT;
+
+      if (peepPressureSumCnt<SENSORS_PEEP_AVG_CNT)
+        peepPressureSumCnt++;
+    }
+
     // Derive PEEP Pressure from pressure readings during exhalation after values
     // have "stabilized" (ie, the difference of any one point from their average
     // is less than some threshold)
-    if (control.state == CONTROL_EXHALATION) {
+   /* if (control.state == CONTROL_EXHALATION) {
       int32_t sum = 0;
       for (int i = 0; i < PRESSURE_WINDOW; i++) {
         sum += previousPressure[i];
@@ -138,7 +181,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
         sensors.peepPressure = pressure;
       }
     }
-    
+   */ 
     // Derive inhalation detection from pressure readings during exhalation by
     // looking for a dip in pressure below the PEEP threshold (or below an
     // absolute pressure threshold)
