@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "../util/alarm.h"
 
 #define ALARM_ECU_POWER_LOSS              0x01
 #define ALARM_ECU_LOW_BATTERY             0x02 
@@ -76,14 +77,19 @@ struct link {
   // Variables
   uint8_t  startVentilation;
   uint8_t  ventilationMode;
-  uint32_t volumeRequested;
-  uint32_t respirationRateRequested;
-  uint32_t ieRatioRequested;
+  int16_t  volumeRequested;
+  int16_t  pressureRequested;
+  uint16_t respirationRateRequested;
+  uint16_t ieRatioRequested;
+  int16_t  highVolumeLimit;
+  int16_t  lowVolumeLimit;
+  int16_t  highPressureLimit;
+  int16_t  lowPressureLimit;
+  uint16_t highRespiratoryRateLimit;
+  uint16_t lowRespiratoryRateLimit;
   
   // Alarms
-  int8_t   droppedPacketAlarm;
-  int8_t   crcErrorAlarm;
-  int8_t   unsupportedPacketVersionAlarm;
+  struct alarm communicationFailureAlarm;
 };
 
 // Public Variables

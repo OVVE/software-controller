@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+#include "../util/alarm.h"
+
 // Control States
 // TODO: Consider different encoding?
 // TODO: Hold out states? error state?
@@ -26,8 +28,7 @@ struct control {
   uint32_t breathCount;
   
   // Alarms
-  int8_t   breathTimeoutAlarm;
-  int8_t   unknownStateAlarm;
+  struct alarm unknownStateAlarm;
 };
 
 // Public Variables
