@@ -16,6 +16,7 @@
 #include "../modules/sensors.h"
 #include "../modules/parameters.h"
 
+#include "../util/alarm.h"
 #include "../util/metrics.h"
 
 #ifdef DEBUG_CONTROL_MODULE

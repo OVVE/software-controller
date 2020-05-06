@@ -14,6 +14,8 @@
 #include "../modules/control.h"
 #include "../modules/parameters.h"
 
+#include "../util/alarm.h"
+
 #define PARAMETERS_BANK_ADDRESS 0
 #define PARAMETERS_BANK(b) (STORAGE_HAL_PAGE_SIZE * \
                             (1 + (sizeof(struct parameters) + \
@@ -35,17 +37,25 @@ static bool checkParameters(struct parameters* params)
 
 static bool differentLinkAndParameters(void)
 {
+  // TODO: Come up with a better solution
   return ((comm.startVentilation != parameters.startVentilation) ||
           (comm.ventilationMode != parameters.ventilationMode) ||
           (comm.volumeRequested != parameters.volumeRequested) ||
           (comm.respirationRateRequested != parameters.respirationRateRequested) ||
-          (comm.ieRatioRequested != parameters.ieRatioRequested));
+          (comm.ieRatioRequested != parameters.ieRatioRequested) ||
+          (comm.pressureRequested != parameters.pressureRequested) ||
+          (comm.highVolumeLimit != parameters.highVolumeLimit) ||
+          (comm.lowVolumeLimit != parameters.lowVolumeLimit) ||
+          (comm.highPressureLimit != parameters.highPressureLimit) ||
+          (comm.lowPressureLimit != parameters.lowPressureLimit) ||
+          (comm.highRespiratoryRateLimit != parameters.highRespiratoryRateLimit) ||
+          (comm.lowRespiratoryRateLimit != parameters.lowRespiratoryRateLimit));
 }
 
 static PT_THREAD(parametersThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-  
+
   // Read out the current parameter settings
   PT_WAIT_UNTIL(pt, storageHalRead(PARAMETERS_BANK_ADDRESS,
                                    &parametersAddress,
@@ -74,6 +84,12 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       tmpParameters[0].volumeRequested = comm.volumeRequested;
       tmpParameters[0].respirationRateRequested = comm.respirationRateRequested;
       tmpParameters[0].ieRatioRequested = comm.ieRatioRequested;
+      tmpParameters[0].highVolumeLimit = comm.highVolumeLimit;
+      tmpParameters[0].lowVolumeLimit = comm.lowVolumeLimit;
+      tmpParameters[0].highPressureLimit = comm.highPressureLimit;
+      tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
+      tmpParameters[0].highRespiratoryRateLimit = comm.highRespiratoryRateLimit;
+      tmpParameters[0].lowRespiratoryRateLimit = comm.lowRespiratoryRateLimit;
     }
     
     if (!checkParameters(&tmpParameters[0])) {
