@@ -109,6 +109,8 @@
 // TODO: Update this based on maximum PWM frequency and control loop frequency.
 #define MOTOR_CONTROL_STEP_ERROR 5
 
+#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE 100
+#define MAX_MOTOR_SPEED_DIR_CHANGE 200
 
 
 //**************************************
@@ -123,6 +125,8 @@ static volatile struct {
   int32_t  step_position;
   int8_t   microstep_position;
   uint8_t  direction;
+  int16_t speedSet; // +/- -> direction
+  int16_t speedRequested; // +/-> direction
 } motor_control;
 
 //**************************************
@@ -425,6 +429,7 @@ static void motor_state_update()
     if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
       // Do not move the motor in the CLOSE direction if the bottom limit
       // switch is tripped.
+      DEBUG_PRINT("LIMIT_BOTTOM_TRIPPED");
       motor_state_transition(MOTOR_STATE_HOLD);
     } else {
       motor_state_transition(MOTOR_STATE_CLOSE);
@@ -434,6 +439,7 @@ static void motor_state_update()
       // Do not move the motor in the OPEN direction if the top limit switch is
       // tripped. There is no need to go through motor_state_transition()
       // because the zero reference point is set here.
+      DEBUG_PRINT("LIMIT_CLOSE_TRIPPED");
       motor_state_set_HOLD();
       motor_position_set_zero();
     } else {
@@ -516,14 +522,15 @@ int8_t motorHalInit(void)
     pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
   }
 
+  motor_control.speedSet=0;
   // TODO The following code has a few long pauses, which may want to be
   // avoided during WDT reset.
 
   // Move the motor to the home position to zero the motor position.
-  motorHalCommand(MOTOR_DIR_OPEN, 5000U);
   do
   {
-    motor_state_update();
+    motorHalCommand(MOTOR_DIR_OPEN, 5000U);
+    delay(10);
   } while (motor_state_moving());
   
   delay(1000);
@@ -532,31 +539,62 @@ int8_t motorHalInit(void)
   // TODO: This value will vary depending upon the installation location of the
   // top limit switch, as well as the type of bag. Ultimately, the sensors
   // should be used to find the top of the bag.
-  motorHalCommand(MOTOR_DIR_CLOSE, 5000U);
   do
   {
-    motor_state_update();
+    motorHalCommand(MOTOR_DIR_CLOSE, 5000U);
+    delay(10);
   } while ((motorHalGetPosition()<MOTOR_INIT_POSITION) && (motorHalGetStatus()==MOTOR_STATUS_MOVING));
   
-  motorHalCommand(MOTOR_DIR_STOP, 0U);
-  delay(1000);
+  do
+  {
+    motorHalCommand(MOTOR_DIR_STOP, 0U);
+    delay(10);
+  } while ((motorHalGetStatus()==MOTOR_STATUS_MOVING));
 
+  
   return HAL_OK;
+}
+
+
+void motorLimitAcceleration(uint8_t dir, uint16_t speed)
+{
+  motor_control.speedRequested=speed;
+  if (dir==MOTOR_DIR_CLOSE)
+    motor_control.speedRequested*=-1;
+  else if (dir==MOTOR_DIR_STOP)
+    motor_control.speedRequested=0;
+
+  //limit acceleration
+  /*if (motor_control.speedRequested>motor_control.speedSet+MAX_MOTOR_ACC_CHANGE_PER_CYCLE)
+        motor_control.speedSet+=MAX_MOTOR_ACC_CHANGE_PER_CYCLE;
+    else if (motor_control.speedRequested<motor_control.speedSet-MAX_MOTOR_ACC_CHANGE_PER_CYCLE)
+        motor_control.speedSet-=MAX_MOTOR_ACC_CHANGE_PER_CYCLE;
+    else*/
+        motor_control.speedSet=motor_control.speedRequested;
+   
+  DEBUG_PRINT("SpeedSet: %i %i",motor_control.speedRequested,motor_control.speedSet);
+
+  if (motor_control.speedSet>0)
+  {
+    motor_speed_set(motor_control.speedSet);
+    motor_control.direction=MOTOR_DIR_OPEN;      
+  } if (motor_control.speedSet<0)
+  {
+    motor_speed_set((uint16_t)-motor_control.speedSet);
+    motor_control.direction=MOTOR_DIR_CLOSE;      
+  }
+  else
+  {
+    motor_control.direction=MOTOR_DIR_STOP;      
+  }
 }
 
 // DIR in MOTOR_DIR_OPEN or MOTOR_DIR_CLOSE
 // Speed given in MRPM (millirevolutions per second).
 int8_t motorHalCommand(uint8_t dir, uint16_t speed)
 {
-  if (speed)
-  {
-    motor_control.direction=dir;
-    motor_speed_set(speed);
-  }
-  else
-  {
-    motor_control.direction=MOTOR_DIR_STOP;      
-  }
+
+  motorLimitAcceleration(dir,speed);
 
   motor_state_update();
 }
