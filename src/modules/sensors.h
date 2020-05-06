@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "../util/alarm.h"
+
 // TODO: Units?
 struct sensors {
   // Variables
@@ -21,12 +23,16 @@ struct sensors {
   bool    exhalationDetected;
   
   // Alarms
-  int8_t  onBatteryAlarm;
-  int8_t  lowBatteryAlarm;
-  int8_t  highPressureAlarm;
-  int8_t  lowPressureAlarm;
-  int8_t  lowVolumeAlarm;
-  int8_t  apneaAlarm;
+  struct alarm onBatteryAlarm;
+  struct alarm lowBatteryAlarm;
+  struct alarm badPressureSensorAlarm;
+  struct alarm badAirflowSensorAlarm;
+  struct alarm highPressureAlarm;
+  struct alarm lowPressureAlarm;
+  struct alarm highVolumeAlarm;
+  struct alarm lowVolumeAlarm;
+  struct alarm highRespiratoryRateAlarm;
+  struct alarm lowRespiratoryRateAlarm;
 };
 // Public Variables
 extern struct sensors sensors;

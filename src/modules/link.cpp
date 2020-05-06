@@ -82,6 +82,14 @@ void updateFromCommandPacket()
   comm.volumeRequested = public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = public_command_packet.ie_ratio_set;
+  
+  // TODO: Actually set the values correctly, for now, just use
+  comm.highVolumeLimit = INT16_MAX;
+  comm.lowVolumeLimit = INT16_MIN;
+  comm.highPressureLimit = INT16_MAX;
+  comm.lowPressureLimit = INT16_MIN;
+  comm.highRespiratoryRateLimit = UINT16_MAX;
+  comm.lowRespiratoryRateLimit = 0;
  
   public_data_packet.battery_level = 0; // TBD set to real value when available
 #ifdef SERIAL_DEBUG
@@ -91,11 +99,7 @@ void updateFromCommandPacket()
         SERIAL_DEBUG.println(comm.startVentilation, HEX);
         SERIAL_DEBUG.print("mode value: 0x");
         SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
-#endif  
-  // Alarms
-  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
-  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
-  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_PACKET_VERSION) != 0x00;
+#endif
 }
 
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set

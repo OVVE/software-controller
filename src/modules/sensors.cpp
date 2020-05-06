@@ -16,7 +16,9 @@
 #include "../modules/module.h"
 #include "../modules/control.h"
 #include "../modules/sensors.h"
+#include "../modules/parameters.h"
 
+#include "../util/alarm.h"
 #include "../util/utils.h"
 
 #define DEBUG
@@ -58,6 +60,57 @@ static struct pt sensorsBatteryThread;
 
 static struct timer pressureTimer;
 static struct timer airflowTimer;
+
+static struct alarmProperties onBatteryAlarmProperties = {
+  .priority = ALARM_PRIORITY_MODERATE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties lowBatteryAlarmProperties = {
+  .priority = ALARM_PRIORITY_MODERATE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties badPressureSensorAlarmProperties = {
+  .priority = ALARM_PRIORITY_SEVERE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties badAirflowSensorAlarmProperties = {
+  .priority = ALARM_PRIORITY_SEVERE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties highPressureAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties lowPressureAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties highVolumeAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties lowVolumeAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties highRespiratoryRateAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+static struct alarmProperties lowRespiratoryRateAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
 
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
@@ -152,6 +205,14 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     if (sensors.inhalationDetected &&
         (inhalationTimeout++ == (uint8_t) (INHALATION_TIMEOUT / PRESSURE_SAMPLING_PERIOD))) {
       sensors.inhalationDetected = false;
+    }
+    
+    // Alarms
+    if (pressure > parameters.highPressureLimit) {
+      alarmSet(&sensors.highPressureAlarm);
+    }
+    if (pressure < parameters.lowPressureLimit) {
+      alarmSet(&sensors.lowPressureAlarm);
     }
     
     DEBUG_PRINT_EVERY(100, "Pressure  = %c%u.%01u mmH2O",
@@ -271,6 +332,14 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       volumeReset = false;
     }
     
+    // Alarms
+    if (airvolume > parameters.highVolumeLimit) {
+      alarmSet(&sensors.highVolumeAlarm);
+    }
+    if (airvolume < parameters.lowVolumeLimit) {
+      alarmSet(&sensors.lowVolumeAlarm);
+    }
+    
     DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
     DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
@@ -330,6 +399,18 @@ int sensorsModuleInit(void)
   if (batterySensorHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
+  
+  // Initialize Alarms
+  alarmInit(&sensors.onBatteryAlarm, &onBatteryAlarmProperties);
+  alarmInit(&sensors.lowBatteryAlarm, &lowBatteryAlarmProperties);
+  alarmInit(&sensors.badPressureSensorAlarm, &badPressureSensorAlarmProperties);
+  alarmInit(&sensors.badAirflowSensorAlarm, &badAirflowSensorAlarmProperties);
+  alarmInit(&sensors.highPressureAlarm, &highPressureAlarmProperties);
+  alarmInit(&sensors.lowPressureAlarm, &lowPressureAlarmProperties);
+  alarmInit(&sensors.highVolumeAlarm, &highVolumeAlarmProperties);
+  alarmInit(&sensors.lowVolumeAlarm, &lowVolumeAlarmProperties);
+  alarmInit(&sensors.highRespiratoryRateAlarm, &highRespiratoryRateAlarmProperties);
+  alarmInit(&sensors.lowRespiratoryRateAlarm, &lowRespiratoryRateAlarmProperties);
 
   PT_INIT(&sensorsThread);
   PT_INIT(&sensorsPressureThread);
