@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+#define MOTOR_DIR_STOP_NOW 3
 #define MOTOR_DIR_CLOSE 2
 #define MOTOR_DIR_OPEN 1
 #define MOTOR_DIR_STOP 0
