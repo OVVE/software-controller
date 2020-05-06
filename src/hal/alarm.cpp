@@ -10,6 +10,7 @@
 int alarmHalInit(void)
 {
   pinMode(ALARM_PIN, OUTPUT);
+  digitalWrite(ALARM_PIN, ALARM_ASSERT_OFF);
   
   return HAL_OK;
 }
@@ -28,7 +29,7 @@ int alarmHalRing(unsigned int pattern)
 
   // Check to see if new tone needs to be played
   if (pattern != currentPattern) {
-    noTone(ALARM_PIN);
+    digitalWrite(ALARM_PIN, ALARM_ASSERT_OFF);
     currentPattern = pattern;
     alarmOn = false;
   }
@@ -53,7 +54,7 @@ int alarmHalRing(unsigned int pattern)
     // If a blinking buzzer, check the running timer
     if (currentPattern != ALARM_HAL_CONSTANT) {
       if (timerHalRun(&timer) != HAL_IN_PROGRESS) {
-        noTone(ALARM_PIN);
+        digitalWrite(ALARM_PIN, ALARM_ASSERT_OFF);
         alarmOn = false;
         timerHalBegin(&timer, alarmTime, false);
       }
@@ -61,12 +62,12 @@ int alarmHalRing(unsigned int pattern)
   } else {
     // If a constant alarm, just turn it on an leave it on until a pattern change
     if (currentPattern == ALARM_HAL_CONSTANT) {
-      tone(ALARM_PIN, ALARM_FREQUENCY);
+      digitalWrite(ALARM_PIN, ALARM_ASSERT_ON);
       alarmOn = true;
     } else if (currentPattern != ALARM_HAL_OFF) {
       // If a blinking buzzer (ie, not off or constant), check the running timer
       if (timerHalRun(&timer) != HAL_IN_PROGRESS) {
-        tone(ALARM_PIN, ALARM_FREQUENCY);
+        digitalWrite(ALARM_PIN, ALARM_ASSERT_ON);
         alarmOn = true;
         timerHalBegin(&timer, alarmTime, false);
       }

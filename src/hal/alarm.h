@@ -4,10 +4,10 @@
 
 #include "../hal/hal.h"
 
-// TODO: Determine pin
-#define ALARM_PIN  1
+#define ALARM_PIN          3
 
-#define ALARM_FREQUENCY 1000
+#define ALARM_ASSERT_OFF   0
+#define ALARM_ASSERT_ON    1
 
 // Various alarm settings
 #define ALARM_HAL_OFF       0
