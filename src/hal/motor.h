@@ -27,5 +27,18 @@ int32_t motorHalGetPosition(void);
 
 int8_t motorHalGetStatus(void);
 
+struct motor{
+  // Precomputed value so that we can minimize the amount of math operations
+  // inside of an ISR.
+  bool     counter_update;
+  uint16_t counter_TOP;
+
+  int32_t  step_position;
+  int8_t   microstep_position;
+  uint8_t  direction;
+  int32_t speedSet; // +/- -> direction
+  int32_t speedRequested; // +/-> direction
+} ;
+extern struct motor motor_control;
 #endif /* __MOTOR_HAL_H__ */
 

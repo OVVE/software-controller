@@ -18,6 +18,7 @@
 #include "../modules/module.h"
 #include "../modules/control.h"
 #include "../modules/sensors.h"
+#include "../hal/motor.h"
 
 #include "../util/utils.h"
 
@@ -99,13 +100,13 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
     // entry into CONTROL_HOLD_IN state
-    if ((control.state == CONTROL_HOLD_IN) && !setPeakPressure) {
+    if ((control.state == CONTROL_EXHALATION) && !setPeakPressure) {
       sensors.peakPressure = currentMaxPressure;
       currentMaxPressure = INT16_MIN;
       setPeakPressure = true;
     } else {
       currentMaxPressure = max(currentMaxPressure, pressure);
-      if (control.state == CONTROL_EXHALATION) {
+      if ((control.state == CONTROL_INHALATION)) {
         setPeakPressure = false;
       }
     }
@@ -285,10 +286,10 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     
     // Derive Volume IN from current volume; updating the public value upon entry
     // into CONTROL_HOLD_IN state
-    if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
+    if ((control.state == CONTROL_EXHALATION) && !setVolumeIn) {
       sensors.volumeIn = airvolume;
       setVolumeIn = true;
-    } else if (control.state == CONTROL_EXHALATION) {
+    } else if (control.state == CONTROL_INHALATION) {
       setVolumeIn = false;
     }
     
@@ -343,6 +344,7 @@ static PT_THREAD(sensorsBatteryThreadMain(struct pt* pt))
 
 PT_THREAD(sensorsThreadMain(struct pt* pt))
 {
+  static uint8_t cnt=0;
   PT_BEGIN(pt);
 
   if (!PT_SCHEDULE(sensorsPressureThreadMain(&sensorsPressureThread))) {
@@ -357,8 +359,13 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
   
-  // TODO: Mess with the units to make the graph scale nicely?
-  DEBUG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
+  cnt++;
+  if (cnt==16)
+  {
+    cnt=0;
+    // TODO: Mess with the units to make the graph scale nicely?
+    DEBUG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure, control.state*1000, motor_control.speedRequested, motor_control.speedSet);
+  }
 
   PT_RESTART(pt);
   PT_END(pt);

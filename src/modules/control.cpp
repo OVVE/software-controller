@@ -323,7 +323,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
       initialCycleCnt--;
     }
 
-    DEBUG_PRINT("InH Trj: param: if:%li tsF:%li teF: %li tv:%li",(int32_t)(inhalationTrajectoryInitialFlow*10.0f),(int32_t)(inhalationTrajectoryStartFlow*10.0f),(int32_t)(inhalationTrajectoryEndFlow*10.0f),(int32_t)targetVolume);
+    DEBUG_PRINT_EVERY(50,"InH Trj: param: if:%li tsF:%li teF: %li tv:%li",(int32_t)(inhalationTrajectoryInitialFlow*10.0f),(int32_t)(inhalationTrajectoryStartFlow*10.0f),(int32_t)(inhalationTrajectoryEndFlow*10.0f),(int32_t)targetVolume);
   
     inhalationTrajectoryCurrentTimeInCycle=0.0f;
     
@@ -388,9 +388,6 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     targetAirFlow*=(MAX_PEAK_PRESSURE-pressure)/(0.1f*MAX_PEAK_PRESSURE);
 
   }
-
-   DEBUG_PRINT("Inh Trj: Target Velocity: %lu State: %i Time: %i", 
-    (uint32_t)targetAirFlow,inhalationTrajectoryState, (int16_t)(currentTime*1000.0f));
 
   return inhalationTrajectoryState;
 

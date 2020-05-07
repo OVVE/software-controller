@@ -53,9 +53,9 @@
 // TODO: These are probably per motor, please move them and update them accordingly
 #define MOTOR_SPEED_MIN 400
 #define MOTOR_SPEED_MAX 65535
-#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING 200
-#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_OPENING 1000
-#define MAX_MOTOR_SPEED_CLOSING                12000
+#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING 10000
+#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_OPENING 10000
+#define MAX_MOTOR_SPEED_CLOSING                25000
 #define MAX_MOTOR_SPEED_OPENING                25000
 
 // millidegrees of shaft rotation (including the gearbox) per motor step
@@ -137,18 +137,7 @@
 //**************************************
 // Motor Control Variables
 //**************************************
-static volatile struct {
-  // Precomputed value so that we can minimize the amount of math operations
-  // inside of an ISR.
-  bool     counter_update;
-  uint16_t counter_TOP;
-
-  int32_t  step_position;
-  int8_t   microstep_position;
-  uint8_t  direction;
-  int32_t speedSet; // +/- -> direction
-  int32_t speedRequested; // +/-> direction
-} motor_control;
+static struct motor motor_control;
 
 //**************************************
 // Motor State Machine Variables
