@@ -16,6 +16,7 @@
 #include "../modules/sensors.h"
 #include "../modules/parameters.h"
 
+#include "../util/utils.h"
 #include "../util/metrics.h"
 
 #ifdef DEBUG_CONTROL_MODULE
@@ -28,6 +29,8 @@
 #define HOLD_TIME           (200 MSEC)
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
+
+#define RESPIRATORY_RATE_MARGIN(rr) ((rr) * 4 / 3)
 
 #define MAX_PEAK_PRESSURE 40.0f
 
@@ -645,6 +648,33 @@ static bool checkExhalationTimeout(void)
   return (timerHalRun(&breathTimer) != HAL_IN_PROGRESS);
 }
 
+static bool syncBreathFound(void)
+{
+  bool breathFound = false;
+  
+  // Only trigger if the sensors module has actually detected a breath;
+  // note that inhalationDetected is only true for a brief window when a patient
+  // begins a breath
+  if (sensors.inhalationDetected) {
+    switch (parameters.ventilationMode) {
+      // For AC mode, any breath found, only make sure the respiration rate for 
+      // the breath is within the limit of the machine
+      case VENTILATOR_MODE_AC:
+        breathFound = ((60 SEC) / timerHalCurrent(&breathTimer)) < MAX_RESPIRATORY_RATE;
+      break;
+      
+      // For SIMV-CPAP mode, any breath found, only make sure the respiration rate
+      // for the breath is within a margin of the target
+      case VENTILATOR_MODE_SIMV_CPAP:
+        breathFound = (((60 SEC) / timerHalCurrent(&breathTimer)) <
+                       min(RESPIRATORY_RATE_MARGIN(parameters.respirationRateRequested),
+                           MAX_RESPIRATORY_RATE));
+      break;
+    }
+  }
+  return breathFound;
+}
+
 static PT_THREAD(controlThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
@@ -808,7 +838,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       // At this point, either wait for the breath timer to expire or find a new
       // breath to sync with
-      PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS)));
+      PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS) ||
+                         (syncBreathFound())));
       
       // Calculate and update the measured times
       uint32_t currentBreathTime = timerHalCurrent(&breathTimer);

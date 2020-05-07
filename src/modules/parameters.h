@@ -4,9 +4,11 @@
 
 #include <stdbool.h>
 
-#define VENTILATOR_MODE_VC   0x01
-#define VENTILATOR_MODE_AC   0x02
-#define VENTILATOR_MODE_SIMV 0x03
+#define VENTILATOR_MODE_AC        0x02
+#define VENTILATOR_MODE_SIMV_CPAP 0x03
+
+#define MIN_RESPIRATORY_RATE    5
+#define MAX_RESPIRATORY_RATE   35
 
 struct parameters {
   // Variables
