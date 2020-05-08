@@ -531,20 +531,21 @@ static int updateControl(void)
 
 //scale down target airflow if we are above our tidal volume target
 #define INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT 10.0f // in %
-    if (sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))) 
+    if ((control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
     {
-      
-      controlOutputFiltered*=0.65;
+      if (control.state == CONTROL_INHALATION)
+      {
+        controlOutputFiltered*=0.65;
 
-      //we hit a limit don't change it for 2 more cycles
-      inhalationTrajectoryStartFlow*=0.99;
-      inhalationTrajectoryEndFlow*=0.99;
-      inhalationTrajectoryInitialCycleCnt=2;
-
+        //we hit a limit don't change it for 2 more cycles
+        inhalationTrajectoryStartFlow*=0.99;
+        inhalationTrajectoryEndFlow*=0.99;
+        inhalationTrajectoryInitialCycleCnt=2;
+      }
     }
 
     //dynamically limit to max pressure
-    if ((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE))
+    if ((control.state==CONTROL_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
     {
 
       float pressure=(float)sensors.currentPressure/100.f;
