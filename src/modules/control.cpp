@@ -127,7 +127,7 @@ static uint8_t controlForceHome=0;
 static uint8_t controlLimitHit=CONTROL_LIMIT_HIT_NONE;
 
 
-#define INITIAL_FLOW_SAFETY_FACTOR 0.8f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
+#define INITIAL_FLOW_SAFETY_FACTOR 0.6f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
 float initialFlow()
 {
   float timeInS=(float)targetInhalationTime/(float)(1.0f SEC);
