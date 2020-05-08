@@ -67,7 +67,7 @@ static uint32_t breathTimerStateStart = 0;
 static struct metrics midControlTiming;
 static float controlI=0.0f;
 static float controlOutputFiltered=0.0f;
-static int32_t exhalationTargetPosition=MOTOR_INIT_POSITION;
+static int32_t exhalationTargetPosition=MOTOR_HAL_INIT_POSITION;
 
 //this is our initial guess scaling factor to match the trajectory to flow sensor values
 #define SCALING_FACTOR 2.60f
@@ -441,9 +441,9 @@ static int updateControl(void)
         Ki=.0f;
         Kd=.0f;
      
-      if ((motorHalGetPosition()<=exhalationTargetPosition)  || (motorHalGetStatus()==MOTOR_STATUS_SWITCH_TRIPPED_TOP))
+      if ((motorHalGetPosition()<=exhalationTargetPosition)  || (motorHalGetStatus()==MOTOR_HAL_STATUS_LIMIT_TOP))
       {
-        motorHalCommand(MOTOR_DIR_STOP_NOW,0);
+        motorHalCommand(MOTOR_HAL_COMMAND_HOLD,0);
         DEBUG_PRINT("Target Reached %li of %li",motorHalGetPosition(),exhalationTargetPosition);
         return 1;
       }
@@ -452,7 +452,7 @@ static int updateControl(void)
     {
       if (generateFlowInhalationTrajectory(0)==STATE_INHALATION_TRAJECTORY_END)
       {
-        motorHalCommand(MOTOR_DIR_STOP_NOW,0);
+        motorHalCommand(MOTOR_HAL_COMMAND_HOLD,0);
         DEBUG_PRINT("Target Reached");
         return 1;
 
@@ -470,7 +470,7 @@ static int updateControl(void)
         exhalationTargetPosition=(int32_t)(0.8f*(float)exhalationTargetPosition+0.2f*(float)(motorHalGetPosition()-CONTROL_INITIAL_BAG_POSITION_OFFSET));
 
 
-        if (exhalationTargetPosition>MOTOR_INIT_POSITION+CONTROL_INITIAL_BAG_POSITION_PULL_IN)
+        if (exhalationTargetPosition>MOTOR_HAL_INIT_POSITION+CONTROL_INITIAL_BAG_POSITION_PULL_IN)
           exhalationTargetPosition-=CONTROL_INITIAL_BAG_POSITION_PULL_IN; //always move out a little
 
         //don't move more than 10deg in
@@ -554,13 +554,13 @@ static int updateControl(void)
       if (controlOutputFiltered<-65535.0f)
         controlOutputFiltered=-65535.0f;
       // Send motor commands
-      motorHalCommand(MOTOR_DIR_OPEN, -controlOutputFiltered);
+      motorHalCommand(MOTOR_HAL_COMMAND_OPEN, -controlOutputFiltered);
     }else
     {
       if (controlOutputFiltered>65535.0f)
         controlOutputFiltered=65535.0f;
       // Send motor commands
-      motorHalCommand(MOTOR_DIR_CLOSE,controlOutputFiltered);
+      motorHalCommand(MOTOR_HAL_COMMAND_CLOSE, controlOutputFiltered);
     }
     
     lastFlowSensorInput=flowSensorInput;
@@ -604,7 +604,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.ieRatioMeasured = 0;
       control.respirationRateMeasured = 0;
       
-      motorHalCommand(MOTOR_DIR_STOP_NOW, 0U);
+      motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
 
       // Wait for the parameters to enter the run state before
       PT_WAIT_UNTIL(pt, parameters.startVentilation);
@@ -664,14 +664,14 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Setup the hold timer
       timerHalBegin(&controlTimer, targetHoldTime, false);
       
-      motorHalCommand(MOTOR_DIR_STOP, 0U);
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
       
       control.state = CONTROL_HOLD_IN;
       
     } else if (control.state == CONTROL_HOLD_IN) {
       DEBUG_PRINT("state: CONTROL_HOLD_IN");
 
-      motorHalCommand(MOTOR_DIR_STOP_NOW, 0U);
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
 
       PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       control.state = CONTROL_BEGIN_EXHALATION;
@@ -707,7 +707,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         }
       }
       
-      motorHalCommand(MOTOR_DIR_STOP, 0);
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0);
 
       // TODO: look into this
       
@@ -729,7 +729,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else {
       DEBUG_PRINT("state: (unknown)");
 
-      motorHalCommand(MOTOR_DIR_STOP, 0U);
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
 
       // TODO: Error, unknown control state!!!
       control.state = CONTROL_IDLE;
