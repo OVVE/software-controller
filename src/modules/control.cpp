@@ -455,7 +455,7 @@ static int updateControl(void)
           targetAirFlow=-(motorHalGetPosition()-exhalationTargetPosition)/2;
         }
         else
-          targetAirFlow=-8000.0;
+          targetAirFlow=-15000.0;
         
         Kf=1.0f;
         Kp=.0f;
