@@ -63,6 +63,7 @@
 // STEPPERONLINE 23HS22-2804S-HG20
 // NEMA 23, 56 mm, Gear Ratio 20:1
 #define MOTOR_STEPS_PER_REVOLUTION (20*200) 
+#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING 5000
 #elif defined MOTOR_STEPPERONLINE__23HS22_2804S_HG50
 // STEPPERONLINE 23HS22-2804S-HG50
 // NEMA 23, 56 mm ,Gear Ratio 50:1
@@ -494,7 +495,6 @@ int8_t motor_state_transition(uint8_t next_state)
   } else if (next_state == MOTOR_STATE_OPEN) {
     if (motor_state == MOTOR_STATE_CLOSE) {
       motor_state_set_HOLD();
-      DEBUG_PRINT("Error: Detected illegal transition from MOTOR_STATE_CLOSE to MOTOR_STATE_OPEN");
       motor_status = MOTOR_HAL_STATUS_ERROR;
     } else if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED) {
       if (motor_state != MOTOR_STATE_HOLD) {
@@ -514,7 +514,6 @@ int8_t motor_state_transition(uint8_t next_state)
   } else if (next_state == MOTOR_STATE_CLOSE) {
     if (motor_state == MOTOR_STATE_OPEN) {
       motor_state_set_HOLD();
-      DEBUG_PRINT("Error: Detected illegal transition from MOTOR_STATE_OPEN to MOTOR_STATE_CLOSE");
       motor_status = MOTOR_HAL_STATUS_ERROR;
     } else if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
       if (motor_state != MOTOR_STATE_HOLD) {
@@ -574,14 +573,20 @@ int8_t motor_state_transition(uint8_t next_state)
 #error Maximum PWM frequency exceeded.
 #endif
 
-void motor_speed_set(uint16_t speed)
+void motor_speed_set(uint16_t speed, uint8_t command)
 {
   static uint16_t last_speed = 0;
 
   if (speed == last_speed) {
     return;
   } else {
-    last_speed = speed;
+    
+    //limit speed change on closing
+#ifdef MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING
+    if ((speed>last_speed+MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING) && (command==MOTOR_HAL_COMMAND_CLOSE))
+      speed=last_speed+MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING;
+#endif
+      last_speed = speed;
   }
 
   if (speed == 0) {
@@ -657,10 +662,10 @@ int8_t motorHalCommand(uint8_t command, uint16_t speed)
   } else if (command == MOTOR_HAL_COMMAND_HOLD) {
     motor_status = motor_state_transition(MOTOR_STATE_HOLD);
   } else if (command == MOTOR_HAL_COMMAND_OPEN) {
-    motor_speed_set(speed);
+    motor_speed_set(speed,command);
     motor_status = motor_state_transition(MOTOR_STATE_OPEN);
   } else if (command = MOTOR_HAL_COMMAND_CLOSE) {
-    motor_speed_set(speed);
+    motor_speed_set(speed,command);
     motor_status = motor_state_transition(MOTOR_STATE_CLOSE);
   }
 
