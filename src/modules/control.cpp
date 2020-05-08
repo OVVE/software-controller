@@ -682,7 +682,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.breathCount = 0;
       control.ieRatioMeasured = 0;
       control.respirationRateMeasured = 0;
-      controlI=0.0;
+      controlI=0.0f;
       exhalationTargetPosition=MOTOR_HAL_INIT_POSITION;
       inhalationTrajectoryInitialFlow=0.0f;
       controlOutputFiltered=0.0f;
@@ -767,6 +767,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       breathTimerStateStart = timerHalCurrent(&breathTimer);
       controlComplete = false;
       
+      controlI=0.0f;
+
       control.state = CONTROL_EXHALATION;
 
     } else if (control.state == CONTROL_EXHALATION) {
