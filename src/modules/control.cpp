@@ -553,7 +553,7 @@ static int updateControl(void)
         pressure=MAX_PEAK_PRESSURE;
 
       // targetAirFlow*=(MAX_PEAK_PRESSURE-pressure)/(0.1f*MAX_PEAK_PRESSURE);
-      controlOutputFiltered*=0.65;
+      controlOutputFiltered*=0.35;
 
       //we hit a limit, make a down adjustment of the current trajectory and don't change it for 2 more cycles
       inhalationTrajectoryStartFlow*=0.95;
