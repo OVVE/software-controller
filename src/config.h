@@ -10,16 +10,16 @@
 //==============================================================================
 
 // Motor
-// Determine which motor type and gearing is installed in the system
-// #define MOTOR_23HS22_2804S_HG50_50_1
-#define MOTOR_23HS22_2804S_HG50_20_1
-// #define MOTOR_23HS22_2804S_HG50_15_1
-// #define MOTOR_23HS30_2804S_HG10_10_1
+#define MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
+// #define MOTOR_STEPPERONLINE__23HS30_2804S_HG10
+// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG15
+// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG20
+// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG50
 
 // Motor Controller
-// Determine which motor controller is installed in the system
-#define MOTOR_CONTROLLER_ISD08
-// #define MOTOR_CONTROLLER_DM332T
+#define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
+// #define MOTOR_CONTROLLER_STEPPERONLINE_ISD08
+// #define MOTOR_CONTROLLER_STEPPERONLINE_DM332T
 
 //==============================================================================
 // Sensor Settings
@@ -74,3 +74,4 @@
 // If commented out, debug features from that module will be disabled
 #define DEBUG_MAIN_LOOP
 #define DEBUG_MAIN_LOOP_METRICS
+

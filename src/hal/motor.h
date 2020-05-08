@@ -5,18 +5,6 @@
 
 #include <stdint.h>
 
-// Motor Selection
-#define MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
-// #define MOTOR_STEPPERONLINE__23HS30_2804S_HG10
-// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG15
-// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG20
-// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG50
-
-// Motor Controller Selection
-#define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
-// #define MOTOR_CONTROLLER_STEPPERONLINE_ISD08
-// #define MOTOR_CONTROLLER_STEPPERONLINE_DM332T
-
 // General Definitions
 #define DEGREES_PER_REVOLUTION 360
 #define SECONDS_PER_MINUTE 60
@@ -37,6 +25,10 @@
 #define MOTOR_HAL_STATUS_MOVING       1
 #define MOTOR_HAL_STATUS_LIMIT_BOTTOM 2
 #define MOTOR_HAL_STATUS_LIMIT_TOP    3
+
+// TODO: This probably should not be located in this file, as all position
+// control should be performed outside the motor HAL.
+#define MOTOR_HAL_INIT_POSITION (2*MOTOR_HAL_DEGREE_MULTIPLIER)
 
 // TODO: Documentation
 int8_t motorHalInit(void);
