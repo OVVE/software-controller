@@ -533,15 +533,13 @@ static int updateControl(void)
 #define INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT 10.0f // in %
     if ((control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
     {
-      if (control.state == CONTROL_INHALATION)
-      {
         controlOutputFiltered*=0.65;
 
         //we hit a limit don't change it for 2 more cycles
         inhalationTrajectoryStartFlow*=0.99;
         inhalationTrajectoryEndFlow*=0.99;
         inhalationTrajectoryInitialCycleCnt=2;
-      }
+        return 1;
     }
 
     //dynamically limit to max pressure
@@ -560,6 +558,7 @@ static int updateControl(void)
       inhalationTrajectoryStartFlow*=0.95;
       inhalationTrajectoryEndFlow*=0.95;
       inhalationTrajectoryInitialCycleCnt=2;
+      return 1;
 
     }
 
