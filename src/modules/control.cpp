@@ -29,7 +29,7 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
-#define MAX_PEAK_PRESSURE 35.0f
+#define MAX_PEAK_PRESSURE 20.0f
 
 // Uncomment the following to enable the current closed loop control
  #define CONTROL_CLOSED_LOOP
@@ -109,6 +109,12 @@ t2=targetInhalationTime
 h and hb for the next cycle need to be adapted to meet the tidal volume
 */
 
+#define CONTROL_LIMIT_HIT_NONE 0
+#define CONTROL_LIMIT_HIT_VOLUME 1
+#define CONTROL_LIMIT_HIT_PRESSURE 2
+#define CONTROL_LIMIT_GOT_HANDLED 3
+
+
 static float inhalationTrajectoryVolumeScale=1.0f; //scale to volume to match desired volume
 static float inhalationTrajectoryStartFlow=1.0f; //modified start flow
 static float inhalationTrajectoryEndFlow=1.0f; //modified end flow
@@ -118,7 +124,7 @@ static float inhalationTrajectoryCurrentTimeInCycle=0.0f; //0..1
 static int32_t inhalationTrajectoryPhaseShiftEstimate=0; //compressing the air in the bag causes a delay of flow and we therefore need to estimate the phase shift in timing to allow enough inhale time
 static uint8_t inhalationTrajectoryInitialCycleCnt=0;
 static uint8_t controlForceHome=0;
-     
+static uint8_t controlLimitHit=CONTROL_LIMIT_HIT_NONE;
 
 
 #define INITIAL_FLOW_SAFETY_FACTOR 0.8f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
@@ -255,6 +261,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
 {
   float currentTime;
   static uint8_t inhalationTrajectoryState=STATE_INHALATION_TRAJECTORY_INIT;
+  static float lastAirflow=0.0f;
  
   // TODO: Actually sync up with how ie is supposed to be represented
   //       for next, fix IE at 1:1.5 (1 / 2.5 = 0x0066)
@@ -293,6 +300,25 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     targetAirFlow=0.0f;
     return inhalationTrajectoryState;
   }
+  
+  if (controlLimitHit)
+  {
+    if (controlLimitHit==CONTROL_LIMIT_HIT_PRESSURE)
+    {
+     //we hit a limit, make a down adjustment of the current trajectory and don't change it for 2 more cycles
+      inhalationTrajectoryStartFlow*=0.99;
+      inhalationTrajectoryEndFlow*=0.99;
+      inhalationTrajectoryInitialCycleCnt=2;
+      controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
+    }else if (controlLimitHit==CONTROL_LIMIT_HIT_VOLUME)
+    {
+      inhalationTrajectoryStartFlow*=0.95;
+      inhalationTrajectoryEndFlow*=0.95;
+      inhalationTrajectoryInitialCycleCnt=2;
+      controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
+    }
+    
+  }
 
   targetAirFlow=0.0f;
 
@@ -310,6 +336,9 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     targetVolume = parameters.volumeRequested;
     targetHoldTime = HOLD_TIME; // fixed value
     
+    if (controlLimitHit)
+      controlLimitHit=CONTROL_LIMIT_HIT_NONE;
+
     inhalationTrajectoryLastVolume=(float)sensors.volumeIn;
 
     if (!inhalationTrajectoryInitialCycleCnt)
@@ -377,6 +406,13 @@ static int generateFlowInhalationTrajectory(uint8_t init)
 
   targetAirFlow*=10.0f; 
    
+
+  if (controlLimitHit==CONTROL_LIMIT_GOT_HANDLED)
+  {
+    targetAirFlow=lastAirflow;
+  }
+  lastAirflow=targetAirFlow;
+
   return inhalationTrajectoryState;
 
 }
@@ -533,33 +569,15 @@ static int updateControl(void)
 #define INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT 10.0f // in %
     if ((control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
     {
-        controlOutputFiltered*=0.65;
-
-        //we hit a limit don't change it for 2 more cycles
-        inhalationTrajectoryStartFlow*=0.99;
-        inhalationTrajectoryEndFlow*=0.99;
-        inhalationTrajectoryInitialCycleCnt=2;
-        return 1;
+        controlLimitHit=CONTROL_LIMIT_HIT_VOLUME;
+        controlOutputFiltered*=0.65f;
     }
 
     //dynamically limit to max pressure
     if ((control.state==CONTROL_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
     {
-
-      float pressure=(float)sensors.currentPressure/100.f;
-
-      if (pressure>MAX_PEAK_PRESSURE)
-        pressure=MAX_PEAK_PRESSURE;
-
-      // targetAirFlow*=(MAX_PEAK_PRESSURE-pressure)/(0.1f*MAX_PEAK_PRESSURE);
-      controlOutputFiltered*=0.35;
-
-      //we hit a limit, make a down adjustment of the current trajectory and don't change it for 2 more cycles
-      inhalationTrajectoryStartFlow*=0.95;
-      inhalationTrajectoryEndFlow*=0.95;
-      inhalationTrajectoryInitialCycleCnt=2;
-      return 1;
-
+      controlOutputFiltered*=0.35f;
+      controlLimitHit=CONTROL_LIMIT_HIT_PRESSURE;
     }
 
     //TODO: Remove this diry fix here. It needs to be replace with a better trajectory planning.
