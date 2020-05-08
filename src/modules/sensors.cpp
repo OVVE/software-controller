@@ -46,6 +46,7 @@
 #define AIRFLOW_SAMPLING_PERIOD                  (5 MSEC)
 
 #define AIRFLOW_BIAS_SAMPLES                      32
+#define PRESSURE_BIAS_SAMPLES                      32
 
 #define VOLUME_MINUTE_PERIOD                      (5 SEC)
 #define VOLUME_MINUTE_WINDOW                     (60 SEC) / VOLUME_MINUTE_PERIOD
@@ -76,7 +77,24 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static int16_t previousPressure[PRESSURE_WINDOW];
   static uint8_t inhalationTimeout = 0;
 
+  static int16_t pressureBias = 0;
+  static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
+  static int32_t pressureSum=0;
   PT_BEGIN(pt);
+
+    // Find the bias of the sensor
+  while (pressureBiasCounter--) {
+    PT_WAIT_UNTIL(pt, pressureSensorHalFetch() != HAL_IN_PROGRESS);
+    int16_t pressure;
+    pressureSensorHalGetValue(&pressure);
+    pressureSum += pressure;
+  }
+  
+  pressureBias = pressureSum / PRESSURE_BIAS_SAMPLES;
+  pressureSum = 0;
+  
+  DEBUG_PRINT("Pressure bias = %c%u.%02u cmH20",
+              (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
 
   // Kick off sampling timer
   timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, true);
@@ -88,6 +106,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     int16_t pressure;
     pressureSensorHalGetValue(&pressure); // get pressure, in [0.1mmH2O]
   
+    pressure-=pressureBias;
     // Update public interface with the pressure value
     sensors.currentPressure = pressure;
 
