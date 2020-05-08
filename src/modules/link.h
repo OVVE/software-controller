@@ -138,9 +138,16 @@ struct link {
   // Variables
   uint8_t  startVentilation;
   uint8_t  ventilationMode;
-  uint32_t volumeRequested;
-  uint32_t respirationRateRequested;
-  uint32_t ieRatioRequested;
+  uint16_t volumeRequested;
+  uint16_t respirationRateRequested;
+  uint16_t ieRatioRequested;
+  uint16_t pressureRequested;
+  uint16_t highVolumeLimit;
+  uint16_t lowVolumeLimit;
+  uint16_t highPressureLimit;
+  uint16_t lowPressureLimit;
+  uint16_t highRespiratoryRateLimit;
+  uint16_t lowRespiratoryRateLimit;
   
   // Alarms
   int8_t   droppedPacketAlarm;
