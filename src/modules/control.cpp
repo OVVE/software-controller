@@ -29,7 +29,7 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
-#define MAX_PEAK_PRESSURE 38.0f
+#define MAX_PEAK_PRESSURE 32.0f
 
 // Uncomment the following to enable the current closed loop control
  #define CONTROL_CLOSED_LOOP
@@ -131,7 +131,7 @@ float inhalationTrajectoryVolume()
 
 #define INHALATION_TRAJECTORY_PRESSURE_DIFFERENCE_DEADZONE 50 //in 0.1mmH20
 #define INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE 1000 //in 0.1mmH20 //TODO: Verify these values.
-#define INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE 10.0f //in %
+#define INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE 5.0f //in %
 #define INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE 0.5f //in %
 
 #define INHALATION_TRAJECTORY_MAX_SCALE 3.0f //max initial Flow to current flow scale
@@ -392,7 +392,8 @@ static int generateFlowInhalationTrajectory(uint8_t init)
       pressure=MAX_PEAK_PRESSURE;
 
 
-    targetAirFlow*=(MAX_PEAK_PRESSURE-pressure)/(0.1f*MAX_PEAK_PRESSURE);
+    // targetAirFlow*=(MAX_PEAK_PRESSURE-pressure)/(0.1f*MAX_PEAK_PRESSURE);
+    targetAirFlow*=0.0f;
 
   }
 
@@ -544,7 +545,8 @@ static int updateControl(void)
 
     //IIR filter
     if (targetAirFlow!=0.0f)
-      controlOutputFiltered=0.85f*controlOutputFiltered+0.15f*controlOutLimited; 
+      // controlOutputFiltered=0.85f*controlOutputFiltered+0.15f*controlOutLimited; 
+      controlOutputFiltered=0.65f*controlOutputFiltered+0.35f*controlOutLimited; 
     else
       controlOutputFiltered=controlOutLimited;
 
