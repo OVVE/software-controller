@@ -545,18 +545,21 @@ static int updateControl(void)
     //final control output is feed forward + limited controlOut
     controlOutLimited=Kf*targetAirFlow+controlOut;
 
-    //scale with motor angle from 0 to 90deg with scaling factor
-    uint32_t currentPos=motorHalGetPosition();
-    if (currentPos>45000)
-      currentPos=45000;
+    if (control.state==CONTROL_INHALATION)
+    {
+      //scale with motor angle from 0 to 90deg with scaling factor
+      uint32_t currentPos=motorHalGetPosition();
+      if (currentPos>45000)
+        currentPos=45000;
 
-    float currentScale=45000.0f-(float) currentPos;
+      float currentScale=45000.0f-(float) currentPos;
 
-    currentScale/=45000.0f;
+      currentScale/=45000.0f;
 
-    currentScale*=SCALING_FACTOR;
+      currentScale*=SCALING_FACTOR;
 
-    controlOutLimited*=(1.0f+currentScale);
+      controlOutLimited*=(1.0f+currentScale);
+    }
 
     //IIR filter
     if (targetAirFlow!=0.0f)
@@ -750,12 +753,15 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
       
+      controlOutputFiltered=0.0f;
+           
       control.state = CONTROL_HOLD_IN;
       
     } else if (control.state == CONTROL_HOLD_IN) {
       DEBUG_PRINT("state: CONTROL_HOLD_IN");
 
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
+      controlOutputFiltered=0.0f;
 
       PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       control.state = CONTROL_BEGIN_EXHALATION;
@@ -768,6 +774,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       controlComplete = false;
       
       controlI=0.0f;
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
 
       control.state = CONTROL_EXHALATION;
 
