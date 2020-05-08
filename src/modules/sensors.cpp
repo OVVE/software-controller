@@ -76,12 +76,14 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static int8_t plateauPressureSampleCount = 0;
   static int16_t previousPressure[PRESSURE_WINDOW];
   static uint8_t inhalationTimeout = 0;
-
+#ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
   static int32_t pressureSum=0;
+#endif
   PT_BEGIN(pt);
 
+#ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
     // Find the bias of the sensor
   while (pressureBiasCounter--) {
     PT_WAIT_UNTIL(pt, pressureSensorHalFetch() != HAL_IN_PROGRESS);
@@ -95,7 +97,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   
   DEBUG_PRINT("Pressure bias = %c%u.%02u cmH20",
               (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
-
+#endif
   // Kick off sampling timer
   timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, true);
   
@@ -105,8 +107,9 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     
     int16_t pressure;
     pressureSensorHalGetValue(&pressure); // get pressure, in [0.1mmH2O]
-  
+#ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
     pressure-=pressureBias;
+#endif
     // Update public interface with the pressure value
     sensors.currentPressure = pressure;
 
