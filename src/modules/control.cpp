@@ -450,13 +450,15 @@ static int updateControl(void)
 	//deactivate controller for exhilation
         //goto a fixed movement and deactivate the controller
 	      
-        if (motorHalGetPosition()-exhalationTargetPosition<12000)
+        if (motorHalGetPosition()-exhalationTargetPosition<2000)
         {
           targetAirFlow=-(motorHalGetPosition()-exhalationTargetPosition)/2;
         }
         else
           targetAirFlow=-15000.0;
         
+        if (targetAirFlow>-1000.0)
+          targetAirFlow=-1000.0;
         Kf=1.0f;
         Kp=.0f;
         Ki=.0f;
