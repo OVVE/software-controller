@@ -730,10 +730,10 @@ int32_t motorHalGetPosition(void)
     result = (int64_t) motor_position;
   }
 
-  result *= ((int32_t) MOTOR_HAL_DEGREE_MULTIPLIER) *
-            ((int16_t) DEGREES_PER_REVOLUTION);
-  result /= ((int16_t) MOTOR_STEPS_PER_REVOLUTION) *
-            ((int8_t)  MC_MICROSTEPS_PER_STEP);
+  result *= ((int64_t) MOTOR_HAL_DEGREE_MULTIPLIER) *
+            ((int64_t) DEGREES_PER_REVOLUTION);
+  result /= ((int64_t) MOTOR_STEPS_PER_REVOLUTION) *
+            ((int64_t)  MC_MICROSTEPS_PER_STEP);
 
   return (int32_t) result;
 }
