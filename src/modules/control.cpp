@@ -29,7 +29,7 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
-#define MAX_PEAK_PRESSURE 20.0f
+#define MAX_PEAK_PRESSURE 35.0f
 
 // Uncomment the following to enable the current closed loop control
  #define CONTROL_CLOSED_LOOP
@@ -306,15 +306,15 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     if (controlLimitHit==CONTROL_LIMIT_HIT_PRESSURE)
     {
      //we hit a limit, make a down adjustment of the current trajectory and don't change it for 2 more cycles
-      inhalationTrajectoryStartFlow*=0.99;
-      inhalationTrajectoryEndFlow*=0.99;
-      inhalationTrajectoryInitialCycleCnt=2;
+      inhalationTrajectoryStartFlow*=0.95;
+      inhalationTrajectoryEndFlow*=0.95;
+      inhalationTrajectoryInitialCycleCnt=1;
       controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
     }else if (controlLimitHit==CONTROL_LIMIT_HIT_VOLUME)
     {
-      inhalationTrajectoryStartFlow*=0.95;
-      inhalationTrajectoryEndFlow*=0.95;
-      inhalationTrajectoryInitialCycleCnt=2;
+      inhalationTrajectoryStartFlow*=0.99;
+      inhalationTrajectoryEndFlow*=0.99;
+      inhalationTrajectoryInitialCycleCnt=1;
       controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
     }
     
@@ -570,14 +570,21 @@ static int updateControl(void)
     if ((control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
     {
         controlLimitHit=CONTROL_LIMIT_HIT_VOLUME;
-        controlOutputFiltered*=0.65f;
+        controlOutputFiltered=0.0f;
+        DEBUG_PRINT("Volume limit hit at %li with output %li",sensors.currentVolume,(int32_t)controlOutputFiltered);
     }
 
     //dynamically limit to max pressure
     if ((control.state==CONTROL_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
     {
-      controlOutputFiltered*=0.35f;
+      controlOutputFiltered=0.0f;
       controlLimitHit=CONTROL_LIMIT_HIT_PRESSURE;
+      DEBUG_PRINT("Pressure limit hit at %li  with output %li",sensors.currentPressure,(int32_t)controlOutputFiltered);
+    }
+
+    if ((control.state==CONTROL_INHALATION)&&(controlLimitHit))
+    {
+      controlOutputFiltered=0.0f;
     }
 
     //TODO: Remove this diry fix here. It needs to be replace with a better trajectory planning.
