@@ -65,33 +65,24 @@ uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 void updateFromCommandPacket()
 {
   static uint8_t tmpMode;  // used for setting bits
-  comm.startVentilation = (public_command_packet.mode_value & MODE_START_STOP) != 0x00;
+  comm.startVentilation = (public_command_packet.command & COMMAND_BIT_START) != 0x00;
 
-  tmpMode = 0x7f & public_command_packet.mode_value;
+  tmpMode = public_command_packet.mode_value;
   
-  // check for a conflict - more than one mode - not the best logic going forward
-  if (tmpMode != MODE_ASSIST && tmpMode != MODE_NON_ASSIST && tmpMode != MODE_SIM)
+  if (tmpMode != MODE_VC_CMV && tmpMode != MODE_SIMV)
   {
-    public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
+    public_data_packet.alarm_bits |= ALARM_UI_SETPOINT_MISMATCH;
   }
   else
   {    
     comm.ventilationMode = tmpMode;
-    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
+    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_SETPOINT_MISMATCH;
   }
   comm.volumeRequested = public_command_packet.tidal_volume_set;
   comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
   comm.ieRatioRequested = public_command_packet.ie_ratio_set;
-  
-  // TODO: Actually set the values correctly, for now, just use
-  comm.highVolumeLimit = INT16_MAX;
-  comm.lowVolumeLimit = INT16_MIN;
-  comm.highPressureLimit = INT16_MAX;
-  comm.lowPressureLimit = INT16_MIN;
-  comm.highRespiratoryRateLimit = UINT16_MAX;
-  comm.lowRespiratoryRateLimit = 0;
  
-  public_data_packet.battery_level = 0; // TBD set to real value when available
+  public_data_packet.battery_status = 0; // TBD set to real value when available
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("mode bits: 0x");
         SERIAL_DEBUG.println(public_command_packet.mode_value, HEX);
@@ -99,62 +90,124 @@ void updateFromCommandPacket()
         SERIAL_DEBUG.println(comm.startVentilation, HEX);
         SERIAL_DEBUG.print("mode value: 0x");
         SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
-#endif
+#endif  
+  // Alarms
+  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
+  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;  
+  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
 }
 
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
 void updateDataPacket()
 {
+  
+  public_data_packet.packet_version = PACKET_VERSION;
+  public_data_packet.packet_type = PACKET_TYPE_DATA;
+  
   // only set the lower 7 bits of mode value
-  public_data_packet.mode_value = 0x7f & parameters.ventilationMode;
+  //public_data_packet.control_state = 0x7f & parameters.ventilationMode;
+  public_data_packet.mode_value = parameters.ventilationMode;
+  public_data_packet.control_state = control.state;
   if (parameters.startVentilation)
   {
-    public_data_packet.mode_value |= MODE_START_STOP;
+    public_data_packet.control_state |= MODE_START_STOP;
   }
   else
   {
-    public_data_packet.mode_value &= ~MODE_START_STOP;
+    public_data_packet.control_state &= ~MODE_START_STOP;
   }
-  // could not find 
-  //    respiratory_rate_measured
-  //    tidal_volume_measured
-  //    battery_level
-  //
+  
+  //public_data_packet.battery_status = 0x7f & battery.percent; // could not find battery_status in modules
+  // if (battery.charging) {
+       // public_data_packet.battery_status |= BATTERY_CHARGING; // turn bit 7 ON independent of lower bits
+  // }
+  //   else {
+  //     public_data_packet.battery_status &= ~BATTERY_CHARGING;  // turn bit 7 OFF independent of lower bits
+  //   }
+  public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
+  //public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one 
+
+  //public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
+
   public_data_packet.tidal_volume_set = parameters.volumeRequested;
   public_data_packet.tidal_volume_measured = sensors.currentVolume;
-  public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;
-  public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
   
-  public_data_packet.control_state = control.state;
+  public_data_packet.ie_ratio_set = parameters.ieRatioRequested;
   public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
-  public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
   
-  // readings from sensor module
-  public_data_packet.plateau_value_measurement = sensors.plateauPressure;
-  public_data_packet.pressure_measured = sensors.currentPressure;  
+  public_data_packet.peep_value_measured = sensors.peepPressure; 
   public_data_packet.peak_pressure_measured = sensors.peakPressure;
-  public_data_packet.peep_value_measured = sensors.peepPressure;
-  public_data_packet.tidal_volume_measured = sensors.currentVolume;
+  public_data_packet.plateau_value_measurement = sensors.plateauPressure;
+  
+  //public_data_packet.pressure_set =   
+  public_data_packet.pressure_measured = sensors.currentPressure;
+
+  public_data_packet.flow_measured = sensors.currentFlow; 
+
   public_data_packet.volume_in_measured = sensors.volumeIn;
   public_data_packet.volume_out_measured = sensors.volumeOut;  
-  public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
-  public_data_packet.flow_measured = sensors.currentFlow; 
+  public_data_packet.volume_rate_measured = sensors.volumePerMinute;
+
+  //public_data_packet.high_pressure_limit_set =; 
+  //public_data_packet.low_pressure_limit_set =;   
+
+  //public_data_packet.high_volume_limit_set =; 
+  //public_data_packet.low_volume_limit_set =;
+
+  //public_data_packet.high_respiratory_rate_limit_set =; 
+  //public_data_packet.low_respiratory_rate_limit_set =;
+  
+  // could not find these in any modules in develop branch 4/29/2020
+  //    battery status
+  //    public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
+  //    public_data_packet.pressure_set = 
+  // public_data_packet.high_pressure_limit_set =; 
+  // public_data_packet.low_pressure_limit_set =;   
+  // public_data_packet.high_volume_limit_set =; 
+  // public_data_packet.low_volume_limit_set =;
+  //public_data_packet.high_respiratory_rate_limit_set =; 
+  //public_data_packet.low_respiratory_rate_limit_set =;  
+ 
 //#define SET_VALUES // - for testing
 #ifdef SET_VALUES
   public_data_packet.mode_value = public_command_packet.mode_value; //comm.ventilationMode;
-  public_data_packet.tidal_volume_set = public_command_packet.tidal_volume_set;
+  public_data_packet.packet_type = PACKET_TYPE_DATA;
+
+  public_data_packet.control_state = 1;
+  public_data_packet.control_state |= MODE_START_STOP; // turn on top bit
+
   public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
-  public_data_packet.ie_ratio_set = public_command_packet.ie_ratio_set;
+  //public_data_packet.respiratory_rate_measured = ;
+  
+  public_data_packet.tidal_volume_set = public_command_packet.tidal_volume_set;
   public_data_packet.tidal_volume_measured = 475;
-  public_data_packet.respiratory_rate_measured = 35;
+
+  public_data_packet.ie_ratio_set = public_command_packet.ie_ratio_set;
+  public_data_packet.ie_ratio_measured = 2;  
+
   public_data_packet.peep_value_measured = 426;
   public_data_packet.peak_pressure_measured =  527;
+  public_data_packet.plateau_value_measurement  = 150;  
+  
   public_data_packet.pressure_measured  =  980;
+  public_data_packet.pressure_set  =  990;  
+ 
   public_data_packet.flow_measured = 980;
-  public_data_packet.plateau_value_measurement  = 150;
+
   public_data_packet.volume_in_measured = 18;
   public_data_packet.volume_out_measured = 13;
   public_data_packet.volume_rate_measured = 12;
+
+  public_data_packet.high_pressure_limit_set = public_command_packet.high_pressure_limit_set; 
+  public_data_packet.low_pressure_limit_set = public_command_packet.low_pressure_limit_set;   
+
+  public_data_packet.high_pressure_limit_set = public_command_packet.high_pressure_limit_set; 
+  public_data_packet.low_pressure_limit_set = public_command_packet.low_pressure_limit_set;
+  public_data_packet.high_volume_limit_set = public_command_packet.high_volume_limit_set; 
+  public_data_packet.low_volume_limit_set = public_command_packet.low_volume_limit_set;
+
+  public_data_packet.high_respiratory_rate_limit_set = public_command_packet.high_respiratory_rate_limit_set; 
+  public_data_packet.low_respiratory_rate_limit_set = public_command_packet.low_respiratory_rate_limit_set;
 #endif  
 
   
@@ -176,7 +229,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     watchdog_count++;    
     watchdog_exceeded = false;
     clear_input = true;
-    public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
+    public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
   }
   else
   {
@@ -189,7 +242,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
-      public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
+      public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
     }
     else
     {
@@ -201,7 +254,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
-        public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
+        public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("bad CRC 0x ");
         SERIAL_DEBUG.println(command_packet.crc, HEX);
@@ -210,8 +263,8 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       }
       else
       {
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
+        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
+    
         memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
@@ -241,7 +294,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   ++sequence_count;
   updateDataPacket();
   public_data_packet.sequence_count = sequence_count;
-  public_data_packet.packet_version = PACKET_VERSION;
+  //public_data_packet.packet_version = PACKET_VERSION;
 #ifdef USE_FAST_CRC
    public_data_packet.crc = CRC16.ccitt((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);   
 #else  
