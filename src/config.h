@@ -63,6 +63,9 @@
 // TODO: Add more HAL debug features if needed
 #define DEBUG_MOTOR_HAL
 
+//calibrate the bias of the pressure sensor at startup. Requires the user to make sure that the sensor sees environmental pressure at startup as well.
+//#define PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
+
 // Module Debug Flags
 // If commented out, debug features from that module will be disabled
 #define DEBUG_CONTROL_MODULE
