@@ -285,10 +285,12 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     
     // Derive Volume IN from current volume; updating the public value upon entry
     // into CONTROL_HOLD_IN state
-    if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
+    // if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
+    if ((control.state == CONTROL_EXHALATION) && !setVolumeIn) {
       sensors.volumeIn = airvolume;
       setVolumeIn = true;
-    } else if (control.state == CONTROL_EXHALATION) {
+    // } else if (control.state == CONTROL_EXHALATION) {
+    } else if (control.state == CONTROL_INHALATION) {
       setVolumeIn = false;
     }
     
