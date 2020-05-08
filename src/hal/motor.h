@@ -21,16 +21,35 @@
 #define DEGREES_PER_REVOLUTION 360
 #define SECONDS_PER_MINUTE 60
 
-extern volatile int16_t motor_position;
+// Unit Conventions
+#define MOTOR_HAL_DEGREE_MULTIPLIER 1000
+#define MOTOR_HAL_RPM_MULTIPLIER    1000
 
-// TODO: Doc
+#define MOTOR_HAL_COMMAND_OFF   0
+#define MOTOR_HAL_COMMAND_HOLD  1
+#define MOTOR_HAL_COMMAND_OPEN  2        
+#define MOTOR_HAL_COMMAND_CLOSE 3
+
+#define MOTOR_HAL_SPEED_MAX (28*MOTOR_HAL_RPM_MULTIPLIER)
+
+#define MOTOR_HAL_STATUS_ERROR       -1
+#define MOTOR_HAL_STATUS_STOPPED      0
+#define MOTOR_HAL_STATUS_MOVING       1
+#define MOTOR_HAL_STATUS_LIMIT_BOTTOM 2
+#define MOTOR_HAL_STATUS_LIMIT_TOP    3
+
+// TODO: Documentation
 int8_t motorHalInit(void);
 
-// TODO: Doc
-int8_t motorHalCommand(int8_t position, uint16_t speed);
+// TODO: Documentation
+int8_t motorHalCommand(uint8_t command, uint16_t speed);
 
-// TODO: Doc
-int8_t motorHalStatus(void);
+// TODO: Documentation
+// Motor position in degrees*MOTOR_HAL_DEGREE_MULTIPLIER.
+int32_t motorHalGetPosition(void);
+
+// TODO: Documentation
+int8_t motorHalGetStatus(void);
 
 #endif /* __MOTOR_HAL_H__ */
 

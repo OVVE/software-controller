@@ -9,7 +9,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-// #define DEBUG
+#define DEBUG
 #define DEBUG_MODULE "motor"
 #include "../util/debug.h"
 
@@ -25,6 +25,7 @@
 
 #define PIN_MOTOR_DIRECTION_OPEN  LOW
 #define PIN_MOTOR_DIRECTION_CLOSE HIGH
+
 #define PIN_MOTOR_ENABLE_FALSE LOW
 #define PIN_MOTOR_ENABLE_TRUE  HIGH
 
@@ -90,9 +91,6 @@
 #ifdef MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
 // Nanotec CL4-E-2-12-5VDI
 
-// TODO: Implement a "ready" signal on the motor controller for handshake upon
-// initialization?
-
 // Clock Direction Multiplier
 #define MC_OBJECT_2057 128
 
@@ -145,72 +143,176 @@
 //******************************************************************************
 // Motor State Machine Definitions
 //******************************************************************************
+#define MOTOR_STATE_NONE -1
 #define MOTOR_STATE_OFF   0
 #define MOTOR_STATE_HOLD  1
 #define MOTOR_STATE_OPEN  2
 #define MOTOR_STATE_CLOSE 3
-#define MOTOR_STATE_NONE  UINT8_MAX
+
+// These motor state aliases establish the convention that maps
+// positive/negative position to direction.
+#define MOTOR_STATE__DIRECTION_POSITIVE MOTOR_STATE_CLOSE
+#define MOTOR_STATE__DIRECTION_NEGATIVE MOTOR_STATE_OPEN
 
 //******************************************************************************
 // Motor Control Definitions
 //******************************************************************************
-
-// TODO: Revise this mechanism.
-#define MOTOR_POSITION_INCREMENT_OPEN  false
-#define MOTOR_POSITION_INCREMENT_CLOSE true
+#define MOTOR_POSITION_MIN INT16_MIN
+#define MOTOR_POSITION_MAX INT16_MAX
 
 //******************************************************************************
 // Motor Control Variables
 //******************************************************************************
+#if (UINTMAX_MAX != UINT64_MAX)
+#error Overflow checks not possible.
+#endif
 
-// Public
-// TODO: Detect potential overflow in this variable.
-// TODO: It's okay to read this variable outside of a critical section, as long
-// as we assume that it can never overflow.
-volatile int16_t motor_position; // Motor position in microsteps.
+// Motor position in microsteps from zero.
+static volatile int16_t motor_position;
 
-// Private
-static int16_t motor_speed;
-static int16_t motor_speed_command;
+// Verify that int16_t motor_position can represent a range of +/- 90 degrees.
+#if ((( 90 * MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP) /            \
+      DEGREES_PER_REVOLUTION) > INT16_MAX)
+#error Overflow condition detected.
+#endif
 
-static volatile bool motor_position_increment;
+#if (((-90 * MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP) /            \
+      DEGREES_PER_REVOLUTION) < INT16_MIN)
+#error Overflow condition detected.
+#endif
 
-// Motor State Machine Variables
-static uint8_t motor_state = MOTOR_STATE_NONE;
-static volatile uint8_t motor_state_pending = MOTOR_STATE_NONE;
+// Motor State Machine
+static int8_t motor_state = MOTOR_STATE_NONE;
 
 //******************************************************************************
 // Timer 4 Configuration: Motor Movement and Position Tracking
 //
-// 
-// Configure Timer 4 to generate a PWM signal to output to the motor controller,
+// Configure Timer 4 to generate a PWM signal output to the motor controller,
 // causing it to advance the motor by one (micro)step per pulse. The PWM signal
 // is enabled and disabled dynamically, so there are separate *_enabled and
-// *_disabled values for TCCR4B. Configure an interrupt to occur for every PWM
-// pulse to track the motor position.
+// *_disabled values for TCCR4B. Configure an interrupt for each PWM pulse to
+// track the motor position.
 //******************************************************************************
+#define TIMER4_PRESCALER 8
 
-// WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
 #ifdef MC_STEP_PULSE_HIGH
+#if (PIN_MOTOR_STEP == 7)
+// WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
 // COM4B[1:0] = 0b10 (Enable non-inverting PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
 #define TCCR4A_VALUE ((1<<COM4B1) | (0<<COM4B0) | (0<<WGM41) | (1<<WGM40))
+#define TCCR4B_VALUE_DISABLED ((1<<WGM43) | (0<<WGM42))
+#else
+#error Unsupported value for PIN_MOTOR_STEP.
+#endif
 #elif defined MC_STEP_PULSE_LOW
+#if (PIN_MOTOR_STEP == 7)
+// WGM4[3:0] = 0b1001 (PWM, Phase and Frequency Correct Mode, TOP: OCR4A)
 // COM4B[1:0] = 0b11 (Enable inverting PWM output on OC4B -> ATMega 2560 PH4 -> Arduino D7)
 #define TCCR4A_VALUE ((1<<COM4B1) | (1<<COM4B0) | (0<<WGM41) | (1<<WGM40))
+#define TCCR4B_VALUE_DISABLED ((1<<WGM43) | (0<<WGM42))
+#else
+#error Unsupported value for PIN_MOTOR_STEP.
+#endif
 #else
 #error No motor controller step pulse convention has been defined.
 #endif
 
-#define TCCR4B_VALUE_DISABLED ((1<<WGM43) | (0<<WGM42))
-
+#if (TIMER4_PRESCALER == 8)
 // CS3[2:0] = 0b010 (clk/8 prescaler)
 #define TCCR4B_VALUE_ENABLED (TCCR4B_VALUE_DISABLED | (0<<CS42) | (1<<CS41) | (0<<CS40))
 
-// TODO
-// Forward Declaration
-static void motor_state_register_pending(uint8_t next_state);
+// TODO: Consider adding compile-time checks for the platform and clock
+// frequency.
 
-// TODO: Document that this function can be called by WDT reset.
+// The frequency (Hz) at which the Timer 4 counter updates.
+#define TIMER4_COUNT_FREQUENCY (16000000/TIMER4_PRESCALER)
+#else
+#error Unsupported clock prescaler.
+#endif
+
+//                     16 MHz clock
+// PWM Frequency = -------------------
+//                 2 * prescaler * TOP
+#define PWM_FREQUENCY_BASE (16000000/(2*TIMER4_PRESCALER))
+#define PWM_FREQUENCY_MIN  ((PWM_FREQUENCY_BASE/UINT16_MAX)+1)
+#define PWM_FREQUENCY_MAX  (PWM_FREQUENCY_BASE/100)
+
+// Enable Timer 4.
+static inline void timer4_enable() {
+#if (TIMER4_COUNT_FREQUENCY == 2000000)
+  TCNT4 = MC_STEP_PULSE_WIDTH + MC_DIRECTION_SETUP_TIME*2;
+#else 
+#error Unsupported value for TIMER4_COUNT_FREQUENCY.
+#endif
+  
+  TCCR4B = TCCR4B_VALUE_ENABLED;
+}
+
+// Disable Timer 4.
+static void timer4_disable()
+{
+  if (TCCR4B == TCCR4B_VALUE_ENABLED) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // Poll for TCNT4 TOP. This can take as long as the period of
+      // PWM_FREQUENCY_MIN.
+      while (true) {
+        // Obtain 2 adjacent samples from TCNT4.
+        uint16_t TCNT4_sample1 = TCNT4;
+
+#if (TIMER4_COUNT_FREQUENCY == 2000000)
+        // Wait for the timer to increment/decrement.
+        asm volatile (
+          "nop" "\n\t"
+          "nop" "\n\t"
+          "nop" "\n\t"
+          "nop" "\n\t"
+          ::  
+        );
+#else 
+#error Unsupported value for TIMER4_COUNT_FREQUENCY.
+#endif
+
+        uint16_t TCNT4_sample2 = TCNT4;
+
+        // Check if the timer is  counting down.
+        if (TCNT4_sample2 < TCNT4_sample1) {
+
+          // Check if the timer was not in the middle of a pulse when it was
+          // last read a few cycles ago.
+          if (TCNT4_sample2 > ((uint8_t) MC_STEP_PULSE_WIDTH)) {
+            
+            // There is a reasonable likelihood that the timer is not in the
+            // middle of a pulse, so disable the timer now.
+            TCCR4B = TCCR4B_VALUE_DISABLED;
+
+            if (TCNT4 > ((uint8_t) MC_STEP_PULSE_WIDTH)) {
+              // The timer is stopped and not in the middle of a pulse, so the
+              // polling loop can now exit.
+              DEBUG_PRINT("Timer 4 Disabled, TCNT4: %u", TCNT4);
+              break;
+            } else {
+              // The timer is stopped in the middle of a pulse, so re-enable the
+              // timer and continue polling.
+              TCCR4B = TCCR4B_VALUE_ENABLED;
+            }
+          }
+        }
+
+        // Open an interrupt window.
+        NONATOMIC_BLOCK(NONATOMIC_FORCEOFF) {}
+      }
+    }
+  }
+}
+
+// Set a new value for Timer 4 TOP. This changes the frequency of the PWM
+// signal. It can be updated at any time without any glitches on the output.
+static inline void timer4_TOP_set(uint16_t TOP)
+{
+  OCR4A = TOP;
+}
+
+// TODO: Consider the implications of calling this during WDT reset.
 void timer4_init()
 {
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -218,94 +320,89 @@ void timer4_init()
     TCCR4B = TCCR4B_VALUE_DISABLED;
     
     TCNT4 = 0;
-    OCR4A = 100; // TODO: Decide on a good value to use here and document it.
-    OCR4B = MC_STEP_PULSE_WIDTH; // TODO: microsecond to timer count conversion?
-    
-    // Enable interrupt at timer 4 BOTTOM.
+#if (TIMER4_COUNT_FREQUENCY == 2000000)
+    OCR4A = 100; // TODO: Document why this value was chosen.
+    OCR4B = MC_STEP_PULSE_WIDTH;
+#else
+#error Unsupported value for TIMER4_COUNT_FREQUENCY.
+#endif
+
+    // Enable the interrupt at timer 4 BOTTOM.
     TIFR4 = _BV(TOV4); // Clear Timer 4 Overflow Flag
     TIMSK4 = _BV(TOIE4); // Set Timer 4 Overflow Interrupt Enable
   }
-  
-  // Initialize the timer and allow it to count up to TOP, at which point the
-  // interrupt at TOP will disable the timer.
-  motor_state_register_pending(MOTOR_STATE_OFF);
-  TCCR4B = TCCR4B_VALUE_ENABLED;
-
-  // TODO: Encapsulate this in a function.
-  while (motor_state_pending != MOTOR_STATE_NONE) {}
-}
-
-static inline void timer4_enable() {
-  // TODO
-  // Implement a macro to convert microseconds to timer values.
-  TCNT4 = MC_STEP_PULSE_WIDTH + MC_DIRECTION_SETUP_TIME*2;
-  TCCR4B = TCCR4B_VALUE_ENABLED;
-}
-
-static inline void timer4_disable()
-{
-  TCCR4B = TCCR4B_VALUE_DISABLED;
-}
-
-// Enable interrupt at Timer 4 TOP.
-static inline void timer4_interrupt_TOP_enable()
-{
-  // Clear Timer 4 Output Compare A Match Flag
-  // This prevents the interrupt from being taken immediately after enabling it.
-  TIFR4 = _BV(OCF4A); 
-  
-  // Set Timer 4 Output Compare A Match Interrupt Enable
-  TIMSK4 |= _BV(OCIE4A);
-}
-
-// Disable interrupt at Timer 4 TOP.
-static inline void timer4_interrupt_TOP_disable()
-{
-  // Clear Timer 4 Compare A Match Interrupt Enable
-  TIMSK4 &= ~_BV(OCIE4A);
-}
-
-// Set a new value for Timer 4 TOP
-// This changes the frequency of the PWM signal. It can be updated at any time
-// without any glitches on the output.
-static inline void timer4_set_TOP(uint16_t counter_value)
-{
-  OCR4A = counter_value;
+    
+  TCCR4B = TCCR4B_VALUE_ENABLED; // The timer starts counting up from zero.
+  timer4_disable(); // This will disable the timer once it starts counting down.
 }
 
 //******************************************************************************
 // Motor PWM Control
 //******************************************************************************
 
-static inline void motor_pwm_enable()
+// Enable the PWM signal.
+static inline void motor_pwm_enable(void)
 {
   timer4_enable();
 }
 
-static inline void motor_pwm_disable()
+// Disable the PWM signal.
+static inline void motor_pwm_disable(void)
 {
   timer4_disable();
 }
 
-static inline void motor_pwm_frequency_set(uint32_t frequency)
-{
-  // TODO Resolve divide by zero error.
+// Set the PWM frequency.
+#if (PWM_FREQUENCY_MIN > UINT16_MAX)
+#error Overflow condition detected.
+#endif
 
-  // Convert from frequency to counter value.
-  // TODO static/#define timer4_frequency
-  timer4_set_TOP(((uint32_t) 1000000)/frequency);
+#if (PWM_FREQUENCY_MAX > UINT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if (PWM_FREQUENCY_MIN > PWM_FREQUENCY_MAX)
+#error Error in PWM frequency range.
+#endif
+
+#if (PWM_FREQUENCY_BASE > UINT32_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((PWM_FREQUENCY_BASE / PWM_FREQUENCY_MIN) > UINT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((PWM_FREQUENCY_BASE / PWM_FREQUENCY_MAX) > UINT16_MAX)
+#error Overflow condition detected.
+#endif
+
+static inline void motor_pwm_frequency_set(uint16_t frequency)
+{
+  if (frequency < PWM_FREQUENCY_MIN) {
+    frequency = PWM_FREQUENCY_MIN;
+    DEBUG_PRINT("Warning: Limiting motor PWM frequency to maximum value %u Hz", frequency);
+  }
+
+  if (frequency > PWM_FREQUENCY_MAX) {
+    frequency = PWM_FREQUENCY_MAX;
+    DEBUG_PRINT("Warning: Limiting motor PWM frequency to minimum value %u Hz", frequency);
+  }
+
+  // Convert from frequency (Hz) to timer TOP value.
+  timer4_TOP_set(((uint32_t) PWM_FREQUENCY_BASE) / frequency);
 }
 
-// Enable interrupts on the phase of the PWM signal where there is no pulse.
-static inline void motor_pwm_phase_interrupt_enable()
-{
-  timer4_interrupt_TOP_enable();
-}
+//******************************************************************************
+// Motor Position
+//******************************************************************************
 
-// Disable interrupts on the phase of the PWM signal where there is no pulse.
-static inline void motor_pwm_phase_interrupt_disable()
+// Set the current position as the zero point.
+void motor_position_set_zero()
 {
-  timer4_interrupt_TOP_disable();
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    motor_position = 0;
+  }
 }
 
 //******************************************************************************
@@ -338,13 +435,12 @@ static void motor_state_set_HOLD()
 // its outputs accordingly.
 static inline void motor_state_set_OPEN()
 {
-
   digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_TRUE);
   digitalWrite(PIN_MOTOR_DIRECTION, PIN_MOTOR_DIRECTION_OPEN);
-  motor_position_increment = MOTOR_POSITION_INCREMENT_OPEN;
-  motor_pwm_enable();
   
   motor_state = MOTOR_STATE_OPEN;
+  motor_pwm_enable();
+  
   DEBUG_PRINT( "MOTOR_STATE_OPEN" );
 }
 
@@ -354,35 +450,11 @@ static inline void motor_state_set_CLOSE()
 {
   digitalWrite(PIN_MOTOR_DIRECTION, PIN_MOTOR_DIRECTION_CLOSE);
   digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_TRUE);
-  motor_position_increment = MOTOR_POSITION_INCREMENT_CLOSE;
-  motor_pwm_enable();
   
   motor_state = MOTOR_STATE_CLOSE;
+  motor_pwm_enable();
+  
   DEBUG_PRINT( "MOTOR_STATE_CLOSE" );
-}
-
-// Registers a provided motor state as pending to be installed in the next
-// available phase window of the PWM signal.
-static void motor_state_register_pending(uint8_t next_state)
-{
-  motor_state_pending = next_state;
-  motor_pwm_phase_interrupt_enable();
-}
-
-// Installs a pending motor state update. It is expected that this function
-// will only be called within the correct phase window of the PWM signal.
-static inline void motor_state_install_pending()
-{
-  if (motor_state_pending == MOTOR_STATE_OFF) {
-    motor_state_set_OFF();
-  } else if (motor_state_pending == MOTOR_STATE_HOLD) {
-    motor_state_set_HOLD();
-  } else {
-    // TODO: error
-  }
-
-  motor_pwm_phase_interrupt_disable();
-  motor_state_pending = MOTOR_STATE_NONE;
 }
 
 // Determines whether the current motor state is a moving state.
@@ -394,197 +466,156 @@ static bool motor_state_moving()
 
 // Manages motor state machine transitions.
 //
+// Performs limit switch checks and stops the motor if necessary.
+//
 // A transition from a non-moving state to any other state is made immediately
-// via motor_state_set().
+// via motor_state_set_*().
 //
-// A transition from a moving state to a non-moving state is registered as
-// pending to be installed in the next available phase window of the PWM signal
-// via motor_state_register_pending().
-//
-// A transition from a moving state directly to another moving state is treated
-// as an error.
-void motor_state_transition(uint8_t next_state)
+// A transition from a moving state directly to any other moving state is
+// treated as an error.
+int8_t motor_state_transition(uint8_t next_state)
 {
-  if (motor_state == next_state) {
-    return;
-  }
- 
-  if (motor_state_pending != MOTOR_STATE_NONE) {
-    if (next_state != motor_state_pending) {
-      // TODO: error
-    } else {
-      return;
-    }
-  }
+  int8_t motor_status = MOTOR_HAL_STATUS_ERROR;
 
   if (next_state == MOTOR_STATE_OFF) {
-    if (motor_state_moving()) {
-      motor_state_register_pending(MOTOR_STATE_OFF);
-    } else {
+    if (motor_state != MOTOR_STATE_OFF) {
       motor_state_set_OFF();
     }
+    motor_status = MOTOR_HAL_STATUS_STOPPED;
   } else if (next_state == MOTOR_STATE_HOLD) {
-    if (motor_state_moving()) {
-      motor_state_register_pending(MOTOR_STATE_HOLD);
-    } else {
+    if (motor_state != MOTOR_STATE_HOLD) {
       motor_state_set_HOLD();
     }
+    motor_status = MOTOR_HAL_STATUS_STOPPED;
   } else if (next_state == MOTOR_STATE_OPEN) {
     if (motor_state == MOTOR_STATE_CLOSE) {
-      // assert(motor_state != MOTOR_STATE_CLOSE);
-      // TODO: error
+      motor_state_set_HOLD();
+      DEBUG_PRINT("Error: Detected illegal transition from MOTOR_STATE_CLOSE to MOTOR_STATE_OPEN");
+      motor_status = MOTOR_HAL_STATUS_ERROR;
+    } else if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED) {
+      if (motor_state != MOTOR_STATE_HOLD) {
+        // Do not move the motor in the OPEN direction if the top limit switch is
+        // tripped.
+        motor_state_set_HOLD();
+        motor_position_set_zero();
+        DEBUG_PRINT("Top limit switch tripped.");
+      }
+      motor_status = MOTOR_HAL_STATUS_LIMIT_TOP;
+    } else {
+      if (motor_state != MOTOR_STATE_OPEN) {
+        motor_state_set_OPEN();
+      }
+      motor_status = MOTOR_HAL_STATUS_MOVING;
     }
-    motor_state_set_OPEN();
   } else if (next_state == MOTOR_STATE_CLOSE) {
     if (motor_state == MOTOR_STATE_OPEN) {
-      // assert(motor_state != MOTOR_STATE_OPEN);
-      // TODO: error
+      motor_state_set_HOLD();
+      DEBUG_PRINT("Error: Detected illegal transition from MOTOR_STATE_OPEN to MOTOR_STATE_CLOSE");
+      motor_status = MOTOR_HAL_STATUS_ERROR;
+    } else if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
+      if (motor_state != MOTOR_STATE_HOLD) {
+        // Do not move the motor in the CLOSE direction if the bottom limit switch
+        // is tripped.
+        motor_state_set_HOLD();
+        DEBUG_PRINT("Bottom limit switch tripped.");
+      }
+      motor_status = MOTOR_HAL_STATUS_LIMIT_BOTTOM;
+    } else {
+      if (motor_state != MOTOR_STATE_CLOSE) {
+        motor_state_set_CLOSE();
+      }
+      motor_status = MOTOR_HAL_STATUS_MOVING;
     }
-    motor_state_set_CLOSE();
-  } else {
-    // TODO: error
   }
-}
 
-//******************************************************************************
-// Motor Position Tracking
-//******************************************************************************
-
-// Set the current position as the zero point.
-void motor_position_set_zero()
-{
-  assert((motor_state != MOTOR_STATE_OPEN) && (motor_state != MOTOR_STATE_CLOSE));
-
-  // TODO: Check for critical section.
-  motor_position = 0;
+  return motor_status;
 }
 
 //******************************************************************************
 // Motor Speed Control
 //******************************************************************************
 
-// Sets the motor command speed.
-//
-// Parameter
-// ---------
-// uint8_t  speed   The speed at which to move the motor.
-//                  units: MPRM (milli-RPM)
+#if (MOTOR_STEPS_PER_REVOLUTION > UINT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if (MC_MICROSTEPS_PER_STEP > UINT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP) > UINT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((UINT16_MAX * MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP) >      \
+     UINT32_MAX)
+#error Overflow condition detected.
+#endif
+
+#if (MOTOR_HAL_RPM_MULTIPLIER > UINT32_MAX)
+#error Overflow condition detected.
+#endif
+
+#if (SECONDS_PER_MINUTE > UINT8_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((MOTOR_HAL_RPM_MULTIPLIER * SECONDS_PER_MINUTE) > UINT32_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((((MOTOR_HAL_SPEED_MAX) *                                                 \
+       (MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP)) /                \
+      (MOTOR_HAL_RPM_MULTIPLIER * SECONDS_PER_MINUTE)) > PWM_FREQUENCY_MAX)
+#error Maximum PWM frequency exceeded.
+#endif
+
 void motor_speed_set(uint16_t speed)
 {
-  // TODO: bounds check on speed
-  if (speed == 0) {
-    // motor_state
-  }
+  static uint16_t last_speed = 0;
 
-  DEBUG_PRINT("motor_speed_set: %u", speed);
-  motor_speed = speed;
-  
-  // Convert from MRPM to frequency.
-  uint32_t frequency = ((((uint32_t) speed)*MOTOR_STEPS_PER_REVOLUTION)*MC_MICROSTEPS_PER_STEP)/(((int32_t) 1000)*SECONDS_PER_MINUTE);
-  
-  motor_pwm_frequency_set(frequency);
-
-  // DEBUG_PRINT("frequency: %d", frequency);
-
-}
-
-void motor_speed_command_set(uint16_t speed_command)
-{
-  DEBUG_PRINT("motor_speed_command_set: %u", speed_command);
-  motor_speed_command = speed_command;
-}
-
-void motor_speed_set_zero()
-{
-  motor_speed = 0;
-  motor_speed_command = 0;
-}
-
-//******************************************************************************
-
-static void motor_state_update()
-{
-  int32_t motor_position_delta = motor_position_command - motor_position;
-
-  static bool skip = false;
-  if (!skip) {
-    if (ABS(motor_position_delta) < 0/* TODO */) {
-      skip = true;
-
-      while (motor_speed > MOTOR_SPEED_STOP) {
-        // Deceleration
-        // 20 RPM/s
-        motor_state_update();
-        delay(5);
-        motor_speed_set(MAX(motor_speed - 100, MOTOR_SPEED_STOP));
-      }
-      motor_speed_set_zero();
-
-      skip = false;
-    }
-    else if  (motor_speed < motor_speed_command) {
-      skip = true;
-      
-      while (motor_speed < motor_speed_command) {
-        // Acceleration
-        // 20 RPM/s
-        motor_state_update();
-        delay(5);
-        motor_speed_set(MIN(motor_speed + 100, motor_speed_command));
-      }
-
-      skip = false;
-    }
-  }
-
-  if (motor_position_delta > MOTOR_CONTROL_STEP_ERROR) {
-    if (digitalRead(PIN_LIMIT_BOTTOM) == PIN_LIMIT_TRIPPED) {
-      // Do not move the motor in the CLOSE direction if the bottom limit
-      // switch is tripped.
-      motor_state_transition(MOTOR_STATE_HOLD);
-    } else {
-      motor_state_transition(MOTOR_STATE_CLOSE);
-    }
-  } else if (motor_position_delta < -MOTOR_CONTROL_STEP_ERROR) {
-    if (digitalRead(PIN_LIMIT_TOP) == PIN_LIMIT_TRIPPED) {
-      // Do not move the motor in the OPEN direction if the top limit switch is
-      // tripped. There is no need to go through motor_state_transition()
-      // because the zero reference point is set here.
-      motor_state_set_HOLD();
-      motor_position_set_zero();
-      motor_speed_set_zero();
-    } else {
-      motor_state_transition(MOTOR_STATE_OPEN);
-    }
+  if (speed == last_speed) {
+    return;
   } else {
-    if ((motor_state == MOTOR_STATE_OPEN) ||
-        (motor_state == MOTOR_STATE_CLOSE)) {
-      // Hold the motor in place in order to maintain the correct position
-      // without having to zero the motor again.
-      motor_state_transition(MOTOR_STATE_HOLD);
-    }
+    last_speed = speed;
   }
+
+  if (speed == 0) {
+    motor_state_set_HOLD();
+    return;
+  }
+
+  if (speed > MOTOR_HAL_SPEED_MAX) {
+    speed = MOTOR_HAL_SPEED_MAX;
+    DEBUG_PRINT("Warning: Limiting speed to maximum value %u RPM*%u", speed, MOTOR_HAL_RPM_MULTIPLIER);
+  }
+
+  //--------------------------------------------------------
+  // Convert from RPM*MOTOR_HAL_RPM_MULTIPLIER to frequency.
+  //--------------------------------------------------------
+  uint32_t frequency = (uint32_t) speed;
+
+  frequency *= ((uint16_t) MOTOR_STEPS_PER_REVOLUTION) *
+               ((uint16_t) MC_MICROSTEPS_PER_STEP);
+  frequency /= ((uint32_t) MOTOR_HAL_RPM_MULTIPLIER) *
+               ((uint8_t)  SECONDS_PER_MINUTE);
+ 
+  motor_pwm_frequency_set(frequency);
 }
 
 //******************************************************************************
-// Interrupt Service Routines
+// Interrupt Service Routine
 //******************************************************************************
 
 // Timer 4 BOTTOM
 ISR(TIMER4_OVF_vect) {
-  // There is a pulse on the PWM signal. Count the pulse to track the motor
-  // position.
-  if (motor_position_increment) {
+  // This interrupt occurs when there is a pulse on the PWM signal. Update the
+  // motor position.
+  if (motor_state == MOTOR_STATE__DIRECTION_POSITIVE) {
     motor_position++;
-  } else {
+  } else if (motor_state == MOTOR_STATE__DIRECTION_NEGATIVE) {
     motor_position--;
   }
-}
-
-// Timer 4 TOP
-ISR(TIMER4_COMPA_vect)
-{
-  motor_state_install_pending();
 }
 
 //******************************************************************************
@@ -596,7 +627,7 @@ int8_t motorHalInit(void)
   // Configure the step pin as an input during timer initialization in order to
   // prevent glitches on the output PWM signal.
   pinMode(PIN_MOTOR_STEP, INPUT);
-  timer4_init(); // TODO: PWM/state init, since this also sets up the initial state.
+  timer4_init();
   
   // Motor Pin Configuration
   pinMode(PIN_MOTOR_DIRECTION, OUTPUT);
@@ -607,34 +638,99 @@ int8_t motorHalInit(void)
   pinMode(PIN_LIMIT_BOTTOM, INPUT_PULLUP);
   pinMode(PIN_LIMIT_TOP, INPUT_PULLUP);
 
+  // Initialize motor state to MOTOR_STATE_OFF.
+  motor_state_set_OFF();
+
   return HAL_OK;
 }
 
-// Speed MRPM (millirevolutions per second).
-// TODO signed value for speed, or additional variable for direction? 
-int8_t motorHalCommand(uint16_t speed)
+int8_t motorHalCommand(uint8_t command, uint16_t speed)
 {
-  motor_position_command_set(position);
-  motor_speed_set(MIN(speed, MOTOR_SPEED_START));
-  motor_speed_command_set(speed);
-  
-  motor_state_update();
+  int8_t motor_status = MOTOR_HAL_STATUS_ERROR;
 
-  if (motor_state_moving()) {
-    return HAL_IN_PROGRESS;
-  } else {
-    return HAL_OK;
+  if (command == MOTOR_HAL_COMMAND_OFF) {
+    motor_status = motor_state_transition(MOTOR_STATE_OFF);
+  } else if (command == MOTOR_HAL_COMMAND_HOLD) {
+    motor_status = motor_state_transition(MOTOR_STATE_HOLD);
+  } else if (command == MOTOR_HAL_COMMAND_OPEN) {
+    motor_speed_set(speed);
+    motor_status = motor_state_transition(MOTOR_STATE_OPEN);
+  } else if (command = MOTOR_HAL_COMMAND_CLOSE) {
+    motor_speed_set(speed);
+    motor_status = motor_state_transition(MOTOR_STATE_CLOSE);
   }
+
+  return motor_status;
 }
 
-int8_t motorHalStatus(void)
-{
-  motor_state_update();
+#if (MOTOR_HAL_DEGREE_MULTIPLIER > INT32_MAX)
+#error Overflow condition detected.
+#endif
 
-  if (motor_state_moving()) {
-    return HAL_IN_PROGRESS;
-  } else {
-    return HAL_OK;
+#if (DEGREES_PER_REVOLUTION > INT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((MOTOR_HAL_DEGREE_MULTIPLIER * DEGREES_PER_REVOLUTION) > INT32_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((MOTOR_HAL_DEGREE_MULTIPLIER * DEGREES_PER_REVOLUTION) >                  \
+     (INT64_MAX / (MOTOR_POSITION_MAX)))
+#error Overflow condition detected.
+#endif
+
+#if ((MOTOR_HAL_DEGREE_MULTIPLIER * DEGREES_PER_REVOLUTION) >                  \
+     (INT64_MIN / (MOTOR_POSITION_MIN)))
+#error Overflow condition detected.
+#endif
+
+#if ((((MOTOR_POSITION_MAX) *                                                  \
+       (MOTOR_HAL_DEGREE_MULTIPILER * DEGREES_PER_REVISION)) /                 \
+      (MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP)) > INT32_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((((MOTOR_POSITION_MIN) *                                                  \
+       (MOTOR_HAL_DEGREE_MULTIPILER * DEGREES_PER_REVISION)) /                 \
+      (MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP)) < INT32_MIN)
+#error Overflow condition detected.
+#endif
+
+#if (MOTOR_STEPS_PER_REVOLUTION > INT16_MAX)
+#error Overflow condition detected.
+#endif
+
+#if (MC_MICROSTEPS_PER_STEP > INT8_MAX)
+#error Overflow condition detected.
+#endif
+
+#if ((MOTOR_STEPS_PER_REVOLUTION * MC_MICROSTEPS_PER_STEP) > INT16_MAX)
+#error Overflow condition detected.
+#endif
+
+int32_t motorHalGetPosition(void)
+{
+  (void) motorHalGetStatus();
+
+  //----------------------------------------------------------------
+  // Convert from microsteps to degrees*MOTOR_HAL_DEGREE_MULTIPLIER.
+  //----------------------------------------------------------------
+  int64_t result;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    result = (int64_t) motor_position;
   }
+
+  result *= ((int32_t) MOTOR_HAL_DEGREE_MULTIPLIER) *
+            ((int16_t) DEGREES_PER_REVOLUTION);
+  result /= ((int16_t) MOTOR_STEPS_PER_REVOLUTION) *
+            ((int8_t)  MC_MICROSTEPS_PER_STEP);
+
+  return (int32_t) result;
+}
+
+int8_t motorHalGetStatus(void)
+{
+  return motor_state_transition(motor_state);
 }
 

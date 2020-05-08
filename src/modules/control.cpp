@@ -63,7 +63,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       // if (parameters.ventilationMode == VENTILATOR_MODE_VC) {
       if (true) {
-        PT_WAIT_UNTIL(pt, motorHalStatus() != HAL_IN_PROGRESS);
+        PT_WAIT_UNTIL(pt, motorHalGetStatus() != HAL_IN_PROGRESS);
       } else {
         // TODO: Implement Assist mode run
       }
@@ -95,7 +95,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       DEBUG_PRINT("state: CONTROL_EXHALATION");
 
       // TODO: Fix this condition for assisted modes
-      PT_WAIT_UNTIL(pt, motorHalStatus() != HAL_IN_PROGRESS && timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
+      PT_WAIT_UNTIL(pt, motorHalGetStatus() != HAL_IN_PROGRESS && timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
       control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_IDLE;
       
     } else {
@@ -112,10 +112,23 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
   PT_END(pt);
 }
 
+#include <Arduino.h>
+
 int controlModuleInit(void)
 {
   if (motorHalInit() != HAL_OK) {
     return MODULE_FAIL;
+  }
+
+  while (true) {
+    motorHalCommand(MOTOR_HAL_COMMAND_OPEN, 30000U);
+    delay(10000);
+    motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
+    delay(5000);
+    motorHalCommand(MOTOR_HAL_COMMAND_CLOSE, 10000U);
+    delay(10000);
+    motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
+    delay(5000);
   }
   
   PT_INIT(&controlThread);
