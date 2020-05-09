@@ -10,15 +10,15 @@
 //==============================================================================
 
 // Motor
-//#define MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
+#define MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
 // #define MOTOR_STEPPERONLINE__23HS30_2804S_HG10
 // #define MOTOR_STEPPERONLINE__23HS22_2804S_HG15
-#define MOTOR_STEPPERONLINE__23HS22_2804S_HG20
+// #define MOTOR_STEPPERONLINE__23HS22_2804S_HG20
 // #define MOTOR_STEPPERONLINE__23HS22_2804S_HG50
 
 // Motor Controller
-//#define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
-#define MOTOR_CONTROLLER_STEPPERONLINE_ISD08
+#define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
+// #define MOTOR_CONTROLLER_STEPPERONLINE_ISD08
 // #define MOTOR_CONTROLLER_STEPPERONLINE_DM332T
 
 //==============================================================================
@@ -30,6 +30,9 @@
 // #define PRESSURE_SENSOR_MPXV7025
 // #define PRESSURE_SENSOR_MPXV7007
 #define PRESSURE_SENSOR_SSCDRRN100MDAA5
+
+//calibrate the bias of the pressure sensor at startup. Requires the user to make sure that the sensor sees environmental pressure at startup as well.
+#define PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
 
 // Airflow Sensor
 // Determine which airflow sensor is installed in the system
@@ -62,9 +65,6 @@
 // If commented out, debug features from that HAL will be disabled
 // TODO: Add more HAL debug features if needed
 #define DEBUG_MOTOR_HAL
-
-//calibrate the bias of the pressure sensor at startup. Requires the user to make sure that the sensor sees environmental pressure at startup as well.
-//#define PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
 
 // Module Debug Flags
 // If commented out, debug features from that module will be disabled
