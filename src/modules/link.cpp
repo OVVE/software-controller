@@ -64,7 +64,43 @@ uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
 {
+  
+  
+
+  
+
+  
   static uint8_t tmpMode;  // used for setting bits
+  
+  if (public_command_packet.packet_version != PACKET_VERSION)
+  {
+#ifdef SERIAL_DEBUG
+    SERIAL_DEBUG.print("invalid packet version: 0x");
+    SERIAL_DEBUG.println(public_command_packet.packet_version, HEX);
+#endif     
+    public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
+    return;
+  }
+  if (public_command_packet.packet_type == PACKET_TYPE_FIRMWARE)
+  {
+    // TODO: handle fw updates
+#ifdef SERIAL_DEBUG
+    SERIAL_DEBUG.println("firmware packet update not available yet");
+#endif
+    return;
+  }    
+  // check to see that this is a data packet
+  if (public_command_packet.packet_type != PACKET_TYPE_COMMAND)
+  {
+#ifdef SERIAL_DEBUG
+    SERIAL_DEBUG.print("not a command packet set in packet type: 0x");
+    SERIAL_DEBUG.println(public_command_packet.packet_type, HEX);
+#endif 
+    return;
+  }
+
+  public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
+  
   comm.startVentilation = (public_command_packet.command & COMMAND_BIT_START) != 0x00;
 
   tmpMode = public_command_packet.mode_value;
@@ -78,9 +114,19 @@ void updateFromCommandPacket()
     comm.ventilationMode = tmpMode;
     public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_SETPOINT_MISMATCH;
   }
-  comm.volumeRequested = public_command_packet.tidal_volume_set;
+
   comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
+  comm.volumeRequested = public_command_packet.tidal_volume_set;
   comm.ieRatioRequested = public_command_packet.ie_ratio_set;
+  comm.pressureRequested = public_command_packet.pressure_set;
+  comm.highPressureLimit = public_command_packet.high_pressure_limit_set;
+  comm.lowPressureLimit = public_command_packet.low_pressure_limit_set; 
+  comm.highVolumeLimit = public_command_packet.high_volume_limit_set;
+  comm.lowVolumeLimit = public_command_packet.low_volume_limit_set;
+  comm.highPressureLimit = public_command_packet.high_pressure_limit_set;
+  comm.lowPressureLimit = public_command_packet.low_pressure_limit_set;   
+  comm.highRespiratoryRateLimit = public_command_packet.high_respiratory_rate_limit_set;
+  comm.lowRespiratoryRateLimit = public_command_packet.low_respiratory_rate_limit_set;
  
   public_data_packet.battery_status = 0; // TBD set to real value when available
 #ifdef SERIAL_DEBUG
