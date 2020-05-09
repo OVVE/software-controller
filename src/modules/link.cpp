@@ -100,7 +100,6 @@ void updateFromCommandPacket()
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
 void updateDataPacket()
 {
-  
   public_data_packet.packet_version = PACKET_VERSION;
   public_data_packet.packet_type = PACKET_TYPE_DATA;
   
@@ -125,9 +124,8 @@ void updateDataPacket()
   //     public_data_packet.battery_status &= ~BATTERY_CHARGING;  // turn bit 7 OFF independent of lower bits
   //   }
   public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
-  //public_data_packet.respiratory_rate_set = control.respirationRateRequested; // // should we use the one from parameters or this one 
 
-  //public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
+  public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
 
   public_data_packet.tidal_volume_set = parameters.volumeRequested;
   public_data_packet.tidal_volume_measured = sensors.currentVolume;
@@ -139,7 +137,7 @@ void updateDataPacket()
   public_data_packet.peak_pressure_measured = sensors.peakPressure;
   public_data_packet.plateau_value_measurement = sensors.plateauPressure;
   
-  //public_data_packet.pressure_set =   
+  public_data_packet.pressure_set = parameters.pressureRequested;
   public_data_packet.pressure_measured = sensors.currentPressure;
 
   public_data_packet.flow_measured = sensors.currentFlow; 
@@ -148,25 +146,14 @@ void updateDataPacket()
   public_data_packet.volume_out_measured = sensors.volumeOut;  
   public_data_packet.volume_rate_measured = sensors.volumePerMinute;
 
-  //public_data_packet.high_pressure_limit_set =; 
-  //public_data_packet.low_pressure_limit_set =;   
+  public_data_packet.high_pressure_limit_set = parameters.highPressureLimit; 
+  public_data_packet.low_pressure_limit_set = parameters.lowPressureLimit;   
 
-  //public_data_packet.high_volume_limit_set =; 
-  //public_data_packet.low_volume_limit_set =;
+  public_data_packet.high_volume_limit_set = parameters.highVolumeLimit; 
+  public_data_packet.low_volume_limit_set = parameters.lowVolumeLimit;
 
-  //public_data_packet.high_respiratory_rate_limit_set =; 
-  //public_data_packet.low_respiratory_rate_limit_set =;
-  
-  // could not find these in any modules in develop branch 4/29/2020
-  //    battery status
-  //    public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
-  //    public_data_packet.pressure_set = 
-  // public_data_packet.high_pressure_limit_set =; 
-  // public_data_packet.low_pressure_limit_set =;   
-  // public_data_packet.high_volume_limit_set =; 
-  // public_data_packet.low_volume_limit_set =;
-  //public_data_packet.high_respiratory_rate_limit_set =; 
-  //public_data_packet.low_respiratory_rate_limit_set =;  
+  public_data_packet.high_respiratory_rate_limit_set = parameters.highRespiratoryRateLimit; 
+  public_data_packet.low_respiratory_rate_limit_set = parameters.lowRespiratoryRateLimit;
  
 //#define SET_VALUES // - for testing
 #ifdef SET_VALUES
