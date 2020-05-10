@@ -24,8 +24,11 @@
 #ifdef DEBUG_SENSORS_MODULE
 #define DEBUG_MODULE "sensors"
 #include "../util/debug.h"
+#else
+#define DEBUG_PLOT(...)
+#define DEBUG_PRINT(...)
+#define DEBUG_PRINT_EVERY(...)
 #endif
-
 // 
 // Pressure Sensor Parameters
 //

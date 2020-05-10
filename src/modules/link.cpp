@@ -4,17 +4,7 @@
 //
 #include <stdint.h>
 
-//#define USE_FAST_CRC
-#ifdef USE_FAST_CRC  // utils/crc16.h not found for DUE and the function used here to wrap it is causing timeouts
-                     // the header file has functions defined using inline assembly. It works fine on Mega with a 
-                     // standalone program, but using it with the controller is always taking too much time.
-                     
-#include <FastCRC.h>
-FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
-#else
-#include <util/crc16.h>
-#endif
-
+#include "../config.h"
 #include "../pt/pt.h"
 #include "../modules/link.h"
 #include "../modules/module.h"
@@ -22,6 +12,15 @@ FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 
 #include "../modules/control.h"
 #include "../modules/sensors.h"
 #include "../hal/serial.h"
+
+#ifdef DEBUG_LINK
+#define DEBUG_MODULE "link"
+#include "../util/debug.h"
+#endif
+
+
+#define LINK_PACKET_TYPE_PUBLICDATA_PACKET 0x01
+#define LINK_PACKET_TYPE_COMMAND_PACKET 0x02
 
 // Private Variables
 struct link comm;
@@ -36,30 +35,11 @@ command_packet_def public_command_packet;
 
 // Public Variables
 // shared with serial.cpp
-uint8_t data_bytes[sizeof(data_packet_def)];
-uint16_t sizeof_data_bytes = sizeof(data_bytes);
-uint8_t command_bytes[sizeof(command_packet_def)];
-uint16_t sizeof_command_bytes = sizeof(command_bytes);
-extern bool watchdog_exceeded;  // timeout waiting for number of received bytes (command packet)
-extern bool clear_input;        // if there are issues with command packet data then let serial know to clear the input buffer
 extern struct parameters parameters;
 extern struct control control;
 extern struct sensors sensors;
 
-#ifndef USE_FAST_CRC
 
-uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
-{
- static uint16_t crc_base;
- crc_base = 0xFFFF;
-
- while(byteLength--)
- {
-   crc_base = _crc_xmodem_update(crc_base, (uint8_t)*bytes++);
- }
- return(crc_base);
-}
-#endif
 
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
@@ -156,102 +136,77 @@ void updateDataPacket()
   
 }
 
-static PT_THREAD(serialReadThreadMain(struct pt* pt))
-{
-  static uint16_t calc_crc;
-  static uint32_t dropped_packet_count = 0;
-  static uint32_t watchdog_count = 0;
-  static command_packet_def command_packet;
-  
-  PT_BEGIN(pt);
 
-  PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
-  
-  if (watchdog_exceeded == true)
+
+int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint16_t sequenceNumber, uint8_t* data)
+{
+  static command_packet_def command_packet;
+  static uint16_t lastSequence=-1;
+  if ((packetType==LINK_PACKET_TYPE_COMMAND_PACKET) && (packetLen==sizeof(command_packet)))
   {
-    watchdog_count++;    
-    watchdog_exceeded = false;
-    clear_input = true;
-    public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
-  }
-  else
-  {
-    memcpy((void *)&command_packet, (void *)command_bytes, sizeof(command_packet));
-    if ((command_packet.sequence_count != last_sequence_count))
+    memcpy((void *)&command_packet, (void *)data, sizeof(command_packet));
+    if ( (sequenceNumber != lastSequence+1) && (lastSequence!=-1))
     {
-      dropped_packet_count++;
-#ifdef SERIAL_DEBUG
-      SERIAL_DEBUG.print("unexpected sequence count: ");
-      SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
-#endif    
-      clear_input = true;
+      serial_statistics.commandPacketSequenceWrongCnt++;
       public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
-    }
-    else
-    {
-#ifdef USE_FAST_CRC
-      calc_crc = CRC16.ccitt((uint8_t *)&command_packet, sizeof(command_packet) - 2);
-#else 
-      calc_crc = calc_crc_avrlib((uint8_t *)&command_packet, sizeof(command_packet) - 2); 
-#endif 
-      if (command_packet.crc != calc_crc)
-      {
-        dropped_packet_count++;
-        public_data_packet.alarm_bits |= ALARM_CRC_ERROR;
-#ifdef SERIAL_DEBUG
-        SERIAL_DEBUG.print("bad CRC 0x ");
-        SERIAL_DEBUG.println(command_packet.crc, HEX);
-#endif  
-        clear_input = true;
-      }
-      else
+    } else
       {
         public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
         public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
         memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
-#ifdef SERIAL_DEBUG
-        SERIAL_DEBUG.print("Successful packet received CRC from command packet: ");
-        SERIAL_DEBUG.println(public_command_packet.crc, DEC);
-#endif           
       }          
-    }
-  }  
-#ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("packet count: ");
-  SERIAL_DEBUG.println(sequence_count, DEC);
-  SERIAL_DEBUG.print("dropped packet count: ");
-  SERIAL_DEBUG.println(dropped_packet_count, DEC);
-  SERIAL_DEBUG.print("timeout count: ");
-  SERIAL_DEBUG.println(watchdog_count);
-  SERIAL_DEBUG.println(" ");
-#endif
+    lastSequence=sequenceNumber;
+  }
+}
+
+static PT_THREAD(serialReadThreadMain(struct pt* pt))
+{
+  static uint16_t calc_crc;
+  static uint32_t dropped_packet_count = 0;
+  static uint32_t watchdog_count = 0;
+  
+  PT_BEGIN(pt);
+
+  serialHalHandleRx(linkProcessPacket);
+
+  
   PT_RESTART(pt);
   PT_END(pt);
 }
 
+#define LINK_PUBLIC_DATA_TIMEOUT 100 // in ms
+#define LINK_DEBUG_MSG_TIMEOUT 20
+
 static PT_THREAD(serialSendThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-  last_sequence_count = sequence_count;  // set this for the next read as the sequence count will advance and wait for read to complete
-  ++sequence_count;
-  updateDataPacket();
-  public_data_packet.sequence_count = sequence_count;
-  public_data_packet.packet_version = PACKET_VERSION;
-#ifdef USE_FAST_CRC
-   public_data_packet.crc = CRC16.ccitt((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);   
-#else  
-  public_data_packet.crc = calc_crc_avrlib((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);
-#endif
+  static long lastPublicDataMillis=0;
+  static long lastDebugMsgMillis=0;
+  //continously process tx data
+  serialHalSendData();
 
-#ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("Microcontroller sending sequence: ");
-  SERIAL_DEBUG.print(sequence_count, DEC);
-  SERIAL_DEBUG.print(", CRC: ");
-  SERIAL_DEBUG.println(public_data_packet.crc, DEC);
-#endif    
-  memcpy((void *)&data_bytes, (void *)&public_data_packet, sizeof(data_bytes));
-  PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
+  //check if we need to send the next public data packet
+  if (millis()>lastPublicDataMillis+LINK_PUBLIC_DATA_TIMEOUT)
+  {
+    lastPublicDataMillis=millis();
+    sequence_count++;
+    last_sequence_count = sequence_count; 
+    updateDataPacket();
+
+    serialHalSendPacket(LINK_PACKET_TYPE_PUBLICDATA_PACKET,sizeof(public_data_packet),sequence_count,(uint8_t*)&public_data_packet);
+
+    //directly start sending if possible
+    serialHalSendData();
+  }
+//check if we need to send the next public data packet
+  if (millis()>lastDebugMsgMillis+LINK_DEBUG_MSG_TIMEOUT)
+  {
+    lastDebugMsgMillis=millis();
+    
+
+  }
+  
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -266,7 +221,9 @@ PT_THREAD(serialThreadMain(struct pt* pt))
   
   if (!PT_SCHEDULE(serialReadThreadMain(&serialReadThread))) {
     PT_EXIT(pt);
-  }  
+  }
+
+  DEBUG_PRINT_EVERY(10000,"Serial Stats: TX(OK,FAIL,SEQERR): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.commandPacketSequenceWrongCnt);
   PT_RESTART(pt);
   PT_END(pt);
 }

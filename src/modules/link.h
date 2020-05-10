@@ -34,11 +34,7 @@
 #define MODE_START_STOP  0x80
 
 
-#define PACKET_VERSION 2
-
 typedef struct __attribute__((packed)) {
-  uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
   uint32_t respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
   uint32_t respiratory_rate_set;      // bytes 8 - 11
@@ -58,18 +54,14 @@ typedef struct __attribute__((packed)) {
   uint8_t battery_level;              // byte 61
   uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
   uint32_t alarm_bits;                // bytes 64 - 67
-  uint16_t crc;                       // bytes 68 - 69 - rpi unsigned short int
 } data_packet_def;
 
 typedef struct __attribute__((packed)) {
-  uint16_t sequence_count;            // bytes 0 - 1 - rpi unsigned short int
-  uint8_t packet_version;             // byte 2      - rpi unsigned char
   uint8_t mode_value;                 // byte 3      - rpi unsigned char
   uint32_t respiratory_rate_set;      // bytes 4 - 7 - rpi unsigned int
   int32_t tidal_volume_set;           // bytes 8 - 11
   uint32_t ie_ratio_set;              // bytes 12 - 15
   uint32_t alarm_bits;                // bytes 16 - 19
-  uint16_t crc;                       // bytes 20 - 21 - rpi unsigned short int  
 } command_packet_def;
 
 struct link {

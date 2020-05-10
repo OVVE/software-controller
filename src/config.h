@@ -72,6 +72,8 @@
 #define DEBUG_SENSORS_MODULE
 #define DEBUG_LINK_MODULE
 #define DEBUG_PARAMETERS_MODULE
+#define DEBUG_SERIAL
+#define DEBUG_LINK
 
 // Main Loop Debug Flags
 // If commented out, debug features from that module will be disabled

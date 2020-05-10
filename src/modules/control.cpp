@@ -21,6 +21,10 @@
 #ifdef DEBUG_CONTROL_MODULE
 #define DEBUG_MODULE "control"
 #include "../util/debug.h"
+#else
+#define DEBUG_PLOT(...)
+#define DEBUG_PRINT(...)
+#define DEBUG_PRINT_EVERY(...)
 #endif
 
 #define CONTROL_LOOP_PERIOD (10 MSEC)
