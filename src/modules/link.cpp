@@ -22,6 +22,7 @@ FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 
 #include "../modules/control.h"
 #include "../modules/sensors.h"
 #include "../hal/serial.h"
+#include "../util/alarm.h"
 
 // Private Variables
 struct link comm;
@@ -46,8 +47,34 @@ extern struct parameters parameters;
 extern struct control control;
 extern struct sensors sensors;
 
-#ifndef USE_FAST_CRC
 
+void handleUIAlarms()
+{
+  static uint32_t last_alarms;
+  static bool alarm_start = false;
+  
+  if (alarm_start == false) {
+    last_alarms = public_data_packet.alarm_bits;
+    alarm_start = true;
+  }
+}
+
+void setDataPacketAlarmBits()
+{
+  
+  //public_data_packet.alarm_bits = alarmGet(&sensors.onBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU... : public_data_packet.alarm_bits &= ~ALARM_ECU;
+  public_data_packet.alarm_bits = alarmGet(&sensors.lowBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_BATTERY : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_BATTERY;
+  public_data_packet.alarm_bits = alarmGet(&sensors.badPressureSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_PRESSURE_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_PRESSURE_SENSOR;
+  public_data_packet.alarm_bits = alarmGet(&sensors.badAirflowSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_FLOW_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_FLOW_SENSOR;
+  public_data_packet.alarm_bits = alarmGet(&sensors.highPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_PRESSURE;
+  public_data_packet.alarm_bits = alarmGet(&sensors.lowPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_PRESSURE;
+  public_data_packet.alarm_bits = alarmGet(&sensors.highPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_VOLUME;
+  public_data_packet.alarm_bits = alarmGet(&sensors.lowPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_VOLUME; 
+  public_data_packet.alarm_bits = alarmGet(&sensors.highRespiratoryRateAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_RESPIRATORY_RATE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_RESPIRATORY_RATE;
+  public_data_packet.alarm_bits = alarmGet(&sensors.lowRespiratoryRateAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_RESPIRATORY_RATE : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_RESPIRATORY_RATE;
+}
+
+#ifndef USE_FAST_CRC
 uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 {
  static uint16_t crc_base;
@@ -64,12 +91,6 @@ uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
 {
-  
-  
-
-  
-
-  
   static uint8_t tmpMode;  // used for setting bits
   
   if (public_command_packet.packet_version != PACKET_VERSION)
@@ -162,6 +183,7 @@ void updateDataPacket()
     public_data_packet.control_state &= ~MODE_START_STOP;
   }
   
+  setDataPacketAlarmBits();
   //public_data_packet.battery_status = 0x7f & battery.percent; // could not find battery_status in modules
   // if (battery.charging) {
        // public_data_packet.battery_status |= BATTERY_CHARGING; // turn bit 7 ON independent of lower bits
