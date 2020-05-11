@@ -13,22 +13,20 @@
 #include "../modules/sensors.h"
 #include "../hal/serial.h"
 
+#define LOG_MODULE "link"
+#include "../util/log.h"
+
+
 #ifdef DEBUG_LINK
 #define DEBUG_MODULE "link"
 #include "../util/debug.h"
 #endif
-
-
-#define LINK_PACKET_TYPE_PUBLICDATA_PACKET 0x01
-#define LINK_PACKET_TYPE_COMMAND_PACKET 0x02
 
 // Private Variables
 struct link comm;
 static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
-uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
-uint16_t last_sequence_count; // what to expect for next sequence, set in write and checked in read
 data_packet_def public_data_packet;
 command_packet_def public_command_packet;
 
@@ -138,16 +136,15 @@ void updateDataPacket()
 
 
 
-int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint16_t sequenceNumber, uint8_t* data)
+int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint8_t* data)
 {
   static command_packet_def command_packet;
-  static uint16_t lastSequence=-1;
+  static uint32_t lastSeqErrorCnt=0;
   if ((packetType==LINK_PACKET_TYPE_COMMAND_PACKET) && (packetLen==sizeof(command_packet)))
   {
     memcpy((void *)&command_packet, (void *)data, sizeof(command_packet));
-    if ( (sequenceNumber != lastSequence+1) && (lastSequence!=-1))
+    if ( (serial_statistics.sequenceNoWrongCnt != lastSeqErrorCnt))
     {
-      serial_statistics.commandPacketSequenceWrongCnt++;
       public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
     } else
       {
@@ -156,7 +153,7 @@ int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint16_t sequenceNu
         memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
       }          
-    lastSequence=sequenceNumber;
+    lastSeqErrorCnt=serial_statistics.sequenceNoWrongCnt;
   }
 }
 
@@ -190,11 +187,9 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
   if (millis()>lastPublicDataMillis+LINK_PUBLIC_DATA_TIMEOUT)
   {
     lastPublicDataMillis=millis();
-    sequence_count++;
-    last_sequence_count = sequence_count; 
     updateDataPacket();
 
-    serialHalSendPacket(LINK_PACKET_TYPE_PUBLICDATA_PACKET,sizeof(public_data_packet),sequence_count,(uint8_t*)&public_data_packet);
+    serialHalSendPacket(LINK_PACKET_TYPE_PUBLICDATA_PACKET,sizeof(public_data_packet),(uint8_t*)&public_data_packet);
 
     //directly start sending if possible
     serialHalSendData();
@@ -223,7 +218,8 @@ PT_THREAD(serialThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
 
-  DEBUG_PRINT_EVERY(10000,"Serial Stats: TX(OK,FAIL,SEQERR): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.commandPacketSequenceWrongCnt);
+  DEBUG_PRINT_EVERY(10000,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt);
+  LOG_PRINT_EVERY(10000,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt);
   PT_RESTART(pt);
   PT_END(pt);
 }

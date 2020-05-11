@@ -45,6 +45,10 @@
 // If commented out, all debug features will be disabled
 #define DEBUG
 
+//Global logging flag
+//enables logging via serial port to UI
+#define ENABLE_LOGGING
+
 // Global plotting flag
 // In order to enable the standard Arduino Serial Plotter, all other types of
 // messages must be disabled and only a single module can plot a single set

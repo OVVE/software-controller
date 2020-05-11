@@ -15,7 +15,7 @@
 #include "../util/debug.h"
 #endif
 
-#define SERIAL_TX_BUFFERSIZE 512
+#define SERIAL_TX_BUFFERSIZE 2048
 
 uint16_t serialTxBufferHead=0;
 uint16_t serialTxBufferTail=0;
@@ -89,7 +89,7 @@ int serialHalInit(void)
 #define SERIAL_STARTBYTE_3      0x7e
 
 //handles all incoming serial data and returns a processPacket callback for every correctly processed packet
-int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen, uint16_t sequenceNumber, uint8_t* data))
+int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen, uint8_t* data))
 {
   uint8_t bytesAvailable;
   uint8_t inByte;
@@ -198,10 +198,16 @@ int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen
 
       if (crcReceived==crcCalculated)
       {
+          static uint16_t lastSeqNum=0;
+          if ((seqNum!=lastSeqNum+1) && (serial_statistics.packetsCntReceivedOk)) //if serial_statistics.packetsCntReceivedOk==0 it's the first packet
+          {
+              serial_statistics.sequenceNoWrongCnt++;
+          }
 
           serial_statistics.packetsCntReceivedOk++;
           if (processPacket)
-            processPacket(packetType,msgLen,seqNum,&rxDataBuffer[0]);
+            processPacket(packetType,msgLen,&rxDataBuffer[0]);
+          lastSeqNum=seqNum;
       }else
       {
         serial_statistics.packetsCntWrongCrc++;
@@ -217,10 +223,11 @@ int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen
   return HAL_IN_PROGRESS;
 }
 
-int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint16_t sequenceNumber, uint8_t* data)
+int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
 {
     uint8_t cnt;
     uint16_t crc=0xFFFF;
+    static uint16_t sequenceNumber=0;
     if (packetLength+SERIAL_HEADER_LENGTH>serialTxBufferBytesAvailable())
     {
       serial_statistics.packetsCntSentBufferOverFlow++;
@@ -255,6 +262,7 @@ int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint16_t seque
     serialTxBufferAddByte(crc>>8);
 
     serial_statistics.packetsCntSentOk++;
+    sequenceNumber++;
 
     return HAL_OK;
 }
