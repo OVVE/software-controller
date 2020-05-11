@@ -16,7 +16,7 @@
 // #define MOTOR_STEPPERONLINE__23HS22_2804S_HG20
 // #define MOTOR_STEPPERONLINE__23HS22_2804S_HG50
 
-// #define MOTOR_ACCELERATION
+#define MOTOR_ACCELERATION
 
 // Motor Controller
 #define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
@@ -34,7 +34,7 @@
 #define PRESSURE_SENSOR_SSCDRRN100MDAA5
 
 //calibrate the bias of the pressure sensor at startup. Requires the user to make sure that the sensor sees environmental pressure at startup as well.
-#define PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
+// #define PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
 
 // Airflow Sensor
 // Determine which airflow sensor is installed in the system
