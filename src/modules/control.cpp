@@ -29,7 +29,7 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
-#define MAX_PEAK_PRESSURE 60.0f
+#define MAX_PEAK_PRESSURE 40.0f
 
 // Uncomment the following to enable the current closed loop control
  #define CONTROL_CLOSED_LOOP
