@@ -47,14 +47,19 @@ extern struct parameters parameters;
 extern struct control control;
 extern struct sensors sensors;
 
+static struct alarmProperties onCommunicationFailureAlarmProperties = {
+  .priority = ALARM_PRIORITY_SEVERE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
 
 void handleUIAlarms()
 {
-  static uint32_t last_alarms;
+  static uint32_t last_data_packet_alarms;
   static bool alarm_start = false;
   
   if (alarm_start == false) {
-    last_alarms = public_data_packet.alarm_bits;
+    last_data_packet_alarms = public_data_packet.alarm_bits;
     alarm_start = true;
   }
 }
@@ -68,8 +73,8 @@ void setDataPacketAlarmBits()
   public_data_packet.alarm_bits = alarmGet(&sensors.badAirflowSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_FLOW_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_FLOW_SENSOR;
   public_data_packet.alarm_bits = alarmGet(&sensors.highPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_PRESSURE;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_PRESSURE;
-  public_data_packet.alarm_bits = alarmGet(&sensors.highPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_VOLUME;
-  public_data_packet.alarm_bits = alarmGet(&sensors.lowPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_VOLUME; 
+  public_data_packet.alarm_bits = alarmGet(&sensors.highVolumeAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_VOLUME;
+  public_data_packet.alarm_bits = alarmGet(&sensors.lowVolumeAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_VOLUME; 
   public_data_packet.alarm_bits = alarmGet(&sensors.highRespiratoryRateAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_RESPIRATORY_RATE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_RESPIRATORY_RATE;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowRespiratoryRateAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_RESPIRATORY_RATE : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_RESPIRATORY_RATE;
 }
@@ -159,9 +164,10 @@ void updateFromCommandPacket()
         SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
 #endif  
   // Alarms
-  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
-  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;  
-  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
+  
+  //comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
+  //comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;  
+  //comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_ECU_COMMUNICATION_FAILURE) != 0x00;
 }
 
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
@@ -284,7 +290,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     watchdog_count++;    
     watchdog_exceeded = false;
     clear_input = true;
-    public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
+    alarmSet(&comm.onCommunicationFailure);
   }
   else
   {
@@ -297,7 +303,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
-      public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
+      alarmSet(&comm.onCommunicationFailure);
     }
     else
     {
@@ -309,7 +315,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
-        public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
+        alarmSet(&comm.onCommunicationFailure);
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("bad CRC 0x ");
         SERIAL_DEBUG.println(command_packet.crc, HEX);
@@ -318,7 +324,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       }
       else
       {
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
+        //public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
     
         memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
@@ -388,7 +394,8 @@ int linkModuleInit(void)
   if (serialHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
-
+  alarmInit(&comm.onCommunicationFailure, &onCommunicationFailureAlarmProperties);
+  
   PT_INIT(&serialSendThread);
   PT_INIT(&serialReadThread);
 
