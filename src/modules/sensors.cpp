@@ -31,7 +31,7 @@
 //
 #define PRESSURE_SAMPLING_PERIOD                 (10 MSEC)
 
-#define PRESSURE_WINDOW                           (4)
+#define PRESSURE_WINDOW                           (8)
 
 // TODO: Define these thresholds accurately
 #define PEEP_PRESSURE_FLAT_THRESHOLD             (20)
@@ -51,6 +51,19 @@
 #define VOLUME_MINUTE_PERIOD                      (5 SEC)
 #define VOLUME_MINUTE_WINDOW                     (60 SEC) / VOLUME_MINUTE_PERIOD
 
+// 2.0 [SLM] inhalation flow threshold
+#define INHALATION_DETECTION_FLOW_ABSOLUTE_THRESHOLD (200)
+// 0.9 [SLM] exhalation flow threshold
+#define EXHALATION_DETECTION_FLOW_ABSOLUTE_THRESHOLD ( 90)
+// Delta of 0.4 [cmH2O] to determine if pressures are roughly equal
+#define PRESSURE_EQUAL (40)
+
+// Patient States
+#define PATIENT_HOLD_OUT   0
+#define PATIENT_INHALATION 1
+#define PATIENT_HOLD_IN    2
+#define PATIENT_EXHALATION 3
+
 // Public variables
 struct sensors sensors;
 
@@ -68,14 +81,56 @@ static uint8_t peepPressureSumCnt;
 static uint8_t peepPressureSumPos;
 static int32_t peepPressureHistoryBuffer[SENSORS_PEEP_AVG_CNT];
 
+static uint8_t patientState = PATIENT_HOLD_OUT;
+
+// In order to properly update measurements and synchronize with the patient,
+// model what the patient's current behavior is as a state machine
+static void updatePatientState(void)
+{
+  uint8_t previousPatientState = patientState;
+  switch (patientState)
+  {
+    case PATIENT_INHALATION:
+    // TODO: determine if we can get to hold in on every breath?
+    if (control.state == CONTROL_HOLD_IN) {
+      patientState = PATIENT_HOLD_IN;
+    } else if ((sensors.currentFlow < EXHALATION_DETECTION_FLOW_ABSOLUTE_THRESHOLD) &&
+               (control.state != CONTROL_INHALATION) && (control.state != CONTROL_BEGIN_HOLD_IN)) {
+      patientState = PATIENT_EXHALATION;
+    }
+    break;
+    case PATIENT_HOLD_IN:
+    // TODO: determine if we can get here on patient spontaneous breaths
+    if (control.state == CONTROL_EXHALATION) {
+      patientState = PATIENT_EXHALATION;
+    }
+    break;
+    case PATIENT_EXHALATION:
+    if (sensors.currentFlow > INHALATION_DETECTION_FLOW_ABSOLUTE_THRESHOLD) {
+      patientState = PATIENT_INHALATION;
+    } else if (abs(sensors.currentPressure - sensors.peepPressure) < PRESSURE_EQUAL) {
+      patientState = PATIENT_HOLD_OUT;
+    }
+    break;
+    case PATIENT_HOLD_OUT:
+    if (sensors.currentFlow > INHALATION_DETECTION_FLOW_ABSOLUTE_THRESHOLD) {
+      patientState = PATIENT_INHALATION;
+    }
+    break;
+  }
+  if (previousPatientState != patientState) {
+    DEBUG_PRINT("Patient State %u -> %u", previousPatientState, patientState);
+  }
+  return;
+}
+
 static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 {
   static int16_t currentMaxPressure = INT16_MIN;
-  static bool setPeakPressure = false;
   static int32_t plateauPressureSum = 0;
   static int8_t plateauPressureSampleCount = 0;
   static int16_t previousPressure[PRESSURE_WINDOW];
-  static uint8_t inhalationTimeout = 0;
+  static uint8_t previousPatientState = PATIENT_HOLD_OUT;
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
@@ -119,108 +174,44 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     previousPressure[0] = pressure;
     
+    // Update the patient state
+    updatePatientState();
+    
     // Derive Peak Pressure from pressure readings; updating the public value upon
-    // entry into CONTROL_HOLD_IN state
-    if ((control.state == CONTROL_HOLD_IN) && !setPeakPressure) {
+    // patient exhalation
+    if ((previousPatientState == PATIENT_HOLD_IN) && (patientState == PATIENT_EXHALATION)) {
       sensors.peakPressure = currentMaxPressure;
       currentMaxPressure = INT16_MIN;
-      setPeakPressure = true;
     } else {
       currentMaxPressure = max(currentMaxPressure, pressure);
-      if (control.state == CONTROL_EXHALATION) {
-        setPeakPressure = false;
-      }
     }
     
     // Derive Plateau Pressure from pressure readings during hold in; updating
     // public value upon entry into CONTROL_EXHALATION state
-    if (control.state == CONTROL_HOLD_IN) {
+    if (patientState == PATIENT_HOLD_IN) {
       plateauPressureSum += pressure;
       plateauPressureSampleCount++;
-    } else if ((control.state == CONTROL_EXHALATION) &&
+    } else if ((patientState == PATIENT_EXHALATION) &&
                (plateauPressureSampleCount > 0)) {
-      sensors.plateauPressure = plateauPressureSum / (int32_t)plateauPressureSampleCount;
+      sensors.plateauPressure = plateauPressureSum / plateauPressureSampleCount;
       plateauPressureSum = 0;
       plateauPressureSampleCount = 0;
     }
     
-
-    // Take the last 8 pressure values BEFORE we do the next breathing cycle. This should be a good average of our PEEP pressure.
-
-    if (control.state == CONTROL_INHALATION)
-    {
-      //reset values
-      if (peepPressureSumCnt)
-      {
-        static int32_t peepPressureSum; 
-        //calculate values and reset
-
-        peepPressureSum=0;
-        
-        for (uint8_t i=0;i<SENSORS_PEEP_AVG_CNT;i++)
-        {
-          peepPressureSum+=peepPressureHistoryBuffer[i];
-        }
-        
-        sensors.peepPressure = peepPressureSum/peepPressureSumCnt;
-
-        for (uint8_t i=0;i<SENSORS_PEEP_AVG_CNT;i++)
-          peepPressureHistoryBuffer[i]=0;
-
-        peepPressureSumCnt=0;
-        peepPressureSum=0;
-        peepPressureSumPos=0;
-      }
-    }else if (control.state == CONTROL_EXHALATION)
-    {
-      peepPressureHistoryBuffer[peepPressureSumPos]=pressure;
-
-      peepPressureSumPos++;
-      peepPressureSumPos%=SENSORS_PEEP_AVG_CNT;
-
-      if (peepPressureSumCnt<SENSORS_PEEP_AVG_CNT)
-        peepPressureSumCnt++;
-    }
-
-    // Derive PEEP Pressure from pressure readings during exhalation after values
-    // have "stabilized" (ie, the difference of any one point from their average
-    // is less than some threshold)
-   /* if (control.state == CONTROL_EXHALATION) {
+    // Derive PEEP Pressure from an average of the last 7 pressure readings 
+    // while the patient is in the hold out state as during this time, no 
+    // pressure fluxations should be happening
+    if ((patientState == PATIENT_INHALATION) && (previousPatientState == PATIENT_HOLD_OUT)) {
       int32_t sum = 0;
-      for (int i = 0; i < PRESSURE_WINDOW; i++) {
+      for (int i = 1; i < PRESSURE_WINDOW; i++) {
         sum += previousPressure[i];
       }
       
-      int16_t average = sum / PRESSURE_WINDOW;
-      
-      bool flat = true;
-      for (int i = 0; i < PRESSURE_WINDOW; i++) {
-        if (abs(average - previousPressure[i]) > PEEP_PRESSURE_FLAT_THRESHOLD) {
-          flat = false;
-        }
-      }
-      
-      // TODO: determine if we want this reading to update so long as it can, or
-      // measure once per breath, like other derived pressures
-      if (flat) {
-        sensors.peepPressure = pressure;
-      }
+      sensors.peepPressure = sum / (PRESSURE_WINDOW - 1);
     }
-   */ 
-    // Derive inhalation detection from pressure readings during exhalation by
-    // looking for a dip in pressure below the PEEP threshold (or below an
-    // absolute pressure threshold)
-    if ((control.state == CONTROL_EXHALATION) && !sensors.inhalationDetected) {
-      if ((pressure < INHALATION_DETECTION_ABSOLUTE_THRESHOLD) ||
-          (sensors.peepPressure - pressure > INHALATION_DETECTION_PEEP_THRESHOLD)) {
-        sensors.inhalationDetected = true;
-        inhalationTimeout = 0;
-      }
-    }
-    if (sensors.inhalationDetected &&
-        (inhalationTimeout++ == (uint8_t) (INHALATION_TIMEOUT / PRESSURE_SAMPLING_PERIOD))) {
-      sensors.inhalationDetected = false;
-    }
+    
+    // Save patient state for next loop
+    previousPatientState = patientState;
     
     DEBUG_PRINT_EVERY(100, "Pressure  = %c%u.%01u mmH2O",
                       (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
@@ -239,13 +230,13 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   static int32_t airflowSum = 0;
   static uint32_t previousSampleTime = 0;
-  static bool setVolumeIn = false;
   static int16_t volumeMinuteWindow[VOLUME_MINUTE_WINDOW] = {0};
   static uint8_t volumeMinuteTimeout = 0;
   static int16_t maxVolume = INT16_MIN;
-  static bool volumeReset = false;
   static int16_t airflowBias = 0;
+  static uint8_t inhalationTimeout = 0;
   static int airflowBiasCounter = AIRFLOW_BIAS_SAMPLES;
+  static uint8_t previousPatientState = PATIENT_HOLD_OUT;
 
   PT_BEGIN(pt);
   
@@ -305,15 +296,15 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     sensors.currentFlow = airflow;
     sensors.currentVolume = airvolume;
     
+    // Update the patient state
+    updatePatientState();
+    
     // Derive Volume IN from current volume; updating the public value upon entry
-    // into CONTROL_HOLD_IN state
-    // if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
-    if ((control.state == CONTROL_EXHALATION) && !setVolumeIn) {
+    // into patient exhalation
+    if ((patientState == CONTROL_EXHALATION) && 
+        ((previousPatientState == CONTROL_HOLD_IN) ||
+         (previousPatientState == CONTROL_INHALATION))) {
       sensors.volumeIn = airvolume;
-      setVolumeIn = true;
-    // } else if (control.state == CONTROL_EXHALATION) {
-    } else if (control.state == CONTROL_INHALATION) {
-      setVolumeIn = false;
     }
     
     // Volume OUT cannot be derived from flow sensor due to position and direction
@@ -332,14 +323,35 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       maxVolume = INT16_MIN;
     }
 
-    // Determine if its time to reset the volume integrator, do it once in exhalation
-    if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
+    // Determine if its time to reset the volume integrator, do it upon entry 
+    // into patient exhalation
+    if ((patientState == PATIENT_EXHALATION) && 
+        ((previousPatientState == PATIENT_HOLD_IN) ||
+         (previousPatientState == PATIENT_INHALATION))) {
       DEBUG_PRINT("*** Reset Volume ***");
       airflowSum = 0;
-      volumeReset = true;
-    } else if (control.state == CONTROL_INHALATION) {
-      volumeReset = false;
     }
+    
+    // Trigger inhalation detection here when transitioning from patient 
+    // exhalation or hold out to inhalation; do so here as its typically related
+    // to airflow
+    // TODO: maybe find a better home for this
+    if ((patientState == PATIENT_INHALATION) && 
+        ((previousPatientState == PATIENT_HOLD_OUT) ||
+         (previousPatientState == PATIENT_EXHALATION))) {
+      DEBUG_PRINT("+++ Breath Detected!");
+      sensors.inhalationDetected = true;
+    }
+    
+    // Timeout mechanism for inhalation detector, only set for a brief window
+    // during which synchronization is possible
+    if (sensors.inhalationDetected &&
+        (inhalationTimeout++ == (uint8_t) (INHALATION_TIMEOUT / PRESSURE_SAMPLING_PERIOD))) {
+      sensors.inhalationDetected = false;
+    }
+    
+    // Save patient state for next loop
+    previousPatientState = patientState;
     
     DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
