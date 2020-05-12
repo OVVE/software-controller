@@ -34,7 +34,6 @@ uint16_t last_sequence_count; // what to expect for next sequence, set in write 
 data_packet_def public_data_packet;
 command_packet_def public_command_packet;
 uint32_t lastDataPacketAlarmBits;
-uint32_t lastCommandPacketAlarmBits;
 
 // Public Variables
 // shared with serial.cpp
@@ -58,12 +57,6 @@ static struct alarmProperties onCommunicationFailureAlarmProperties = {
 
 void handleUIAlarms()
 {
-  static bool alarm_start = false;
-  
-  if (alarm_start == false) {
-    alarm_start = true;
-    return;
-  }
   if (public_command_packet.alarm_bits & ALARM_ECU_LOW_BATTERY && lastDataPacketAlarmBits & ALARM_ECU_LOW_BATTERY)
   {
     alarmSuppress(&sensors.lowBatteryAlarm);
@@ -108,8 +101,12 @@ void handleUIAlarms()
 
 void setDataPacketAlarmBits()
 {
+ 
+  // ALARM_ECU_POWER_LOSS
+  // ALARM_ECU_HARDWARE_FAILURE
+  // ALARM_ECU_ESTOP_PRESSED
+  // what alarm bit - public_data_packet.alarm_bits = alarmGet(&sensors.onBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU... : public_data_packet.alarm_bits &= ~ALARM_ECU;
   
-  //public_data_packet.alarm_bits = alarmGet(&sensors.onBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU... : public_data_packet.alarm_bits &= ~ALARM_ECU;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_BATTERY : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_BATTERY;
   public_data_packet.alarm_bits = alarmGet(&sensors.badPressureSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_PRESSURE_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_PRESSURE_SENSOR;
   public_data_packet.alarm_bits = alarmGet(&sensors.badAirflowSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_FLOW_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_FLOW_SENSOR;
@@ -436,6 +433,7 @@ int linkModuleInit(void)
     return MODULE_FAIL;
   }
   alarmInit(&comm.onCommunicationFailureAlarm, &onCommunicationFailureAlarmProperties);
+  lastDataPacketAlarmBits = 0x0;
   
   PT_INIT(&serialSendThread);
   PT_INIT(&serialReadThread);
