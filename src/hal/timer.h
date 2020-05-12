@@ -14,8 +14,8 @@
 
 struct timer {
   uint32_t start;
-  uint32_t duration;
-  bool     periodic;
+  uint32_t duration : 31;
+  bool     periodic : 1;
 };
 
 // TODO: Doc
