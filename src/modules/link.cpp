@@ -122,8 +122,8 @@ void updateDataPacket()
   public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
   
   public_data_packet.control_state = control.state;
-  public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
-  public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
+  public_data_packet.ie_ratio_measured = sensors.ieRatioMeasured;
+  public_data_packet.respiratory_rate_measured = sensors.respirationRateMeasured;
   
   // readings from sensor module
   public_data_packet.plateau_value_measurement = sensors.plateauPressure;

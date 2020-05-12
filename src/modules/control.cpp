@@ -48,13 +48,11 @@ static struct timer breathTimer;
 static struct timer controlTimer;
 
 static uint32_t targetVolume=500;
+static uint16_t targetRespirationRate;
 static uint32_t totalBreathTime;
 static uint32_t targetInhalationTime;
 static uint32_t targetHoldTime;
 static uint32_t targetExhalationTime;
-
-static uint32_t measuredInhalationTime;
-static uint32_t measuredExhalationTime;
 
 static bool controlComplete;
 
@@ -277,7 +275,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
   {
     inhalationTrajectoryState=STATE_INHALATION_TRAJECTORY_INIT;
     // Collect all set points from parameters
-    totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
+    totalBreathTime = (60 SEC) / targetRespirationRate;
     targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
     targetInhalationTime-= HOLD_TIME; //HOLD is part of inhalation
     targetInhalationTime+=inhalationTrajectoryPhaseShiftEstimate; //allow more time to compensate for initial flow buildup in the bag as measure by the control loop
@@ -287,7 +285,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     targetVolume = parameters.volumeRequested;
     
 
-    DEBUG_PRINT("InH param: vol:%li respRate:%i ieRatio:%i",targetVolume,parameters.respirationRateRequested,parameters.ieRatioRequested);
+    DEBUG_PRINT("InH param: vol:%li respRate:%i ieRatio:%i",targetVolume,targetRespirationRate,parameters.ieRatioRequested);
   
     inhalationTrajectoryLastVolume=(float)sensors.volumeIn;
     inhalationTrajectoryInitialFlow=initialFlow();
@@ -331,7 +329,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
   if (inhalationTrajectoryState==STATE_INHALATION_TRAJECTORY_INIT)
   {
     // Collect all set points from parameters
-    totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
+    totalBreathTime = (60 SEC) / targetRespirationRate;
     targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
     targetInhalationTime-= HOLD_TIME; //HOLD is part of inhalation
     targetInhalationTime+=inhalationTrajectoryPhaseShiftEstimate; //allow more time to compensate for initial flow buildup in the bag as measure by the control loop
@@ -648,7 +646,7 @@ static bool checkExhalationTimeout(void)
   return (timerHalRun(&breathTimer) != HAL_IN_PROGRESS);
 }
 
-static bool syncBreathFound(void)
+static bool syncBreathFound(uint32_t currentBreathTime)
 {
   bool breathFound = false;
   
@@ -660,13 +658,13 @@ static bool syncBreathFound(void)
       // For AC mode, any breath found, only make sure the respiration rate for 
       // the breath is within the limit of the machine
       case VENTILATOR_MODE_AC:
-        breathFound = ((60 SEC) / timerHalCurrent(&breathTimer)) < MAX_RESPIRATORY_RATE;
+        breathFound = ((60 SEC) / currentBreathTime) < MAX_RESPIRATORY_RATE;
       break;
       
       // For SIMV-CPAP mode, any breath found, only make sure the respiration rate
       // for the breath is within a margin of the target
       case VENTILATOR_MODE_SIMV_CPAP:
-        breathFound = (((60 SEC) / timerHalCurrent(&breathTimer)) <
+        breathFound = (((60 SEC) / currentBreathTime) <
                        min(RESPIRATORY_RATE_MARGIN(parameters.respirationRateRequested),
                            MAX_RESPIRATORY_RATE));
       break;
@@ -714,9 +712,6 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       DEBUG_PRINT_EVERY(100, "state: CONTROL_IDLE");
 
       // Reset any parameters
-      control.breathCount = 0;
-      control.ieRatioMeasured = 0;
-      control.respirationRateMeasured = 0;
       controlI=0.0f;
       exhalationTargetPosition=MOTOR_HAL_INIT_POSITION;
       inhalationTrajectoryInitialFlow=0.0f;
@@ -728,6 +723,16 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Wait for the parameters to enter the run state before
       PT_WAIT_UNTIL(pt, parameters.startVentilation);
       
+      // Setup the wait time and parameters for the first breath,
+      // deliver it either on the first patient breath seen or after
+      // half of the set respiratory rate, whichever comes first
+      targetRespirationRate = parameters.respirationRateRequested;
+      totalBreathTime = (30 SEC) / targetRespirationRate;
+      timerHalBegin(&breathTimer, totalBreathTime, false);
+      
+      PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS) ||
+                         (syncBreathFound(totalBreathTime))));
+      
       //call with 1 here to start with the conservative initial guess based on user parameters
       generateFlowInhalationTrajectory(1);
 
@@ -736,10 +741,6 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
       DEBUG_PRINT("state: CONTROL_BEGIN_INHALATION");
-     
-      // Initialize all 
-      measuredInhalationTime = 0;
-      measuredExhalationTime = 0;
       
       // Kickoff timer for monitoring breath of breathing
       timerHalBegin(&breathTimer, totalBreathTime, false);
@@ -770,10 +771,6 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
           break;
         }
       }
-
-
-      // Update some things on state exit
-      measuredInhalationTime = timerHalCurrent(&breathTimer);
         
       control.state = CONTROL_BEGIN_HOLD_IN;
       
@@ -839,16 +836,13 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // At this point, either wait for the breath timer to expire or find a new
       // breath to sync with
       PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS) ||
-                         (syncBreathFound())));
-      
-      // Calculate and update the measured times
-      uint32_t currentBreathTime = timerHalCurrent(&breathTimer);
-      measuredExhalationTime = currentBreathTime - measuredInhalationTime;
-      control.ieRatioMeasured = (measuredExhalationTime << 8) / measuredInhalationTime; // TODO: address fixed point math
-      control.respirationRateMeasured = ((60 SEC) + ((currentBreathTime >> 1) USEC)) / (currentBreathTime USEC);
-      control.breathCount++;
+                         (syncBreathFound(timerHalCurrent(&breathTimer)))));
+                         
+      // Setup the next breath based on the current measured respiratory rate (or
+      // the set point if its faster)
+      targetRespirationRate = max(parameters.respirationRateRequested,
+                                  sensors.respirationRateMeasured);
 
-      DEBUG_PRINT("Timing report [ms]: It: %li Ps: %li Et: %li I:E [1=1000]: %li RR:%li",(uint32_t)measuredInhalationTime/(uint32_t)1000, (uint32_t)inhalationTrajectoryPhaseShiftEstimate/(uint32_t)1000, (uint32_t)measuredExhalationTime/1000, (uint32_t)measuredInhalationTime*(uint32_t)1000/(uint32_t)measuredExhalationTime, (uint32_t)control.respirationRateMeasured);
       // Check if we need to continue onto another breath or if ventilation has stopped
 
       if (controlForceHome)

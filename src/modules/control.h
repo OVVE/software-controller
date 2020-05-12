@@ -21,9 +21,6 @@
 struct control {
   // Variables
   uint8_t  state;
-  uint32_t respirationRateMeasured;
-  uint32_t ieRatioMeasured;
-  uint32_t breathCount;
   
   // Alarms
   int8_t   breathTimeoutAlarm;

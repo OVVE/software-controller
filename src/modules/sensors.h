@@ -8,17 +8,19 @@
 // TODO: Units?
 struct sensors {
   // Variables
-  int32_t currentFlow;
-  int32_t currentVolume;
-  int32_t volumeIn;
-  int32_t volumeOut;
-  int32_t volumePerMinute;
-  int32_t currentPressure;
-  int32_t peakPressure;
-  int32_t plateauPressure;
-  int32_t peepPressure;
-  bool    inhalationDetected;
-  bool    exhalationDetected;
+  int32_t  currentFlow;
+  int32_t  currentVolume;
+  int32_t  volumeIn;
+  int32_t  volumeOut;
+  int32_t  volumePerMinute;
+  int32_t  currentPressure;
+  int32_t  peakPressure;
+  int32_t  plateauPressure;
+  int32_t  peepPressure;
+  uint32_t respirationRateMeasured;
+  uint32_t ieRatioMeasured;
+  bool     inhalationDetected;
+  bool     exhalationDetected;
   
   // Alarms
   int8_t  onBatteryAlarm;
