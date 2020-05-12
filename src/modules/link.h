@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "../util/alarm.h"
 
 // alarm bits to set that are triggered by the microcontroller
 // link.cpp should check modules and set these bits
@@ -151,9 +152,7 @@ struct link {
   uint16_t lowRespiratoryRateLimit;
   
   // Alarms
-  int8_t   droppedPacketAlarm;
-  int8_t   crcErrorAlarm;
-  int8_t   unsupportedPacketVersionAlarm;
+  struct alarm onCommunicationFailure;
 };
 
 // Public Variables
