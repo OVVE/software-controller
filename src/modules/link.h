@@ -152,7 +152,7 @@ struct link {
   uint16_t lowRespiratoryRateLimit;
   
   // Alarms
-  struct alarm onCommunicationFailure;
+  struct alarm onCommunicationFailureAlarm;
 };
 
 // Public Variables
