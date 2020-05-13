@@ -101,7 +101,8 @@ void handleUIAlarms()
 
 void setDataPacketAlarmBits()
 {
- 
+  // control.h defines this but not used   struct alarm unknownStateAlarm;
+  // parameters.h defines this but not used struct alarm parametersInvalidAlarm;
   // ALARM_ECU_POWER_LOSS
   // ALARM_ECU_HARDWARE_FAILURE
   // ALARM_ECU_ESTOP_PRESSED
@@ -272,36 +273,34 @@ void updateDataPacket()
   public_data_packet.mode_value = public_command_packet.mode_value; //comm.ventilationMode;
   public_data_packet.packet_type = PACKET_TYPE_DATA;
 
-  public_data_packet.control_state = 1;
+  public_data_packet.control_state = 0x1;
   public_data_packet.control_state |= MODE_START_STOP; // turn on top bit
 
   public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
-  //public_data_packet.respiratory_rate_measured = ;
+  public_data_packet.respiratory_rate_measured = 0xE;
   
   public_data_packet.tidal_volume_set = public_command_packet.tidal_volume_set;
-  public_data_packet.tidal_volume_measured = 475;
+  public_data_packet.tidal_volume_measured = 0x1DB;
 
   public_data_packet.ie_ratio_set = public_command_packet.ie_ratio_set;
-  public_data_packet.ie_ratio_measured = 2;  
+  public_data_packet.ie_ratio_measured = 0x2;  
 
-  public_data_packet.peep_value_measured = 426;
-  public_data_packet.peak_pressure_measured =  527;
-  public_data_packet.plateau_value_measurement  = 150;  
+  public_data_packet.peep_value_measured = 0x1AB;
+  public_data_packet.peak_pressure_measured =  0x20F;
+  public_data_packet.plateau_value_measurement  = 0x96;  
   
-  public_data_packet.pressure_measured  =  980;
-  public_data_packet.pressure_set  =  990;  
+  public_data_packet.pressure_measured  =  0x3D4;
+  public_data_packet.pressure_set  =  0x3D6;  
  
-  public_data_packet.flow_measured = 980;
+  public_data_packet.flow_measured = 0x3D7;
 
-  public_data_packet.volume_in_measured = 18;
-  public_data_packet.volume_out_measured = 13;
-  public_data_packet.volume_rate_measured = 12;
+  public_data_packet.volume_in_measured = 0xC;
+  public_data_packet.volume_out_measured = 0xD;
+  public_data_packet.volume_rate_measured = 0xB;
 
   public_data_packet.high_pressure_limit_set = public_command_packet.high_pressure_limit_set; 
   public_data_packet.low_pressure_limit_set = public_command_packet.low_pressure_limit_set;   
 
-  public_data_packet.high_pressure_limit_set = public_command_packet.high_pressure_limit_set; 
-  public_data_packet.low_pressure_limit_set = public_command_packet.low_pressure_limit_set;
   public_data_packet.high_volume_limit_set = public_command_packet.high_volume_limit_set; 
   public_data_packet.low_volume_limit_set = public_command_packet.low_volume_limit_set;
 
