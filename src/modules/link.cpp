@@ -57,6 +57,10 @@ static struct alarmProperties onCommunicationFailureAlarmProperties = {
 
 void handleUIAlarms()
 {
+#ifdef SERIAL_DEBUG
+    SERIAL_DEBUG.print("command packet alarm bits: 0x");
+    SERIAL_DEBUG.println(public_command_packet.alarm_bits, HEX);
+#endif  
   if (public_command_packet.alarm_bits & ALARM_ECU_LOW_BATTERY && lastDataPacketAlarmBits & ALARM_ECU_LOW_BATTERY)
   {
     alarmSuppress(&sensors.lowBatteryAlarm);
@@ -167,8 +171,6 @@ void updateFromCommandPacket()
     return;
   }
 
-  public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
-  
   comm.startVentilation = (public_command_packet.command & COMMAND_BIT_START) != 0x00;
 
   tmpMode = public_command_packet.mode_value;
