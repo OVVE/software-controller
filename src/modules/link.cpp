@@ -223,11 +223,11 @@ void updateDataPacket()
   public_data_packet.control_state = control.state;
   if (parameters.startVentilation)
   {
-    public_data_packet.control_state |= MODE_START_STOP;
+    public_data_packet.control_state |= COMMAND_BIT_START;
   }
   else
   {
-    public_data_packet.control_state &= ~MODE_START_STOP;
+    public_data_packet.control_state &= ~COMMAND_BIT_START;
   }
   
   setDataPacketAlarmBits();
@@ -276,7 +276,7 @@ void updateDataPacket()
   public_data_packet.packet_type = PACKET_TYPE_DATA;
 
   public_data_packet.control_state = 0x1;
-  public_data_packet.control_state |= MODE_START_STOP; // turn on top bit
+  public_data_packet.control_state |= COMMAND_BIT_START; // turn on top bit
 
   public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
   public_data_packet.respiratory_rate_measured = 0xE;
