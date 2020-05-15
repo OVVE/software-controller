@@ -84,6 +84,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       tmpParameters[0].volumeRequested = comm.volumeRequested;
       tmpParameters[0].respirationRateRequested = comm.respirationRateRequested;
       tmpParameters[0].ieRatioRequested = comm.ieRatioRequested;
+      tmpParameters[0].pressureRequested = comm.pressureRequested;
       tmpParameters[0].highVolumeLimit = comm.highVolumeLimit;
       tmpParameters[0].lowVolumeLimit = comm.lowVolumeLimit;
       tmpParameters[0].highPressureLimit = comm.highPressureLimit;
