@@ -30,9 +30,6 @@
 #define MODE_VC_CMV  0x00
 #define MODE_SIMV    0x01
 
-// toggle bit for start stop
-#define MODE_START_STOP  0x80
-
 // battery charging state bit
 #define BATTERY_CHARGING 0x80
 
