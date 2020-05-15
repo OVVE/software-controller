@@ -277,9 +277,11 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     
     // Alarms
     if (pressure > parameters.highPressureLimit) {
+      DEBUG_PRINT_EVERY(100, "Pressure High Alarm is there!");
       alarmSet(&sensors.highPressureAlarm);
     }
     if (pressure < parameters.lowPressureLimit) {
+      DEBUG_PRINT_EVERY(100, "Pressure Low Alarm is there!");
       alarmSet(&sensors.lowPressureAlarm);
     }
     
@@ -403,11 +405,13 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     }
     
     // Alarms
-    if (airvolume > parameters.highVolumeLimit) {
-      alarmSet(&sensors.highVolumeAlarm);
-    }
-    if (airvolume < parameters.lowVolumeLimit) {
-      alarmSet(&sensors.lowVolumeAlarm);
+    if (control.state == CONTROL_HOLD_IN) {
+      if (airvolume > parameters.highVolumeLimit) {
+        alarmSet(&sensors.highVolumeAlarm);
+      }
+      if (airvolume < parameters.lowVolumeLimit) {
+        alarmSet(&sensors.lowVolumeAlarm);
+      }
     }
     
     DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",

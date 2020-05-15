@@ -71,6 +71,12 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
 
   // Copy the parameters from storage into the publicly available buffer
   parameters = tmpParameters[0];
+  
+  // TODO: Actually use sensible limits; just do this now for testing
+  parameters.highPressureLimit = 10000;
+  parameters.lowPressureLimit = -100;
+  parameters.highVolumeLimit = 2000;
+  parameters.lowVolumeLimit = -1000;
  
   while (1) {
     // TODO: Determine all the conditions that update the parameters; placeholder for now
@@ -85,10 +91,11 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       tmpParameters[0].respirationRateRequested = comm.respirationRateRequested;
       tmpParameters[0].ieRatioRequested = comm.ieRatioRequested;
       tmpParameters[0].pressureRequested = comm.pressureRequested;
-      tmpParameters[0].highVolumeLimit = comm.highVolumeLimit;
-      tmpParameters[0].lowVolumeLimit = comm.lowVolumeLimit;
-      tmpParameters[0].highPressureLimit = comm.highPressureLimit;
-      tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
+      // TODO: When the UI actually sends good values for these limits; uncomment these lines
+      //tmpParameters[0].highVolumeLimit = comm.highVolumeLimit;
+      //tmpParameters[0].lowVolumeLimit = comm.lowVolumeLimit;
+      //tmpParameters[0].highPressureLimit = comm.highPressureLimit;
+      //tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
       tmpParameters[0].highRespiratoryRateLimit = comm.highRespiratoryRateLimit;
       tmpParameters[0].lowRespiratoryRateLimit = comm.lowRespiratoryRateLimit;
     }
