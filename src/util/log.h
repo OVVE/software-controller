@@ -8,17 +8,12 @@
 
 #include <avr/pgmspace.h>
 
-#include "../util/utils.h"
-
-#ifdef LOG_BACKEND_DEBUG
 #include "../hal/serial.h"
-#endif
 
-#ifdef LOG_BACKEND_LINK
 #include "../modules/link.h"
 
 #include "../util/queue.h"
-#endif
+#include "../util/utils.h"
 
 #ifndef LOG_MODULE
 #error "Cannot include log.h without defining LOG_MODULE"
@@ -40,42 +35,40 @@
 #define DEBUG   4
 #define VERBOSE 5
 
-#ifdef LOG_BACKEND_DEBUG
 #define LOG_BACKEND_DEBUG_PORT SERIAL_PORT_DEBUG
 
-// Handles actually printing to the backend
-#define BACKEND_DEBUG(lid, buf, sz)                                            \
+// Handles actually printing to the debug serial backend
+#define BACKEND_DEBUG(lvl, lid, buf, sz)                                       \
   do {                                                                         \
-    while (serialHalWrite(LOG_BACKEND_DEBUG_PORT,                              \
-                          buf, sz, HAL_FOREVER) == HAL_IN_PROGRESS);           \
-  } while (0);
-#else
-#define BACKEND_DEBUG(...)
-#endif
-
-#ifdef LOG_BACKEND_LINK
-#define BACKEND_LINK(lid, buf, sz)                                             \
-  do {                                                                         \
-    uint8_t _queueSize = comm.logQueue.maxSize - queueSize(&comm.logQueue);    \
-    struct logMessage _msg;                                                    \
-    uint8_t _tsz = sizeof(_msg.header) + sz;                                   \
-    if (_queueSize <= _tsz) {                                                  \
-      _msg.header.size = min(sz, MAX_LOG_DATA_SIZE);                           \
-      _msg.header.id = lid;                                                    \
-      for (int _i = 0; _i < sizeof(_msg.header); _i++) {                       \
-        queuePush(&comm.logQueue, &(_msg.header.raw[_i]));                     \
-      }                                                                        \
-      for (int _i = 0; _i < _msg.header.size; _i++) {                          \
-        queuePush(&comm.logQueue, &(buf[_i]));                                 \
-      }                                                                        \
-      comm.loggingSentMessages++;                                              \
-    } else {                                                                   \
-      comm.loggingDroppedMessages++;                                           \
+    if (lvl <= LOG_BACKEND_DEBUG) {                                            \
+      while (serialHalWrite(LOG_BACKEND_DEBUG_PORT,                            \
+                            buf, sz, HAL_FOREVER) == HAL_IN_PROGRESS);         \
     }                                                                          \
   } while (0);
-#else
-#define BACKEND_LINK(...)
-#endif
+
+// Handles sending data to the link module
+#define BACKEND_LINK(lvl, lid, buf, sz)                                        \
+  do {                                                                         \
+    if (lvl <= LOG_BACKEND_LINK) {                                             \
+      uint8_t _queueSize = comm.logQueue.maxSize - queueSize(&comm.logQueue);  \
+      struct logMessage _msg;                                                  \
+      uint8_t _tsz = sizeof(_msg.header) + sz;                                 \
+      if (_queueSize <= _tsz) {                                                \
+        _msg.header.size = min(sz, MAX_LOG_DATA_SIZE);                         \
+        _msg.header.id = lid;                                                  \
+        for (int _i = 0; _i < sizeof(_msg.header); _i++) {                     \
+          queuePush(&comm.logQueue, &(_msg.header.raw[_i]));                   \
+        }                                                                      \
+        for (int _i = 0; _i < _msg.header.size; _i++) {                        \
+          queuePush(&comm.logQueue, &(buf[_i]));                               \
+        }                                                                      \
+        comm.loggingSentMessages++;                                            \
+      } else {                                                                 \
+        comm.loggingDroppedMessages++;                                         \
+      }                                                                        \
+    }                                                                          \
+  } while (0);
+
 
 #ifdef LOG
 #ifdef LOG_PLOTTING
@@ -119,7 +112,7 @@
   do {                                                                         \
     if (lvl <= LOG_LEVEL) {                                                    \
       uint8_t* _buf = buf;                                                     \
-      BACKEND_LINK(id, _buf, sz);                                              \
+      BACKEND_LINK(lvl, id, _buf, sz);                                         \
     }                                                                          \
   } while (0);
 
@@ -132,8 +125,8 @@
       char _buf[LOG_BUFFER_SIZE];                                              \
       char* PROGMEM _fmt = PSTR("[" LOG_MODULE "] " fmt "\n");                 \
       int _sz = snprintf_P(_buf, LOG_BUFFER_SIZE, _fmt, ## __VA_ARGS__);       \
-      BACKEND_DEBUG(LOG_MESSAGE_ID, _buf, min(_sz, sizeof(_buf)));             \
-      BACKEND_LINK(LOG_MESSAGE_ID, _buf, min(_sz, sizeof(_buf)));              \
+      BACKEND_DEBUG(lvl, LOG_MESSAGE_ID, _buf, min(_sz, sizeof(_buf)));        \
+      BACKEND_LINK(lvl, LOG_MESSAGE_ID, _buf, min(_sz, sizeof(_buf)));         \
     }                                                                          \
   } while (0);
 

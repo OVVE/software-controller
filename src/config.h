@@ -49,9 +49,9 @@
 #define LOG
 
 // Global log backends flags
-// Enables/disables logging to particular backends
-#define LOG_BACKEND_LINK
-#define LOG_BACKEND_DEBUG
+// Defines level of logging to particular backends
+#define LOG_BACKEND_LINK  INFO
+#define LOG_BACKEND_DEBUG VERBOSE
 
 // TOOD: Not working right now, come back to this later
 // Global plotting flag
