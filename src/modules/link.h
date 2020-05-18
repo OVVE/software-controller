@@ -3,74 +3,125 @@
 #define __LINK_MODULE_H__
 
 #include <stdint.h>
-#include <stdbool.h>
 
+#include "../util/queue.h"
 
-#define ALARM_ECU_POWER_LOSS              0x01
-#define ALARM_ECU_LOW_BATTERY             0x02 
-#define ALARM_ECU_LOSS_BREATH_INTEGRITY   0x04
-#define ALARM_ECU_HIGH_AIRWAY_PRESSURE    0x08
-#define ALARM_ECU_LOW_AIRWAY_PRESSURE     0x10
-#define ALARM_ECU_LOW_TIDAL_VOL_DELIVERED 0x20
-#define ALARM_ECU_APNEA                   0x40
-// bits 7 - 15 --
-#define ALARM_CRC_ERROR                   0x00010000
-#define ALARM_DROPPED_PACKET              0x00020000
-#define ALARM_SERIAL_COMM                 0x00040000
-#define ALARM_PACKET_VERSION              0x00080000
-// bits 20 - 23 --
-#define ALARM_UI_MODE_MISMATCH            0x01000000
-#define ALARM_UI_RESP_RATE_MISMATCH       0x02000000
-#define ALARM_UI_TIDAL_MISMATCH           0x04000000
-#define ALARM_UI_IE_RATIO_MISMATCH        0x08000000
-// bits 28 - 31 --
+#define MAX_PACKET_DATA_SIZE  255
+#define MAX_LOG_DATA_SIZE     255
+#define LOG_BUFFER_SIZE       512
 
-// bit mask
-#define MODE_NON_ASSIST  0x00
-#define MODE_ASSIST      0x01
-#define MODE_SIM         0x02
+#define PACKET_START_SEQUENCE 0x26567EUL
 
-// toggle bit for start stop
-#define MODE_START_STOP  0x80
+#define PACKET_VERSION        4U
 
+#define PACKET_TYPE_DATA      1U
+#define PACKET_TYPE_COMMAND   2U
+#define PACKET_TYPE_FIRMWARE  3U
+#define PACKET_TYPE_LOG       4U
 
-typedef struct __attribute__((packed)) {
-  uint8_t mode_value;                 // byte 3      - rpi unsigned char
-  uint32_t respiratory_rate_measured; // bytes 4 - 7 - rpi unsigned int
-  uint32_t respiratory_rate_set;      // bytes 8 - 11
-  int32_t tidal_volume_measured;      // bytes 12 - 15
-  int32_t tidal_volume_set;           // bytes 16 - 19
-  uint32_t ie_ratio_measured;         // bytes 20 - 23
-  uint32_t ie_ratio_set;              // bytes 24 - 27
-  int32_t peep_value_measured;        // bytes 28 - 31
-  int32_t peak_pressure_measured;     // bytes 32 - 35
-  int32_t plateau_value_measurement;  // bytes 36 - 39
-  int32_t pressure_measured;          // bytes 40 - 43
-  int32_t flow_measured;              // bytes 44 - 47
-  int32_t volume_in_measured;         // bytes 48 - 51
-  int32_t volume_out_measured;        // bytes 52 - 55
-  int32_t volume_rate_measured;       // bytes 56 - 59
-  uint8_t control_state;              // byte 60       - rpi unsigned char
-  uint8_t battery_level;              // byte 61
-  uint16_t reserved;                  // bytes 62 - 63 - rpi unsigned int
-  uint32_t alarm_bits;                // bytes 64 - 67
-} data_packet_def;
+#define LOG_MESSAGE_ID        1U
+#define LOG_CONTROL_DATA_ID   2U
 
-typedef struct __attribute__((packed)) {
-  uint8_t mode_value;                 // byte 3      - rpi unsigned char
-  uint32_t respiratory_rate_set;      // bytes 4 - 7 - rpi unsigned int
-  int32_t tidal_volume_set;           // bytes 8 - 11
-  uint32_t ie_ratio_set;              // bytes 12 - 15
-  uint32_t alarm_bits;                // bytes 16 - 19
-} command_packet_def;
+struct packet {
+  uint8_t start[3];
+  union {
+    struct {
+      uint16_t sequenceNumber;
+      uint8_t  version;
+      uint8_t  type;
+      uint8_t  length;
+    };
+    uint8_t raw[5];
+  } header;
+  uint8_t data[MAX_PACKET_DATA_SIZE + sizeof(uint16_t)]; // Max packet data size plus bytes for the CRC
+} __attribute__((packed));
+
+struct dataPacket {
+  uint8_t mode;
+  uint8_t controllerState;
+  uint8_t batteryStatus;
+  uint8_t reserved;
+  uint16_t respiratoryRateSet;
+  uint16_t respiratoryRateMeasured;
+  int16_t  volumeSet;
+  int16_t  volumeMeasured;
+  uint16_t ieRatioSet;
+  uint16_t ieRatioMeasured;
+  int16_t  peepMeasured;
+  int16_t  peakPressureMeasured;
+  int16_t  plateauPressureMeasured;
+  int16_t  pressureSet;
+  int16_t  pressureMeasured;
+  int16_t  flowMeasured;
+  int16_t  volumeInMeasured;
+  int16_t  volumeOutMeasured;
+  int16_t  minuteVolumeMeasured;
+  int16_t  highPressureLimit;
+  int16_t  lowPressureLimit;
+  int16_t  highVolumeLimit;
+  int16_t  lowVolumeLimit;
+  uint16_t highRespiratoryRateLimit;
+  uint16_t lowRespiratoryRateLimit;
+  uint32_t alarmBits;
+} __attribute__((packed));
+
+struct commandPacket {
+  uint8_t  mode;
+  uint8_t  cmdBits;
+  uint16_t respiratoryRateSet;
+  int16_t  volumeSet;
+  uint16_t ieRatioSet;
+  int16_t  pressureSet;
+  int16_t  highPressureLimit;
+  int16_t  lowPressureLimit;
+  int16_t  highVolumeLimit;
+  int16_t  lowVolumeLimit;
+  uint16_t highRespiratoryRateLimit;
+  uint16_t lowRespiratoryRateLimit;
+  uint32_t alarmBits;
+} __attribute__((packed));
+
+struct logPacket {
+  uint16_t id;
+  uint8_t data[];
+} __attribute__((packed));
+
+struct logMessage {
+  union {
+    struct {
+      uint8_t  size;
+      uint16_t id;
+    };
+    uint8_t raw[3];
+  } header;
+  uint8_t data[];
+} __attribute__((packed));
 
 struct link {
   // Variables
   uint8_t  startVentilation;
   uint8_t  ventilationMode;
-  uint32_t volumeRequested;
-  uint32_t respirationRateRequested;
-  uint32_t ieRatioRequested;
+  int16_t  volumeRequested;
+  int16_t  pressureRequested;
+  uint16_t respirationRateRequested;
+  uint16_t ieRatioRequested;
+  int16_t  highPressureLimit;
+  int16_t  lowPressureLimit;
+  int16_t  highVolumeLimit;
+  int16_t  lowVolumeLimit;
+  uint16_t highRespiratoryRateLimit;
+  uint16_t lowRespiratoryRateLimit;
+  
+  struct queue logQueue;
+  uint32_t loggingDroppedMessages;
+  uint32_t loggingSentMessages;
+  uint32_t sentPackets;
+  uint32_t recievedPackets;
+  uint32_t falseStarts;
+  uint32_t badCRC;
+  uint32_t badVersion;
+  uint32_t badSequenceNumber;
+  uint32_t droppedCommandPackets;
   
   // Alarms
   int8_t   droppedPacketAlarm;

@@ -20,6 +20,9 @@ struct sensors {
   bool    inhalationDetected;
   bool    exhalationDetected;
   
+  uint8_t batteryLevel;
+  bool    batteryCharging;
+  
   // Alarms
   int8_t  onBatteryAlarm;
   int8_t  lowBatteryAlarm;

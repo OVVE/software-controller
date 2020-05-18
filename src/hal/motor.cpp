@@ -11,11 +11,10 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-#ifdef DEBUG_MOTOR_HAL
-#define DEBUG
-#define DEBUG_MODULE "motor"
-#include "../util/debug.h"
-#endif
+#define LOG_MODULE "motor"
+#define LOG_LEVEL  LOG_MOTOR_HAL
+#include "../util/log.h"
+
 
 //******************************************************************************
 // Pin Definitions
@@ -293,7 +292,7 @@ static void timer4_disable()
             if (TCNT4 > ((uint8_t) MC_STEP_PULSE_WIDTH)) {
               // The timer is stopped and not in the middle of a pulse, so the
               // polling loop can now exit.
-              DEBUG_PRINT("Timer 4 Disabled, TCNT4: %u", TCNT4);
+              LOG_PRINT(DEBUG, "Timer 4 Disabled, TCNT4: %u", TCNT4);
               break;
             } else {
               // The timer is stopped in the middle of a pulse, so re-enable the
@@ -386,12 +385,12 @@ static inline void motor_pwm_frequency_set(uint16_t frequency)
 {
   if (frequency < PWM_FREQUENCY_MIN) {
     frequency = PWM_FREQUENCY_MIN;
-    DEBUG_PRINT("Warning: Limiting motor PWM frequency to maximum value %u Hz", frequency);
+    LOG_PRINT(WARNING, "Warning: Limiting motor PWM frequency to maximum value %u Hz", frequency);
   }
 
   if (frequency > PWM_FREQUENCY_MAX) {
     frequency = PWM_FREQUENCY_MAX;
-    DEBUG_PRINT("Warning: Limiting motor PWM frequency to minimum value %u Hz", frequency);
+    LOG_PRINT(WARNING, "Warning: Limiting motor PWM frequency to minimum value %u Hz", frequency);
   }
 
   // Convert from frequency (Hz) to timer TOP value.
@@ -422,7 +421,7 @@ static void motor_state_set_OFF()
   digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_FALSE);
 
   motor_state = MOTOR_STATE_OFF;
-  DEBUG_PRINT( "MOTOR_STATE_OFF" );
+  LOG_PRINT(INFO, "MOTOR_STATE_OFF" );
 }
 
 // Sets the motor state machine to the MOTOR_STATE_HOLD state, and configures
@@ -433,7 +432,7 @@ static void motor_state_set_HOLD()
   digitalWrite(PIN_MOTOR_ENABLE, PIN_MOTOR_ENABLE_TRUE);
 
   motor_state = MOTOR_STATE_HOLD;
-  DEBUG_PRINT( "MOTOR_STATE_HOLD" );
+  LOG_PRINT(INFO, "MOTOR_STATE_HOLD" );
 }
 
 // Sets the motor state machine to the MOTOR_STATE_OPEN state, and configures
@@ -446,7 +445,7 @@ static inline void motor_state_set_OPEN()
   motor_state = MOTOR_STATE_OPEN;
   motor_pwm_enable();
   
-  DEBUG_PRINT( "MOTOR_STATE_OPEN" );
+  LOG_PRINT(INFO, "MOTOR_STATE_OPEN" );
 }
 
 // Sets the motor state machine to the MOTOR_STATE_CLOSE state, and configures
@@ -459,7 +458,7 @@ static inline void motor_state_set_CLOSE()
   motor_state = MOTOR_STATE_CLOSE;
   motor_pwm_enable();
   
-  DEBUG_PRINT( "MOTOR_STATE_CLOSE" );
+  LOG_PRINT(INFO, "MOTOR_STATE_CLOSE" );
 }
 
 // Determines whether the current motor state is a moving state.
@@ -502,7 +501,7 @@ int8_t motor_state_transition(uint8_t next_state)
         // tripped.
         motor_state_set_HOLD();
         motor_position_set_zero();
-        DEBUG_PRINT("Top limit switch tripped.");
+        LOG_PRINT(INFO, "Top limit switch tripped.");
       }
       motor_status = MOTOR_HAL_STATUS_LIMIT_TOP;
     } else {
@@ -520,7 +519,7 @@ int8_t motor_state_transition(uint8_t next_state)
         // Do not move the motor in the CLOSE direction if the bottom limit switch
         // is tripped.
         motor_state_set_HOLD();
-        DEBUG_PRINT("Bottom limit switch tripped.");
+        LOG_PRINT(INFO, "Bottom limit switch tripped.");
       }
       motor_status = MOTOR_HAL_STATUS_LIMIT_BOTTOM;
     } else {
@@ -596,7 +595,7 @@ void motor_speed_set(uint16_t speed, uint8_t command)
 
   if (speed > MOTOR_HAL_SPEED_MAX) {
     speed = MOTOR_HAL_SPEED_MAX;
-    DEBUG_PRINT("Warning: Limiting speed to maximum value %u RPM*%u", speed, MOTOR_HAL_RPM_MULTIPLIER);
+    LOG_PRINT(WARNING, "Warning: Limiting speed to maximum value %u RPM*%u", speed, MOTOR_HAL_RPM_MULTIPLIER);
   }
 
   //--------------------------------------------------------

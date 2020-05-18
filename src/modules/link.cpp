@@ -2,207 +2,381 @@
 //
 // Link Module
 //
+#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
 
 #include "../config.h"
+
 #include "../pt/pt.h"
-#include "../modules/link.h"
-#include "../modules/module.h"
-#include "../modules/parameters.h"
-#include "../modules/control.h"
-#include "../modules/sensors.h"
+
+#include "../hal/timer.h"
 #include "../hal/serial.h"
 
+#include "../modules/link.h"
+#include "../modules/module.h"
+#include "../modules/control.h"
+#include "../modules/sensors.h"
+#include "../modules/parameters.h"
+
+#include "../util/crc.h"
+#include "../util/alarm.h"
+#include "../util/queue.h"
+#include "../util/utils.h"
+
 #define LOG_MODULE "link"
+#define LOG_LEVEL  LOG_LINK_MODULE
 #include "../util/log.h"
 
+#define UNPACK_START_VENTILATION(cmd) \
+  (((cmd) >> 0) & 0x1);
 
-#ifdef DEBUG_LINK
-#define DEBUG_MODULE "link"
-#include "../util/debug.h"
-#endif
-
-// Private Variables
-struct link comm;
-static struct pt serialThread;
-static struct pt serialReadThread;
-static struct pt serialSendThread;
-data_packet_def public_data_packet;
-command_packet_def public_command_packet;
-
+#define PACK_CONTROLLER_STATE(start, state) \
+  ((((start) << 7) & 0x80) | (((state) << 0) & 0x0F))
+#define PACK_BATTERY_STATUS(charge, level) \
+  ((((charge) << 7) & 0x80) | (((level) << 0) & 0x7F))
 
 // Public Variables
-// shared with serial.cpp
-extern struct parameters parameters;
-extern struct control control;
-extern struct sensors sensors;
+struct link comm;
 
+// Private Variables
+static struct pt serialThread;
+static struct pt serialTxThread;
+static struct pt serialRxThread;
 
+static struct timer commandPacketTimer;
+static uint16_t expectedDataSequenceNumber;
+static bool waitOnCommandPacket;
+static uint32_t previousLocalAlarms;
+static uint32_t previousRemoteAlarms;
 
-// update variables for modules to read after good sequence and crc from command packet
-void updateFromCommandPacket()
+static uint8_t logBuffer[LOG_BUFFER_SIZE];
+
+static struct alarm** alarmList[] = {
+  (struct alarm*[]) { NULL }, // Bit 0  - Power Los
+  (struct alarm*[]) { NULL }, // Bit 1  - Low Battery
+  (struct alarm*[]) { NULL }, // Bit 2  - Bad Pressure Sensor
+  (struct alarm*[]) { NULL }, // Bit 3  - Bad Flow Sensors
+  (struct alarm*[]) { NULL }, // Bit 4  - Communication Failure (ECU)
+  (struct alarm*[]) { NULL }, // Bit 5  - Hardware Failure (UI)
+  (struct alarm*[]) { NULL }, // Bit 6  - E-stop
+  (struct alarm*[]) { NULL }, // Bit 7  -
+  (struct alarm*[]) { NULL }, // Bit 8  - High Pressure
+  (struct alarm*[]) { NULL }, // Bit 9  - Low Pressure
+  (struct alarm*[]) { NULL }, // Bit 10 - High Volume
+  (struct alarm*[]) { NULL }, // Bit 11 - Low Volume
+  (struct alarm*[]) { NULL }, // Bit 12 - High RR
+  (struct alarm*[]) { NULL }, // Bit 13 - Low RR
+  (struct alarm*[]) { NULL }, // Bit 14 -
+  (struct alarm*[]) { NULL }, // Bit 15 -
+  (struct alarm*[]) { NULL }, // Bit 16 - Communication Failure (UI)
+  (struct alarm*[]) { NULL }, // Bit 17 - Hardware Failure (UI)
+  (struct alarm*[]) { NULL }, // Bit 18 -
+  (struct alarm*[]) { NULL }, // Bit 19 -
+  (struct alarm*[]) { NULL }, // Bit 20 -
+  (struct alarm*[]) { NULL }, // Bit 21 -
+  (struct alarm*[]) { NULL }, // Bit 22 -
+  (struct alarm*[]) { NULL }, // Bit 23 -
+  (struct alarm*[]) { NULL }, // Bit 24 - Setpoint Mismatch
+  (struct alarm*[]) { NULL }, // Bit 25 -
+  (struct alarm*[]) { NULL }, // Bit 26 -
+  (struct alarm*[]) { NULL }, // Bit 27 -
+  (struct alarm*[]) { NULL }, // Bit 28 -
+  (struct alarm*[]) { NULL }, // Bit 29 -
+  (struct alarm*[]) { NULL }, // Bit 30 -
+  (struct alarm*[]) { NULL }, // Bit 31 -
+};
+
+void updateFromCommandPacket(struct commandPacket* command)
 {
-  static uint8_t tmpMode;  // used for setting bits
-  comm.startVentilation = (public_command_packet.mode_value & MODE_START_STOP) != 0x00;
-
-  tmpMode = 0x7f & public_command_packet.mode_value;
+  comm.startVentilation = UNPACK_START_VENTILATION(command->cmdBits);
+  comm.ventilationMode = command->mode;
+  comm.volumeRequested = command->volumeSet;
+  comm.respirationRateRequested = command->respiratoryRateSet;
+  comm.ieRatioRequested = command->ieRatioSet;
+  comm.pressureRequested = command->pressureSet;
+  comm.highPressureLimit = command->highPressureLimit;
+  comm.lowPressureLimit = command->lowPressureLimit;
+  comm.highVolumeLimit = command->highVolumeLimit;
+  comm.lowVolumeLimit = command->lowVolumeLimit;
+  comm.highRespiratoryRateLimit = command->highRespiratoryRateLimit;
+  comm.lowRespiratoryRateLimit = command->lowRespiratoryRateLimit;
   
-  // check for a conflict - more than one mode - not the best logic going forward
-  if (tmpMode != MODE_ASSIST && tmpMode != MODE_NON_ASSIST && tmpMode != MODE_SIM)
-  {
-    public_data_packet.alarm_bits |= ALARM_UI_MODE_MISMATCH;
+  // Loop through all the alarm bits, if one is set but was previously unset,
+  // suppress all internal alarms associated with that bit
+  for (int i = 0; i < sizeof(alarmList) / sizeof(alarmList[0]); i++) {
+    bool localSet = (previousLocalAlarms & (1 << i)) != 0;
+    bool currentRemoteSet = ((command->alarmBits) & (1 << i)) != 0;
+    bool previousRemoteSet = (previousRemoteAlarms & (1 << i)) != 0;
+    if (localSet && currentRemoteSet && !previousRemoteSet) {
+      struct alarm** alarmsPtr = alarmList[i];
+      while (*alarmsPtr) {
+        alarmSuppress(*alarmsPtr);
+        alarmsPtr++;
+      }
+    }
   }
-  else
-  {    
-    comm.ventilationMode = tmpMode;
-    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_MODE_MISMATCH;
-  }
-  comm.volumeRequested = public_command_packet.tidal_volume_set;
-  comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
-  comm.ieRatioRequested = public_command_packet.ie_ratio_set;
- 
-  public_data_packet.battery_level = 0; // TBD set to real value when available
-#ifdef SERIAL_DEBUG
-        SERIAL_DEBUG.print("mode bits: 0x");
-        SERIAL_DEBUG.println(public_command_packet.mode_value, HEX);
-        SERIAL_DEBUG.print("start/stop value: 0x");
-        SERIAL_DEBUG.println(comm.startVentilation, HEX);
-        SERIAL_DEBUG.print("mode value: 0x");
-        SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
-#endif  
-  // Alarms
-  comm.droppedPacketAlarm = (public_command_packet.alarm_bits & ALARM_DROPPED_PACKET) != 0x00;
-  comm.crcErrorAlarm = (public_command_packet.alarm_bits & ALARM_CRC_ERROR) != 0x00;  
-  comm.unsupportedPacketVersionAlarm = (public_command_packet.alarm_bits & ALARM_PACKET_VERSION) != 0x00;
+  
+  previousRemoteAlarms = command->alarmBits;
 }
 
-// get data from modules to be sent back to ui. this is called just before sequence count update and crc set
-void updateDataPacket()
+size_t updateDataPacket(struct dataPacket* packet)
 {
-  // only set the lower 7 bits of mode value
-  public_data_packet.mode_value = 0x7f & parameters.ventilationMode;
-  if (parameters.startVentilation)
-  {
-    public_data_packet.mode_value |= MODE_START_STOP;
-  }
-  else
-  {
-    public_data_packet.mode_value &= ~MODE_START_STOP;
-  }
-  // could not find 
-  //    respiratory_rate_measured
-  //    tidal_volume_measured
-  //    battery_level
-  //
-  public_data_packet.tidal_volume_set = parameters.volumeRequested;
-  public_data_packet.tidal_volume_measured = sensors.currentVolume;
-  public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;
-  public_data_packet.ie_ratio_set = parameters.ieRatioRequested; // comm.ieRatioRequested; 
-  
-  public_data_packet.control_state = control.state;
-  public_data_packet.ie_ratio_measured = control.ieRatioMeasured;
-  public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
-  
-  // readings from sensor module
-  public_data_packet.plateau_value_measurement = sensors.plateauPressure;
-  public_data_packet.pressure_measured = sensors.currentPressure;  
-  public_data_packet.peak_pressure_measured = sensors.peakPressure;
-  public_data_packet.peep_value_measured = sensors.peepPressure;
-  public_data_packet.tidal_volume_measured = sensors.currentVolume;
-  public_data_packet.volume_in_measured = sensors.volumeIn;
-  public_data_packet.volume_out_measured = sensors.volumeOut;  
-  public_data_packet.volume_rate_measured = sensors.volumePerMinute; 
-  public_data_packet.flow_measured = sensors.currentFlow; 
-//#define SET_VALUES // - for testing
-#ifdef SET_VALUES
-  public_data_packet.mode_value = public_command_packet.mode_value; //comm.ventilationMode;
-  public_data_packet.tidal_volume_set = public_command_packet.tidal_volume_set;
-  public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
-  public_data_packet.ie_ratio_set = public_command_packet.ie_ratio_set;
-  public_data_packet.tidal_volume_measured = 475;
-  public_data_packet.respiratory_rate_measured = 35;
-  public_data_packet.peep_value_measured = 426;
-  public_data_packet.peak_pressure_measured =  527;
-  public_data_packet.pressure_measured  =  980;
-  public_data_packet.flow_measured = 980;
-  public_data_packet.plateau_value_measurement  = 150;
-  public_data_packet.volume_in_measured = 18;
-  public_data_packet.volume_out_measured = 13;
-  public_data_packet.volume_rate_measured = 12;
-#endif  
+  packet->mode = parameters.ventilationMode;
+  packet->controllerState = PACK_CONTROLLER_STATE(parameters.startVentilation,
+                                                  control.state);
+  packet->batteryStatus = PACK_BATTERY_STATUS(sensors.batteryCharging,
+                                              sensors.batteryLevel);
 
+  packet->respiratoryRateSet = parameters.respirationRateRequested;
+  packet->respiratoryRateMeasured = control.respirationRateMeasured;
+  packet->volumeSet = parameters.volumeRequested;
+  packet->volumeMeasured = sensors.currentVolume;
+  packet->ieRatioSet = parameters.ieRatioRequested;
+  packet->ieRatioMeasured = control.ieRatioMeasured;
+  packet->peepMeasured = sensors.peepPressure;
+  packet->peakPressureMeasured = sensors.peakPressure;
+  packet->plateauPressureMeasured = sensors.plateauPressure;
+  packet->pressureSet = 0;
+  packet->pressureMeasured = sensors.currentPressure;
+  packet->flowMeasured = sensors.currentFlow;
+  packet->volumeInMeasured = sensors.volumeIn;
+  packet->volumeOutMeasured = sensors.volumeOut;
+  packet->minuteVolumeMeasured = sensors.volumePerMinute;
+/*
+  packet->highPressureLimit = parameters.highPressureLimit;
+  packet->lowPressureLimit = parameters.lowPressureLimit;
+  packet->highVolumeLimit = parameters.highVolumeLimit;
+  packet->lowVolumeLimit = parameters.lowVolumeLimit;
+  packet->highRespiratoryRateLimit = parameters.highRespiratoryRateLimit;
+  packet->lowRespiratoryRateLimit = parameters.lowRespiratoryRateLimit;
+  */
+  packet->alarmBits = 0;
   
+  for (int i = 0; i < sizeof(alarmList) / sizeof(alarmList[0]); i++) {
+    struct alarm** alarmsPtr = alarmList[i];
+    while (*alarmsPtr) {
+      if (alarmGet(*alarmsPtr)) {
+        packet->alarmBits |= 1 << i;
+      }
+      alarmsPtr++;
+    }
+  }
+  
+  previousLocalAlarms = packet->alarmBits;
+
+  return sizeof(struct dataPacket);
 }
 
-
-
-int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint8_t* data)
+size_t updateLogPacket(struct logPacket* packet)
 {
-  static command_packet_def command_packet;
-  static uint32_t lastSeqErrorCnt=0;
-  if ((packetType==LINK_PACKET_TYPE_COMMAND_PACKET) && (packetLen==sizeof(command_packet)))
-  {
-    memcpy((void *)&command_packet, (void *)data, sizeof(command_packet));
-    if ( (serial_statistics.sequenceNoWrongCnt != lastSeqErrorCnt))
-    {
-      public_data_packet.alarm_bits |= ALARM_DROPPED_PACKET;
-    } else
-      {
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_DROPPED_PACKET;
-        public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_CRC_ERROR;        
-        memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
-        updateFromCommandPacket();
-      }          
-    lastSeqErrorCnt=serial_statistics.sequenceNoWrongCnt;
+  struct logMessage message;
+  uint8_t packetSize = 0;
+  uint8_t emptyByte;
+
+  // Pop off log message header to to determine how much data needs to be taken
+  // out of the log queue
+  for (int i = 0; i < sizeof(struct logMessage); i++) {
+    queuePop(&(comm.logQueue), &(message.header.raw[i]));
   }
+  
+  // Load log id into the packet
+  packet->id = message.header.id;
+  packetSize += sizeof(packet->id);
+  
+  // Pop out the entire message and put it in the packet, if the message is too
+  // long, truncate it and pop the rest to 
+  for (int i = 0; i < message.header.size; i++) {
+    if (packetSize < MAX_PACKET_DATA_SIZE) {
+      queuePop(&(comm.logQueue), &(packet->data[i]));
+      packetSize++;
+    } else {
+      queuePop(&(comm.logQueue), &emptyByte);
+    }
+  }
+  
+  return packetSize;
 }
 
-static PT_THREAD(serialReadThreadMain(struct pt* pt))
+size_t finalizePacket(struct packet* packet, uint16_t packetSequenceNumber, uint8_t packetType, size_t dataSize)
 {
-  static uint16_t calc_crc;
-  static uint32_t dropped_packet_count = 0;
-  static uint32_t watchdog_count = 0;
+  // Fill in packet header
+  packet->start[0] = (PACKET_START_SEQUENCE >> 0) & 0xff;
+  packet->start[1] = (PACKET_START_SEQUENCE >> 8) & 0xff;
+  packet->start[2] = (PACKET_START_SEQUENCE >> 16) & 0xff;
+  packet->header.sequenceNumber = packetSequenceNumber;
+  packet->header.version = PACKET_VERSION;
+  packet->header.type = packetType;
+  packet->header.length = dataSize;
   
+  // Calculate CRC over packet and place at the end of the packet
+  uint16_t crc = crc16((uint8_t*) &(packet->header),
+                       sizeof(packet->header) + dataSize,
+                       CRC16_INITIAL_VALUE);
+  memcpy(&(packet->data[dataSize]), &crc, sizeof(uint16_t));
+  
+  return sizeof(packet->start) + sizeof(packet->header) + dataSize + sizeof(crc);
+}
+
+bool processByte(struct packet* packet, uint8_t byteIn)
+{
+  static uint16_t processedBytes = 0;
+  static uint16_t crc = CRC16_INITIAL_VALUE;
+  
+  if (processedBytes < offsetof(struct packet, header)) {
+    // Look for Start Sequence
+    if (byteIn != (PACKET_START_SEQUENCE >> processedBytes) & 0xff) {
+      // Start sequence error, go back to either having seen none of the start
+      // sequence or just the first byte
+      comm.falseStarts++;
+      processedBytes = (byteIn == (PACKET_START_SEQUENCE & 0xff)) ? 1 : 0;
+    } else {
+      processedBytes++;
+    }
+  } else if (processedBytes < offsetof(struct packet, data)) {
+    // Process packet header
+    packet->header.raw[processedBytes - offsetof(struct packet, header)] = byteIn;
+    crc = crc16(&byteIn, sizeof(uint8_t), crc);
+    // Check the version
+    if (processedBytes == offsetof(struct packet, header.version)) {
+      if (packet->header.version != PACKET_VERSION) {
+        // Version mismatch
+        processedBytes = 0;
+        crc = CRC16_INITIAL_VALUE;
+        comm.badVersion++;
+        comm.recievedPackets++;
+      } else {
+        processedBytes++;
+      }
+    } else {
+      processedBytes++;
+    }
+  } else if (processedBytes < offsetof(struct packet, data) + packet->header.length) {
+    // Process packet data
+    packet->data[processedBytes - offsetof(struct packet, data)] = byteIn;
+    crc = crc16(&byteIn, sizeof(uint8_t), crc);
+    processedBytes++;
+  } else {
+    // Process CRC16
+    uint16_t crcOffset = processedBytes - (offsetof(struct packet, data) + packet->header.length);
+    crc ^= byteIn << crcOffset;
+    bool crcGood = (crc == 0);
+    processedBytes++;
+    if (crcOffset) {
+      processedBytes = 0;
+      crc = CRC16_INITIAL_VALUE;
+      comm.recievedPackets++;
+      if (crcGood) {
+        // Good packet delivered, pass it to the high level to handle
+        return true;
+      } else {
+        // CRC error
+        comm.badCRC++;
+      }
+    }
+  }
+  
+  return false;
+}
+
+static PT_THREAD(serialRxThreadMain(struct pt* pt))
+{  
+  static int rc = HAL_OK;
+  static uint8_t readByte = 0;
+  static struct packet packet;
+
   PT_BEGIN(pt);
 
-  serialHalHandleRx(linkProcessPacket);
+  while (1) {
+    PT_WAIT_UNTIL(pt,
+                  (rc = serialHalRead(SERIAL_PORT_UI, &readByte,
+                                      sizeof(readByte), 5 MSEC)) != HAL_IN_PROGRESS);
+    
+    if (waitOnCommandPacket &&
+        (timerHalRun(&commandPacketTimer) == HAL_TIMEOUT)) {
+      // Command packet lost
+      comm.droppedCommandPackets++;
+    }
+    
+    if (rc == HAL_TIMEOUT) {
+      continue;
+    }
 
+    if (processByte(&packet, readByte)) {
+      if (packet.header.type == PACKET_TYPE_COMMAND) {
+        if (packet.header.sequenceNumber != expectedDataSequenceNumber) {
+          // Bad sequence number, but keep going as otherwise the packet is good
+          comm.badSequenceNumber++;
+        }
+        updateFromCommandPacket((struct commandPacket*) packet.data);
+      } else {
+        // Unknown packet type
+      }
+    }
+    
+    PT_YIELD(pt);
+  }
   
-  PT_RESTART(pt);
   PT_END(pt);
 }
 
-#define LINK_PUBLIC_DATA_TIMEOUT 100 // in ms
-#define LINK_DEBUG_MSG_TIMEOUT 20
-
-static PT_THREAD(serialSendThreadMain(struct pt* pt))
+static PT_THREAD(serialTxThreadMain(struct pt* pt))
 {
+  static int rc = HAL_OK;
+  static struct timer dataPacketTimer;
+  static struct packet packet;
+  static uint16_t packetSequenceNumber = 0;
+  static size_t packetSize;
+
   PT_BEGIN(pt);
-  static long lastPublicDataMillis=0;
-  static long lastDebugMsgMillis=0;
-  //continously process tx data
-  serialHalSendData();
+  
+  // Kickoff periodic timer for 
+  timerHalBegin(&dataPacketTimer, 100 MSEC, true);
 
-  //check if we need to send the next public data packet
-  if (millis()>lastPublicDataMillis+LINK_PUBLIC_DATA_TIMEOUT)
-  {
-    lastPublicDataMillis=millis();
-    updateDataPacket();
-
-    serialHalSendPacket(LINK_PACKET_TYPE_PUBLICDATA_PACKET,sizeof(public_data_packet),(uint8_t*)&public_data_packet);
-
-    //directly start sending if possible
-    serialHalSendData();
-  }
-//check if we need to send the next public data packet
-  if (millis()>lastDebugMsgMillis+LINK_DEBUG_MSG_TIMEOUT)
-  {
-    lastDebugMsgMillis=millis();
+  while (1) {
+    PT_WAIT_UNTIL(pt,
+                  ((rc = timerHalRun(&dataPacketTimer)) != HAL_IN_PROGRESS ||
+                   (queueSize(&comm.logQueue) > sizeof(struct logMessage))));
     
+    // Either send a data packet if the timer ran out, or a log packet if one is
+    // ready
+    size_t dataSize;
+    uint8_t packetType;
+    if (rc == HAL_TIMEOUT) {
+      dataSize = updateDataPacket((struct dataPacket*) packet.data);
+      packetType = PACKET_TYPE_DATA;
+    } else {
+      dataSize = updateLogPacket((struct logPacket*) packet.data);
+      packetType = PACKET_TYPE_LOG;
+    }
+    packetSize = finalizePacket(&packet, packetSequenceNumber, packetType, dataSize);
+    
+    // Actually send the packet
+    PT_WAIT_UNTIL(pt, serialHalWrite(SERIAL_PORT_UI, &packet,
+                                     packetSize, 30 MSEC) != HAL_IN_PROGRESS);
 
+    // For data packets, set the expected return type and timeout
+    if (packet.header.type == PACKET_TYPE_DATA) {
+      expectedDataSequenceNumber = packetSequenceNumber;
+      timerHalBegin(&commandPacketTimer, 50 MSEC, false);
+      waitOnCommandPacket = true;
+      
+      // Since data packets are predictable, print out some info on the link
+      // module here
+      LOG_PRINT_EVERY(1000, DEBUG, "msgs: %lu sent, %lu lost",
+                      comm.loggingSentMessages, comm.loggingDroppedMessages);
+      LOG_PRINT_EVERY(1000, DEBUG, "pkts: %lu sent, %lu recv",
+                      comm.sentPackets, comm.recievedPackets);
+      LOG_PRINT_EVERY(1000, DEBUG, "pkt err: %lu fs, %lu crc, %lu sq#, %lu ver, %lu drp",
+                      comm.recievedPackets, comm.badCRC,
+                      comm.badSequenceNumber, comm.badVersion,
+                      comm.droppedCommandPackets);
+    }
+    packetSequenceNumber++;
+    comm.sentPackets++;
   }
   
-  PT_RESTART(pt);
   PT_END(pt);
 }
 
@@ -210,28 +384,25 @@ PT_THREAD(serialThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
 
-  if (!PT_SCHEDULE(serialSendThreadMain(&serialSendThread))) {
+  if (!PT_SCHEDULE(serialTxThreadMain(&serialTxThread))) {
     PT_EXIT(pt);
   }
   
-  if (!PT_SCHEDULE(serialReadThreadMain(&serialReadThread))) {
+  if (!PT_SCHEDULE(serialRxThreadMain(&serialRxThread))) {
     PT_EXIT(pt);
   }
 
-  DEBUG_PRINT_EVERY(10000,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt);
-  LOG_PRINT_EVERY(10000,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt);
   PT_RESTART(pt);
   PT_END(pt);
 }
 
 int linkModuleInit(void)
-{
-  if (serialHalInit() != HAL_OK) {
-    return MODULE_FAIL;
-  }
+{  
+  queueInit(&(comm.logQueue), sizeof(logBuffer), sizeof(uint8_t), logBuffer);
 
-  PT_INIT(&serialSendThread);
-  PT_INIT(&serialReadThread);
+  PT_INIT(&serialThread);
+  PT_INIT(&serialTxThread);
+  PT_INIT(&serialRxThread);
 
   return MODULE_OK;
 }

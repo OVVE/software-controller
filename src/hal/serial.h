@@ -2,41 +2,38 @@
 
 #ifndef __SERIAL_HAL_H__
 #define __SERIAL_HAL_H__
-#include <Arduino.h>
+
+#include <stddef.h>
+#include <stdint.h>
+
 #include "../hal/hal.h"
+#include "../hal/timer.h"
 
-//MSG IDs
-#define LINK_PACKET_TYPE_PUBLICDATA_PACKET 0x01
-#define LINK_PACKET_TYPE_COMMAND_PACKET 0x02
-#define LOG_PACKET_TEXT                 0x80
-#define LOG_PACKET_CONTROL              0x81
-#define LOG_PACKET_SENSORS              0x82
-#define LOG_PACKET_SERIAL_STATS         0x83
+#include <HardwareSerial.h>
 
+#define SERIAL_PORT_UI          &serialHalPortUI
+#define SERIAL_PORT_UI_PORT     Serial1
+#define SERIAL_PORT_UI_BAUD     (250000)
 
-#define BAUD_RATE 125000 //due to 16 Mhz crystal without fractional baudrate divider any of these baudrate has 0% bitrate error: 1000000 500000 250000 125000 62500
+#define SERIAL_PORT_DEBUG       &serialHalPortDebug
+#define SERIAL_PORT_DEBUG_PORT  Serial
+#define SERIAL_PORT_DEBUG_BAUD  (250000)
 
-#define SERIAL_UI Serial1
-//#define SERIAL_DEBUG Serial
+struct serialHalPort {
+  HardwareSerial* port;
+  struct timer    readTimer;
+  struct timer    writeTimer;
+  size_t          readBytesLeft;
+  size_t          writeBytesLeft;
+};
 
-typedef struct{
-  uint32_t packetsCntReceivedOk;
-  uint32_t packetsCntWrongLength;
-  uint32_t packetsCntHeaderSyncFailed;
-  uint32_t packetsCntWrongCrc;
-  uint32_t packetsCntWrongVersion;
-  uint32_t packetsCntSentOk;
-  uint32_t packetsCntSentBufferOverFlow;
-  uint32_t packetsCntSentMaxDatasizeError;
-  uint32_t sequenceNoWrongCnt;
-} SERIAL_STATISTICS;
-
-extern SERIAL_STATISTICS serial_statistics;
+extern struct serialHalPort serialHalPortUI;
+extern struct serialHalPort serialHalPortDebug;
 
 int serialHalInit(void);
-int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen, uint8_t* data));
-int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data);
-int serialHalSendData(void);
 
+int serialHalWrite(struct serialHalPort* port, void* data, size_t size, uint32_t timeout);
+
+int serialHalRead(struct serialHalPort* port, void* data, size_t size, uint32_t timeout);
 
 #endif /* __SERIAL_HAL_H__ */

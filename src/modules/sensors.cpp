@@ -21,14 +21,10 @@
 
 #include "../util/utils.h"
 
-#ifdef DEBUG_SENSORS_MODULE
-#define DEBUG_MODULE "sensors"
-#include "../util/debug.h"
-#else
-#define DEBUG_PLOT(...)
-#define DEBUG_PRINT(...)
-#define DEBUG_PRINT_EVERY(...)
-#endif
+#define LOG_MODULE "sensors"
+#define LOG_LEVEL  LOG_SENSORS_MODULE
+#include "../util/log.h"
+
 // 
 // Pressure Sensor Parameters
 //
@@ -98,8 +94,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   pressureBias = pressureSum / PRESSURE_BIAS_SAMPLES;
   pressureSum = 0;
   
-  DEBUG_PRINT("Pressure bias = %c%u.%02u cmH20",
-              (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
+  LOG_PRINT(INFO, "Pressure bias = %c%u.%02u cmH20",
+            (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
 #endif
   // Kick off sampling timer
   timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, true);
@@ -225,8 +221,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       sensors.inhalationDetected = false;
     }
     
-    DEBUG_PRINT_EVERY(100, "Pressure  = %c%u.%01u mmH2O",
-                      (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
+    LOG_PRINT_EVERY(100, INFO, "Pressure  = %c%u.%01u mmH2O",
+                    (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
 
     // Ensure this threads cannot block if it somehow elapses the timer too fast
     PT_YIELD(pt);
@@ -263,8 +259,8 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   airflowBias = airflowSum / AIRFLOW_BIAS_SAMPLES;
   airflowSum = 0;
   
-  DEBUG_PRINT("Airflow bias = %c%u.%02u SLM",
-              (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
+  LOG_PRINT(INFO, "Airflow bias = %c%u.%02u SLM",
+            (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
 
   // Kick off sampling timer
   timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD, true);
@@ -337,16 +333,16 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 
     // Determine if its time to reset the volume integrator, do it once in exhalation
     if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
-      DEBUG_PRINT("*** Reset Volume ***");
+      LOG_PRINT(INFO, "*** Reset Volume ***");
       airflowSum = 0;
       volumeReset = true;
     } else if (control.state == CONTROL_INHALATION) {
       volumeReset = false;
     }
     
-    DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
-                      (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
-    DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
+    LOG_PRINT_EVERY(200, INFO, "Airflow   = %c%u.%02u SLM",
+                    (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
+    LOG_PRINT_EVERY(200, INFO, "AirVolume = %d mL", airvolume);
     
     // Ensure this threads cannot block if it somehow elapses the timer too fast
     PT_YIELD(pt);
@@ -385,7 +381,7 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
   }
   
   // TODO: Mess with the units to make the graph scale nicely?
-  DEBUG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
+  LOG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
 
   PT_RESTART(pt);
   PT_END(pt);
