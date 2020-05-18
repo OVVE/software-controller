@@ -50,6 +50,11 @@
 #define VOLUME_MINUTE_PERIOD                      (5 SEC)
 #define VOLUME_MINUTE_WINDOW                     (60 SEC) / VOLUME_MINUTE_PERIOD
 
+//
+// Battery Sensor Parameters
+//
+#define BATTERY_SAMPLING_PERIOD                  (1000 MSEC)
+
 // Public variables
 struct sensors sensors;
 
@@ -61,6 +66,7 @@ static struct pt sensorsBatteryThread;
 
 static struct timer pressureTimer;
 static struct timer airflowTimer;
+static struct timer batteryTimer;
 
 #define SENSORS_PEEP_AVG_CNT 8
 static uint8_t peepPressureSumCnt;
