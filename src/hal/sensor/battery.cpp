@@ -32,8 +32,8 @@ int batterySensorHalFetch(void)
   return HAL_IN_PROGRESS;
 }
 
-int batterySensorHalGetValue(float16_t* value)
+int batterySensorHalGetValue(float32_t* value)
 {
-  *value = ((float16_t) reading / SENSOR_RESOLUTION) * (BATTERY_RANGE * VOLTAGE_DIVISION)
+  *value = ((float32_t) reading / SENSOR_RESOLUTION) * (BATTERY_RANGE * VOLTAGE_DIVISION)
   return HAL_OK;
 }

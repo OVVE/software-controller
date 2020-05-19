@@ -13,6 +13,6 @@ int batterySensorHalInit(void);
 int batterySensorHalFetch(void);
 
 // TODO: Doc
-int batterySensorHalGetValue(float16_t* value);
+int batterySensorHalGetValue(float32_t* value);
 
 #endif /* __BATTERY_SENSOR_HAL_H__ */
