@@ -52,6 +52,8 @@
 #define COMMAND_BIT_START 0x01
 #define COMMAND_BIT_FW    0x04
 
+#define CONTROLLER_BIT_START 0x80
+
 typedef struct __attribute__((packed)) {
   uint16_t sequence_count;                   // bytes 0 - 1
   uint8_t packet_version;                    // byte 2
