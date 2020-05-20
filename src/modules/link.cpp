@@ -50,7 +50,7 @@ extern struct sensors sensors;
 
 
 static struct alarmProperties onCommunicationFailureAlarmProperties = {
-  .priority = ALARM_PRIORITY_SEVERE,
+  .priority = ALARM_PRIORITY_HIGH,
   .preventWatchdog = false,
   .suppressionTimeout = (120 SEC),
 };
@@ -182,12 +182,12 @@ void updateFromCommandPacket()
   
   if (tmpMode != MODE_VC_CMV && tmpMode != MODE_SIMV)
   {
-    public_data_packet.alarm_bits |= ALARM_UI_SETPOINT_MISMATCH;
+    //public_data_packet.alarm_bits |= ALARM_UI_SETPOINT_MISMATCH;
   }
   else
   {    
     comm.ventilationMode = tmpMode;
-    public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_SETPOINT_MISMATCH;
+    //public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_UI_SETPOINT_MISMATCH;
   }
 
   comm.respirationRateRequested= public_command_packet.respiratory_rate_set;
@@ -228,11 +228,11 @@ void updateDataPacket()
   public_data_packet.control_state = control.state;
   if (parameters.startVentilation)
   {
-    public_data_packet.control_state |= COMMAND_BIT_START;
+    public_data_packet.control_state |= CONTROLLER_BIT_START;
   }
   else
   {
-    public_data_packet.control_state &= ~COMMAND_BIT_START;
+    public_data_packet.control_state &= ~CONTROLLER_BIT_START;
   }
   
   setDataPacketAlarmBits();
@@ -281,7 +281,7 @@ void updateDataPacket()
   public_data_packet.packet_type = PACKET_TYPE_DATA;
 
   public_data_packet.control_state = 0x1;
-  public_data_packet.control_state |= COMMAND_BIT_START; // turn on top bit
+  public_data_packet.control_state |= CONTROLLER_BIT_START; // turn on top bit
 
   public_data_packet.respiratory_rate_set = public_command_packet.respiratory_rate_set;
   public_data_packet.respiratory_rate_measured = 0xE;
