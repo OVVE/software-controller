@@ -49,7 +49,7 @@
 #define CONTROL_STATE_BEGIN_EXHALATION 0x05
 #define CONTROL_STATE_EXHALATION       0x06
 
-#define COMMAND_BIT_START 0x00
+#define COMMAND_BIT_START 0x01
 #define COMMAND_BIT_FW    0x04
 
 typedef struct __attribute__((packed)) {
