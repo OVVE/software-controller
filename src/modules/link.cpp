@@ -172,7 +172,12 @@ void updateFromCommandPacket()
   }
 
   comm.startVentilation = (public_command_packet.command & COMMAND_BIT_START) != 0x00;
-
+#ifdef SERIAL_DEBUG
+    SERIAL_DEBUG.print("command_packet.command: 0x");
+    SERIAL_DEBUG.println(public_command_packet.command, HEX);
+    SERIAL_DEBUG.print("startVentilation: ");
+    SERIAL_DEBUG.println(comm.startVentilation, DEC);
+#endif
   tmpMode = public_command_packet.mode_value;
   
   if (tmpMode != MODE_VC_CMV && tmpMode != MODE_SIMV)
