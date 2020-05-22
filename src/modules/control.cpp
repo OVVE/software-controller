@@ -814,7 +814,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Calculate and update the measured times
       uint32_t currentBreathTime = timerHalCurrent(&breathTimer);
       measuredExhalationTime = currentBreathTime - measuredInhalationTime;
-      control.ieRatioMeasured = (measuredExhalationTime << 8) / measuredInhalationTime; // TODO: address fixed point math
+      control.ieRatioMeasured = (measuredInhalationTime << 8) / currentBreathTime; // TODO: address fixed point math
       control.respirationRateMeasured = ((60 SEC) + ((currentBreathTime >> 1) USEC)) / (currentBreathTime USEC);
       control.breathCount++;
 
