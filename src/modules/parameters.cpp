@@ -76,7 +76,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
   parameters.highPressureLimit = 10000;
   parameters.lowPressureLimit = -100;
   parameters.highVolumeLimit = 2000;
-  parameters.lowVolumeLimit = -1000;
+  parameters.lowVolumeLimit = 50;
  
   while (1) {
     // TODO: Determine all the conditions that update the parameters; placeholder for now
@@ -98,6 +98,12 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       //tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
       tmpParameters[0].highRespiratoryRateLimit = comm.highRespiratoryRateLimit;
       tmpParameters[0].lowRespiratoryRateLimit = comm.lowRespiratoryRateLimit;
+
+      // TODO: Remove these lines when limit can be set elsewhere
+      tmpParameters[0].highPressureLimit = 2000;
+      tmpParameters[0].lowPressureLimit = -1000;
+      tmpParameters[0].highVolumeLimit = 600;
+      tmpParameters[0].lowVolumeLimit = 90;
     }
     
     if (!checkParameters(&tmpParameters[0])) {
