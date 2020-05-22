@@ -6,8 +6,25 @@
 #include "../../hal/hal.h"
 #include "../../hal/sensor/adc.h"
 #include "../../hal/sensor/pressure.h"
+#include "../../util/alarm.h"
+#include "../../modules/sensors.h"
+
+#define DEBUG_MODULE "pressure"
+#include "../../util/debug.h"
 
 #define PRESSURE_SENSOR_PIN 1
+
+// Pressure sensor analog voltage reading limit specs
+#define PRESSURE_SENSOR_MPXV7025_MIN_VOUT           116     // mV
+#define PRESSURE_SENSOR_MPXV7025_MAX_VOUT           4890
+
+#define PRESSURE_SENSOR_MPXV7007_MIN_VOUT           330        
+#define PRESSURE_SENSOR_MPXV7007_MAX_VOUT           4700
+
+#define PRESSURE_SENSOR_SSCDRRN100MDAA5_MIN_VOUT    125     // Assumes 5V Vsupply (2.5%)
+#define PRESSURE_SENSOR_SSCDRRN100MDAA5_MAX_VOUT    4875    // Assumes 5V Vsupply (97.5%)
+
+#define MILLIVOLTS_TO_ADC * 1023L / 5000L
 
 static int16_t reading;
 
@@ -36,10 +53,29 @@ int pressureSensorHalFetch(void)
 int pressureSensorHalGetValue(int16_t* value)
 {
 #if defined(PRESSURE_SENSOR_MPXV7025)
+  // Alarm for faulty pressure sensor
+  if (reading > PRESSURE_SENSOR_MPXV7025_MAX_VOUT MILLIVOLTS_TO_ADC) {
+    DEBUG_PRINT_EVERY(100, "Faulty pressure sensor (HIGH)! Measured: %i , Limit: %i", (int)reading, (int)(PRESSURE_SENSOR_MPXV7025_MAX_VOUT MILLIVOLTS_TO_ADC));
+    alarmSet(&sensors.badPressureSensorAlarm);
+  }
+  else if (reading < PRESSURE_SENSOR_MPXV7025_MIN_VOUT MILLIVOLTS_TO_ADC) {
+    DEBUG_PRINT_EVERY(100, "Faulty pressure sensor (LOW)! Measured: %i , Limit: %i", (int)reading, (int)(PRESSURE_SENSOR_MPXV7025_MIN_VOUT MILLIVOLTS_TO_ADC));
+    alarmSet(&sensors.badPressureSensorAlarm);
+  }
+
   // For the MPXV7025 pressure sensor: (reading / 1024 - 0.5) / 0.018 = P in kPa
   // From Calvin, why these exact values and the /4, Im not sure
   int32_t pascals = (((int32_t)reading * 217L) - 110995L)>>2; // convert to Pascals
 #elif defined(PRESSURE_SENSOR_MPXV7007)
+
+  // Alarm for faulty pressure sensor
+  if (reading > PRESSURE_SENSOR_MPXV7007_MAX_VOUT MILLIVOLTS_TO_ADC) {
+    alarmSet(&sensors.badPressureSensorAlarm);
+  }
+  else if (reading < PRESSURE_SENSOR_MPXV7007_MIN_VOUT MILLIVOLTS_TO_ADC) {
+    alarmSet(&sensors.badPressureSensorAlarm);
+  }
+
   // For the MPXV7007 pressure sensor: (reading / 1024 - 0.5) / 0.057 = P in kPa
   //                                   (reading / 1024 - 0.5) / (57 / 1000) * 1000 in Pa
   //                                   (reading / 1024 - 0.5) * 1000000 / 57
@@ -48,6 +84,15 @@ int pressureSensorHalGetValue(int16_t* value)
   //                                   (reading * 137.0614 - 70175.4386) / 8
   int32_t pascals = (((int32_t)reading * 137L) - 70175L)>>3; // convert to Pascals
 #elif defined(PRESSURE_SENSOR_SSCDRRN100MDAA5)
+
+  // Alarm for faulty pressure sensor
+  if (reading > PRESSURE_SENSOR_SSCDRRN100MDAA5_MAX_VOUT MILLIVOLTS_TO_ADC) {
+    alarmSet(&sensors.badPressureSensorAlarm);
+  }
+  else if (reading < PRESSURE_SENSOR_SSCDRRN100MDAA5_MIN_VOUT MILLIVOLTS_TO_ADC) {
+    alarmSet(&sensors.badPressureSensorAlarm);
+  }
+
   // For the SSCDRRN100MDAA5 pressure sensor: (reading - 0.1 * 1024) * (200 / (0.8 * 1024)) + (-100) = P in mbar
   //                                          ((reading * 200 - 1024 * 20) / 0.8 / 1024 - 100) * 100 in Pa
   //                                          (reading * 200 - 20480) * 125 / 1024 - 10000

@@ -6,8 +6,20 @@
 #include "../../hal/hal.h"
 #include "../../hal/sensor/adc.h"
 #include "../../hal/sensor/airflow.h"
+#include "../../util/alarm.h"
+#include "../../modules/sensors.h"
+
+#define DEBUG_MODULE "airflow"
+#include "../../util/debug.h"
 
 #define AIRFLOW_SENSOR_PIN 0
+
+// Airflow sensor analog voltage reading limit specs
+// #define AIRFLOW_SENSOR_PMF4103A_MIN_VOUT        1000        // mV
+#define AIRFLOW_SENSOR_PMF4103A_MIN_VOUT        500        // mV
+#define AIRFLOW_SENSOR_PMF4103A_MAX_VOUT        5000
+
+#define MILLIVOLTS_TO_ADC * 1023L / 5000L
 
 static int16_t reading;
 
@@ -35,6 +47,16 @@ int airflowSensorHalFetch(void)
 
 int airflowSensorHalGetValue(int16_t* value)
 {
+  // Alarm for faulty airflow sensor
+  if (reading > AIRFLOW_SENSOR_PMF4103A_MAX_VOUT MILLIVOLTS_TO_ADC) {
+    DEBUG_PRINT_EVERY(100, "Faulty airflow sensor! Measured: %i", (int)reading);
+    alarmSet(&sensors.badAirflowSensorAlarm);
+  }
+  else if (reading < AIRFLOW_SENSOR_PMF4103A_MIN_VOUT MILLIVOLTS_TO_ADC) {
+    DEBUG_PRINT_EVERY(100, "Faulty airflow sensor! Measured: %i", (int)reading);
+    alarmSet(&sensors.badAirflowSensorAlarm);
+  }
+
   // reading is ADC values, from PMF4003V data sheet:
   // flow = (Vout - 1[V]) / 4[V] * Range = (Vout - 1[V]) / 4[V] * 20000[0.01SLM]
   // Vout = ADCVal / 2^10 * 5[V] = ADCVal * 5[V] / 1024
