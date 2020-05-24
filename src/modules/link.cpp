@@ -34,7 +34,8 @@ uint16_t last_sequence_count; // what to expect for next sequence, set in write 
 data_packet_def public_data_packet;
 command_packet_def public_command_packet;
 uint32_t lastDataPacketAlarmBits;
-
+uint32_t dropped_packet_count = 0;
+  
 // Public Variables
 // shared with serial.cpp
 uint8_t data_bytes[sizeof(data_packet_def)];
@@ -150,7 +151,8 @@ void updateFromCommandPacket()
     SERIAL_DEBUG.print("invalid packet version: 0x");
     SERIAL_DEBUG.println(public_command_packet.packet_version, HEX);
 #endif     
-    public_data_packet.alarm_bits |= ALARM_ECU_COMMUNICATION_FAILURE;
+    alarmSet(&comm.onCommunicationFailureAlarm);
+    ++dropped_packet_count;
     return;
   }
   if (public_command_packet.packet_type == PACKET_TYPE_FIRMWARE)
@@ -321,7 +323,6 @@ void updateDataPacket()
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
 {
   static uint16_t calc_crc;
-  static uint32_t dropped_packet_count = 0;
   static uint32_t watchdog_count = 0;
   static command_packet_def command_packet;
   
