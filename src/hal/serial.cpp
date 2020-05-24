@@ -50,7 +50,7 @@ int serialHalGetData(void)
     return HAL_IN_PROGRESS;
   }
   // change to while if reading all the bytes currently available
-  if (SERIAL_UI.available())
+  while (SERIAL_UI.available())
   {       
     SERIAL_UI.readBytes(&inByte, 1);
     
