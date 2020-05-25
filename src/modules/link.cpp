@@ -35,7 +35,8 @@ data_packet_def public_data_packet;
 command_packet_def public_command_packet;
 uint32_t lastDataPacketAlarmBits;
 uint32_t dropped_packet_count = 0;
-  
+uint8_t ConsecutiveDroppedPacketCount = 0; 
+ 
 // Public Variables
 // shared with serial.cpp
 uint8_t data_bytes[sizeof(data_packet_def)];
@@ -150,8 +151,11 @@ void updateFromCommandPacket()
 #ifdef SERIAL_DEBUG
     SERIAL_DEBUG.print("invalid packet version: 0x");
     SERIAL_DEBUG.println(public_command_packet.packet_version, HEX);
-#endif     
-    alarmSet(&comm.onCommunicationFailureAlarm);
+#endif
+    ++ConsecutiveDroppedPacketCount;
+    if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
+      alarmSet(&comm.onCommunicationFailureAlarm);
+    }
     ++dropped_packet_count;
     return;
   }
@@ -335,7 +339,10 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
     watchdog_count++;    
     watchdog_exceeded = false;
     clear_input = true;
-    alarmSet(&comm.onCommunicationFailureAlarm);
+    ++ConsecutiveDroppedPacketCount;
+    if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
+      alarmSet(&comm.onCommunicationFailureAlarm);
+    }    
   }
   else
   {
@@ -348,7 +355,10 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
+    ++ConsecutiveDroppedPacketCount;
+    if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
       alarmSet(&comm.onCommunicationFailureAlarm);
+    }      
     }
     else
     {
@@ -361,6 +371,10 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       {
         dropped_packet_count++;
         alarmSet(&comm.onCommunicationFailureAlarm);
+        ++ConsecutiveDroppedPacketCount;
+        if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
+          alarmSet(&comm.onCommunicationFailureAlarm);
+        }
 #ifdef SERIAL_DEBUG
         SERIAL_DEBUG.print("bad CRC 0x ");
         SERIAL_DEBUG.println(command_packet.crc, HEX);
@@ -369,8 +383,7 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       }
       else
       {
-        //public_data_packet.alarm_bits = public_data_packet.alarm_bits & ~ALARM_ECU_COMMUNICATION_FAILURE;
-    
+        ConsecutiveDroppedPacketCount = 0;
         memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
         updateFromCommandPacket();
 #ifdef SERIAL_DEBUG
