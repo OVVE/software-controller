@@ -355,10 +355,10 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
 #endif    
       clear_input = true;
-    ++ConsecutiveDroppedPacketCount;
-    if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
-      alarmSet(&comm.onCommunicationFailureAlarm);
-    }      
+      ++ConsecutiveDroppedPacketCount;
+      if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
+        alarmSet(&comm.onCommunicationFailureAlarm);
+      }      
     }
     else
     {
@@ -370,7 +370,6 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
       if (command_packet.crc != calc_crc)
       {
         dropped_packet_count++;
-        alarmSet(&comm.onCommunicationFailureAlarm);
         ++ConsecutiveDroppedPacketCount;
         if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
           alarmSet(&comm.onCommunicationFailureAlarm);
