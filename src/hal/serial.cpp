@@ -13,62 +13,102 @@
 #define LOG_LEVEL  LOG_LINK_MODULE
 #include "../util/log.h"
 
-#define SERIAL_TX_BUFFERSIZE 2048
+#define UI_TX_BUFFERSIZE 512
+#define DEBUG_TX_BUFFERSIZE 512
 
-uint16_t serialTxBufferHead=0;
-uint16_t serialTxBufferTail=0;
-
-uint8_t serialTxBuffer[SERIAL_TX_BUFFERSIZE];
-
-inline int serialTxBufferBytesAvailable(void)
+typedef struct 
 {
-  if (serialTxBufferHead>=serialTxBufferTail) 
-    return SERIAL_TX_BUFFERSIZE +serialTxBufferTail - serialTxBufferHead -1;
+  uint16_t head;
+  uint16_t tail;
+  uint8_t *buffer;
+  uint16_t bufferSize;
+} txbuffer;
+
+uint8_t txBufferData[UI_TX_BUFFERSIZE];
+uint8_t debugTxBufferData[DEBUG_TX_BUFFERSIZE];
+
+txbuffer uiTxBuffer;
+txbuffer debugTxBuffer;
+
+inline int serialTxBufferBytesAvailable(txbuffer* buffer)
+{
+  if (!buffer)
+    return 0;
+
+  if (buffer->head>=buffer->tail) 
+    return buffer->bufferSize +buffer->tail - buffer->head -1;
   else
-    return serialTxBufferTail-serialTxBufferHead-1;
+    return buffer->tail-buffer->head-1;
 }
-inline int serialTxBufferAddByte(uint8_t byte)
+inline int serialTxBufferAddByte(txbuffer* buffer, uint8_t byte)
 {
-  if (((serialTxBufferHead+1)%SERIAL_TX_BUFFERSIZE)==serialTxBufferTail)
+  if (!buffer)
+    return HAL_FAIL;
+  if (((buffer->head+1)%buffer->bufferSize)==buffer->tail)
     {
         return HAL_FAIL;
     }
-  serialTxBuffer[serialTxBufferHead]=byte;
-  serialTxBufferHead++;
-  serialTxBufferHead%=SERIAL_TX_BUFFERSIZE;
+  buffer->buffer[buffer->head]=byte;
+  buffer->head++;
+  buffer->head%=buffer->bufferSize;
+  return HAL_OK;
 }
 
-inline int serialTxBufferGetByte(uint8_t* byte)
+inline int serialTxBufferGetByte(txbuffer* buffer, uint8_t* byte)
 {
-  if (serialTxBufferTail==serialTxBufferHead)
+  if (!buffer)
     return HAL_FAIL;
-  *byte=serialTxBuffer[serialTxBufferTail];
-  serialTxBufferTail++;
-  serialTxBufferTail%=SERIAL_TX_BUFFERSIZE;
+
+  if (buffer->tail==buffer->head)
+    return HAL_FAIL;
+  *byte=buffer->buffer[buffer->tail];
+  buffer->tail++;
+  buffer->tail%=buffer->bufferSize;
   return HAL_OK;
 }
 
 SERIAL_STATISTICS serial_statistics;
 
+int serialDebugWrite(uint8_t* buffer, uint16_t size)
+{
+      if (serialTxBufferBytesAvailable(&debugTxBuffer)>=size)
+      {
+          for (int i=0;i<size;i++)
+            serialTxBufferAddByte(&debugTxBuffer,buffer[i]);
+          return HAL_OK;
+      }else
+          return HAL_FAIL;
+}
+
 int serialHalInit(void)
 {
-  SERIAL_UI.begin(BAUD_RATE);  // this function does not return anything
+  SERIAL_UI.begin(BAUD_RATE);  
+  
+  // this function does not return anything
   // not sure how we can do something like while (!serial)
   // return MODULE_FAIL;
 
-    
+  uiTxBuffer.buffer=&txBufferData[0];
+  uiTxBuffer.bufferSize=sizeof(txBufferData);
+  uiTxBuffer.head=0;
+  uiTxBuffer.tail=0;
+
+  debugTxBuffer.buffer=&debugTxBufferData[0];
+  debugTxBuffer.bufferSize=sizeof(debugTxBufferData);
+  debugTxBuffer.head=0;
+  debugTxBuffer.tail=0;
+
+  serial_statistics.handleMaxRxBufferCnt=10000;
+
+  SERIAL_PORT_DEBUG.begin(BAUD_RATE_DEBUG);
 
   LOG_PRINT(DEBUG,"Serial Buffers: TX:%i RX:%i",SERIAL_TX_BUFFER_SIZE,SERIAL_RX_BUFFER_SIZE);
 
   return HAL_OK;
 }
 
-#define SERIAL_MAX_DATA_SIZE 128
-#define SERIAL_PROTOCOL_VERSION 4
-#define SERIAL_HEADER_LENGTH (3+2+1+1+2) //3 start bytes, 2 seq numbers, 1 protocol version, 1 length, 2 CRC
-
-#define SERIAL_RX_MAX_BYTES_PER_CYCLE 64
-#define SERIAL_TX_MAX_BYTES_PER_CYCLE 64
+#define SERIAL_RX_MAX_BYTES_PER_CYCLE 32
+#define SERIAL_TX_MAX_BYTES_PER_CYCLE 256
 
 #define SERIAL_RX_STATE_START1  0
 #define SERIAL_RX_STATE_START2  1
@@ -103,7 +143,9 @@ int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen
   bytesAvailable=SERIAL_UI.available();
 
   if (bytesAvailable>SERIAL_RX_MAX_BYTES_PER_CYCLE)
+  {
     bytesAvailable=SERIAL_RX_MAX_BYTES_PER_CYCLE;
+  }
 
   while(bytesAvailable)
   {       
@@ -226,11 +268,30 @@ int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
     uint8_t cnt;
     uint16_t crc=0xFFFF;
     static uint16_t sequenceNumber=0;
-    if (packetLength+SERIAL_HEADER_LENGTH>serialTxBufferBytesAvailable())
-    {
-      serial_statistics.packetsCntSentBufferOverFlow++;
+
+    //make sure that other packets are only accepted if buffer is <75%
+
+    //TEMPORARY!
+    if (packetType==LINK_PACKET_TYPE_TEXT)
       return HAL_FAIL;
+    
+    if (packetType!=LINK_PACKET_TYPE_PUBLICDATA_PACKET)
+    {
+      if (packetLength+SERIAL_HEADER_LENGTH>((2*serialTxBufferBytesAvailable(&uiTxBuffer))/4))
+      {
+        serial_statistics.packetsCntSentBufferOverFlow++;
+        return HAL_FAIL;
+      }
+    }else
+    {
+      if (packetLength+SERIAL_HEADER_LENGTH>serialTxBufferBytesAvailable(&uiTxBuffer))
+      {
+        serial_statistics.packetsCntSentBufferOverFlow++;
+        return HAL_FAIL;
+      }
     }
+
+    
 
     if (packetLength>SERIAL_MAX_DATA_SIZE)
     {
@@ -238,26 +299,26 @@ int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
       return HAL_FAIL;
     }      
 
-    serialTxBufferAddByte(SERIAL_STARTBYTE_1);
-    serialTxBufferAddByte(SERIAL_STARTBYTE_2);
-    serialTxBufferAddByte(SERIAL_STARTBYTE_3);
-    serialTxBufferAddByte(sequenceNumber&0xff);
+    serialTxBufferAddByte(&uiTxBuffer,SERIAL_STARTBYTE_1);
+    serialTxBufferAddByte(&uiTxBuffer,SERIAL_STARTBYTE_2);
+    serialTxBufferAddByte(&uiTxBuffer,SERIAL_STARTBYTE_3);
+    serialTxBufferAddByte(&uiTxBuffer,sequenceNumber&0xff);
     crc=_crc_xmodem_update(crc,sequenceNumber&0xff);
-    serialTxBufferAddByte(sequenceNumber>>8);
+    serialTxBufferAddByte(&uiTxBuffer,sequenceNumber>>8);
     crc=_crc_xmodem_update(crc,sequenceNumber>>8);
-    serialTxBufferAddByte(SERIAL_PROTOCOL_VERSION);
+    serialTxBufferAddByte(&uiTxBuffer,SERIAL_PROTOCOL_VERSION);
     crc=_crc_xmodem_update(crc,SERIAL_PROTOCOL_VERSION);
-    serialTxBufferAddByte(packetType);
+    serialTxBufferAddByte(&uiTxBuffer,packetType);
     crc=_crc_xmodem_update(crc,packetType);
-    serialTxBufferAddByte(packetLength);
+    serialTxBufferAddByte(&uiTxBuffer,packetLength);
     crc=_crc_xmodem_update(crc,packetLength);
     for (cnt=0;cnt<packetLength;cnt++)
     {
-      serialTxBufferAddByte(data[cnt]);
+      serialTxBufferAddByte(&uiTxBuffer,data[cnt]);
       crc=_crc_xmodem_update(crc,data[cnt]);
     }
-    serialTxBufferAddByte(crc&0xff);
-    serialTxBufferAddByte(crc>>8);
+    serialTxBufferAddByte(&uiTxBuffer,crc&0xff);
+    serialTxBufferAddByte(&uiTxBuffer,crc>>8);
 
     serial_statistics.packetsCntSentOk++;
     sequenceNumber++;
@@ -270,16 +331,38 @@ int serialHalSendData()
     uint16_t availableForWrite;     
     uint8_t ret;
     uint8_t byte;
-    availableForWrite = SERIAL_UI.availableForWrite();
 
+    if (serialTxBufferBytesAvailable(&uiTxBuffer)<serial_statistics.handleMaxRxBufferCnt)
+      serial_statistics.handleMaxRxBufferCnt=serialTxBufferBytesAvailable(&uiTxBuffer);
+
+    availableForWrite = SERIAL_UI.availableForWrite();
+    
+    if (availableForWrite>SERIAL_TX_MAX_BYTES_PER_CYCLE)
+    {
+      serial_statistics.handleMaxTxBufferCnt++;
+      availableForWrite=SERIAL_TX_MAX_BYTES_PER_CYCLE;
+    }
+
+    while (availableForWrite)
+    {
+      if (serialTxBufferGetByte(&uiTxBuffer,&byte)==HAL_OK)
+      {
+        SERIAL_UI.write(byte);
+        availableForWrite--;
+      }else
+        availableForWrite=0;
+    }
+
+    availableForWrite = SERIAL_PORT_DEBUG.availableForWrite();
+    
     if (availableForWrite>SERIAL_TX_MAX_BYTES_PER_CYCLE)
       availableForWrite=SERIAL_TX_MAX_BYTES_PER_CYCLE;
 
     while (availableForWrite)
     {
-      if (serialTxBufferGetByte(&byte)==HAL_OK)
+      if (serialTxBufferGetByte(&debugTxBuffer,&byte)==HAL_OK)
       {
-        SERIAL_UI.write(byte);
+        SERIAL_PORT_DEBUG.write(byte);
         availableForWrite--;
       }else
         availableForWrite=0;

@@ -37,35 +37,26 @@
 #define LOG_BACKEND_DEBUG_PORT SERIAL_PORT_DEBUG
 
 // Handles actually printing to the debug serial backend
-#define BACKEND_DEBUG(lvl, lid, buf, sz)                                       \
+#define BACKEND_DEBUG(lvl, id, buf, sz)                                       \
   do {   \
-    if (lvl <= LOG_BACKEND_DEBUG) {                                            \
-      serialHalSendPacket(LOG_PACKET_TEXT,                            \
-                        buf, sz);         \
+    if (lvl <= LOG_BACKEND_DEBUG) {         \
+        serialDebugWrite(buf,sz);                                            \
     }                                                                    \
   } while (0);
 
 // Handles sending data to the link module
-#define BACKEND_LINK(lvl, lid, buf, sz)                                        \
+#define BACKEND_LINK(lvl, id, buf, sz)                                        \
   do {                                                                         \
-    /*if (lvl <= LOG_BACKEND_LINK) {                                             \
-      uint8_t _queueSize = comm.logQueue.maxSize - queueSize(&comm.logQueue);  \
-      struct logMessage _msg;                                                  \
-      uint8_t _tsz = sizeof(_msg.header) + sz;                                 \
-      if (_queueSize <= _tsz) {                                                \
-        _msg.header.size = min(sz, MAX_LOG_DATA_SIZE);                         \
-        _msg.header.id = lid;                                                  \
-        for (int _i = 0; _i < sizeof(_msg.header); _i++) {                     \
-          queuePush(&comm.logQueue, &(_msg.header.raw[_i]));                   \
-        }                                                                      \
-        for (int _i = 0; _i < _msg.header.size; _i++) {                        \
-          queuePush(&comm.logQueue, &(buf[_i]));                               \
-        }                                                                      \
-        comm.loggingSentMessages++;                                            \
-      } else {                                                                 \
-        comm.loggingDroppedMessages++;                                         \
-      }                                                                        \
-    }                          */                                                \
+    if (lvl <= LOG_BACKEND_LINK) {                                             \
+        if (serialHalSendPacket(id,buf, sz) == HAL_OK)     \
+        {    \
+            serial_statistics.textPacketsSentCnt++;                                            \
+        }\
+        else                                                                  \
+        {\
+            serial_statistics.textPacketsDroppedCnt++;                                            \
+        }\
+    }                                                                          \
   } while (0);
 
 
@@ -124,8 +115,8 @@
       char _buf[LOG_BUFFER_SIZE];                                              \
       char* PROGMEM _fmt = PSTR("[" LOG_MODULE "] " fmt "\n");                 \
       int _sz = snprintf_P(_buf, LOG_BUFFER_SIZE, _fmt, ## __VA_ARGS__);       \
-      BACKEND_DEBUG(lvl, LOG_MESSAGE_ID, _buf, min(_sz, sizeof(_buf)));        \
-      BACKEND_LINK(lvl, LOG_MESSAGE_ID, _buf, min(_sz, sizeof(_buf)));         \
+      BACKEND_DEBUG(lvl, LINK_PACKET_TYPE_TEXT,_buf, min(_sz, sizeof(_buf)));        \
+      BACKEND_LINK(lvl, LINK_PACKET_TYPE_TEXT,_buf, min(_sz, sizeof(_buf)));         \
     }                                                                          \
   } while (0);
 
