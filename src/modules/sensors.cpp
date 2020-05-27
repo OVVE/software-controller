@@ -23,10 +23,9 @@
 #include "../util/alarm.h"
 #include "../util/utils.h"
 
-#ifdef DEBUG_SENSORS_MODULE
-#define DEBUG_MODULE "sensors"
-#include "../util/debug.h"
-#endif
+#define LOG_MODULE "sensors"
+#define LOG_LEVEL  LOG_SENSORS_MODULE
+#include "../util/log.h"
 
 // 
 // Pressure Sensor Parameters
@@ -156,8 +155,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   pressureBias = pressureSum / PRESSURE_BIAS_SAMPLES;
   pressureSum = 0;
   
-  DEBUG_PRINT("Pressure bias = %c%u.%02u cmH20",
-              (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
+  LOG_PRINT(INFO, "Pressure bias = %c%u.%02u cmH20",
+            (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
 #endif
   // Kick off sampling timer
   timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, true);
@@ -285,11 +284,11 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     
     // Alarms
     if (pressure > parameters.highPressureLimit) {
-      DEBUG_PRINT_EVERY(100, "High Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.highPressureLimit);
+      LOG_PRINT_EVERY(100, INFO, "High Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.highPressureLimit);
       alarmSet(&sensors.highPressureAlarm);
     }
     if (pressure < parameters.lowPressureLimit) {
-      DEBUG_PRINT_EVERY(1, "Low Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.lowPressureLimit);
+      LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.lowPressureLimit);
       alarmSet(&sensors.lowPressureAlarm);
     }
     // Check pressure sensor for nominal response
@@ -300,7 +299,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       }
       // DEBUG_PRINT_EVERY(10, "Pressure Diff: %i Pressure Response Count: %i", abs(pressure - previousPressure[PRESSURE_WINDOW -1]), pressureResponseCount);
       if (pressureResponseCount < control.breathCount) {
-        DEBUG_PRINT_EVERY(1, "Pressure Unresponsive Alarm!");
+        LOG_PRINT_EVERY(1, INFO, "Pressure Unresponsive Alarm!");
         alarmSet(&sensors.badPressureSensorAlarm);
         pressureResponseCount = control.breathCount;
       }
@@ -351,8 +350,8 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   airflowBias = airflowSum / AIRFLOW_BIAS_SAMPLES;
   airflowSum = 0;
   
-  DEBUG_PRINT("Airflow bias = %c%u.%02u SLM",
-              (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
+  LOG_PRINT(INFO, "Airflow bias = %c%u.%02u SLM",
+            (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
 
   // Kick off sampling timer
   timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD, true);
@@ -431,7 +430,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 
     // Determine if its time to reset the volume integrator, do it once in exhalation
     if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
-      DEBUG_PRINT("*** Reset Volume ***");
+      LOG_PRINT(INFO, "*** Reset Volume ***");
       airflowSum = 0;
       volumeReset = true;
     } else if (control.state == CONTROL_INHALATION) {
@@ -441,11 +440,11 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     // Alarms
     if (control.state == CONTROL_HOLD_IN) {
       if (airvolume > parameters.highVolumeLimit) {
-        DEBUG_PRINT_EVERY(10, "High Volume Alarm! Measured: %i ; Limit: %i", airvolume, parameters.highVolumeLimit);
+        LOG_PRINT_EVERY(10, INFO, "High Volume Alarm! Measured: %i ; Limit: %i", airvolume, parameters.highVolumeLimit);
         alarmSet(&sensors.highVolumeAlarm);
       }
       if (airvolume < parameters.lowVolumeLimit) {
-        DEBUG_PRINT_EVERY(10, "Low Volume Alarm! Measured: %i ; Limit: %i", airvolume, parameters.lowVolumeLimit);
+        LOG_PRINT_EVERY(10, INFO, "Low Volume Alarm! Measured: %i ; Limit: %i", airvolume, parameters.lowVolumeLimit);
         alarmSet(&sensors.lowVolumeAlarm);
       }
     }
@@ -456,9 +455,9 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
         airflowResponseCount += 1;
         airflowResponseFlag = true;
       }
-      DEBUG_PRINT_EVERY(10, "Airflow Diff: %i Airflow Response Count: %i", abs(airflow - previousAirflow[AIRFLOW_WINDOW -1]), airflowResponseCount);
+      LOG_PRINT_EVERY(10, INFO, "Airflow Diff: %i Airflow Response Count: %i", abs(airflow - previousAirflow[AIRFLOW_WINDOW -1]), airflowResponseCount);
       if (airflowResponseCount < control.breathCount) {
-        DEBUG_PRINT_EVERY(1, "Airflow Unresponsive Alarm!");
+        LOG_PRINT_EVERY(1, INFO, "Airflow Unresponsive Alarm!");
         alarmSet(&sensors.badAirflowSensorAlarm);
         airflowResponseCount = control.breathCount;
       }
@@ -468,7 +467,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       airflowResponseFlag = false;
     }
     
-    DEBUG_PRINT_EVERY(200, "Airflow   = %c%u.%02u SLM",
+    LOG_PRINT_EVERY(200, INFO, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
     // DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
     
@@ -509,7 +508,7 @@ PT_THREAD(sensorsThreadMain(struct pt* pt))
   }
   
   // TODO: Mess with the units to make the graph scale nicely?
-  DEBUG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
+  LOG_PLOT(sensors.currentFlow, sensors.currentVolume, sensors.currentPressure);
 
   PT_RESTART(pt);
   PT_END(pt);

@@ -19,10 +19,9 @@
 #include "../util/alarm.h"
 #include "../util/metrics.h"
 
-#ifdef DEBUG_CONTROL_MODULE
-#define DEBUG_MODULE "control"
-#include "../util/debug.h"
-#endif
+#define LOG_MODULE "control"
+#define LOG_LEVEL  LOG_CONTROL_MODULE
+#include "../util/log.h"
 
 #define CONTROL_LOOP_PERIOD (10 MSEC)
 
@@ -39,6 +38,27 @@
 struct control control = {
   .state = CONTROL_HOME
 };
+
+typedef struct __attribute__((packed)){
+  long time; //millis
+  uint32_t targetInhalationTime;
+  uint32_t targetHoldTime;
+  uint32_t targetExhalationTime;
+  float targetAirFlow;
+  float controlI;
+  float controlOutputFiltered;
+  float inhalationTrajectoryStartFlow; //modified start flow
+  float inhalationTrajectoryEndFlow; //modified end flow
+  float inhalationTrajectoryInitialFlow; //flow calculation based on square form
+  int32_t inhalationTrajectoryPhaseShiftEstimate; //compressing the air in the bag causes a delay of flow and we therefore need to estimate the phase shift in timing to allow enough inhale time
+  int32_t currentFlow;
+  int32_t currentPressure;
+  uint8_t controlForceHome;
+  uint8_t inhalationTrajectoryInitialCycleCnt;
+  uint8_t controlLimitHit;
+} CONTROL_LOG_DATA;
+
+CONTROL_LOG_DATA controlLogData;
 
 // Private Variables
 static struct pt controlThread;
@@ -160,7 +180,7 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
         
     float newScale=(1.0f+(INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE/100.0f)*diff/(float)INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE); 
 
-    DEBUG_PRINT("inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
+    LOG_PRINT(INFO, "inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
 
     //currently deactivated here
     //scale up start
@@ -172,7 +192,7 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
   {
     float newScale=(1.0f-(INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE/100.0f)); 
 
-    DEBUG_PRINT("inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
+    LOG_PRINT(INFO, "inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
 
     if (inhalationTrajectoryStartFlow>inhalationTrajectoryEndFlow)
     {
@@ -197,7 +217,7 @@ float inhalationTrajectoryUpdateVolumeScale(void)
   else
     newScale=targetVolume/inhalationTrajectoryLastVolume;
 
-  DEBUG_PRINT("inh trj: vol: %li lastVol: %li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume);
+  LOG_PRINT(INFO, "inh trj: vol: %li lastVol: %li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume);
   //limit adaption rate
   if (newScale>(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
@@ -205,7 +225,7 @@ float inhalationTrajectoryUpdateVolumeScale(void)
   if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
 
- DEBUG_PRINT("inh trj:  scale:%li",(int32_t)((float)newScale*1000.0f));
+  LOG_PRINT(INFO, "inh trj:  scale:%li",(int32_t)((float)newScale*1000.0f));
 
   inhalationTrajectoryStartFlow*=newScale;
   inhalationTrajectoryEndFlow*=newScale;
@@ -229,7 +249,7 @@ float inhalationTrajectoryUpdateToNewVolume(void)
   else
     newScale=targetVolume/inhalationTrajectoryLastVolume;
 
-  DEBUG_PRINT("inh trj new vol: vol: %li lastVol: %li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume);
+  LOG_PRINT(INFO, "inh trj new vol: vol: %li lastVol: %li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume);
 
   //limit adaption rate
   if (newScale>(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
@@ -238,7 +258,7 @@ float inhalationTrajectoryUpdateToNewVolume(void)
   if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
 
- DEBUG_PRINT("inh trj:  scale:%li",(int32_t)newScale*1000.0f);
+  LOG_PRINT(INFO, "inh trj:  scale:%li",(int32_t)newScale*1000.0f);
   
   inhalationTrajectoryStartFlow*=newScale;
   inhalationTrajectoryEndFlow*=newScale;
@@ -285,14 +305,14 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     targetVolume = parameters.volumeRequested;
     
 
-    DEBUG_PRINT("InH param: vol:%li respRate:%i ieRatio:%i",targetVolume,parameters.respirationRateRequested,parameters.ieRatioRequested);
+    LOG_PRINT(INFO, "InH param: vol:%li respRate:%i ieRatio:%i",targetVolume,parameters.respirationRateRequested,parameters.ieRatioRequested);
   
     inhalationTrajectoryLastVolume=(float)sensors.volumeIn;
     inhalationTrajectoryInitialFlow=initialFlow();
     inhalationTrajectoryStartFlow=inhalationTrajectoryInitialFlow;
     inhalationTrajectoryEndFlow=inhalationTrajectoryInitialFlow;
 
-    DEBUG_PRINT("InH Trj: Init");
+    LOG_PRINT(INFO, "InH Trj: Init");
   
     inhalationTrajectoryInitialCycleCnt=INHALATION_TRAJECTORY_NON_ADAPTED_CYCLES; //the first cycles, we don't adapt to measurements
 
@@ -363,7 +383,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
       inhalationTrajectoryInitialCycleCnt--;
     }
 
-    DEBUG_PRINT("InH Trj: param: if:%li tsF:%li teF: %li tv:%li",(int32_t)(inhalationTrajectoryInitialFlow*10.0f),(int32_t)(inhalationTrajectoryStartFlow*10.0f),(int32_t)(inhalationTrajectoryEndFlow*10.0f),(int32_t)targetVolume);
+    LOG_PRINT(INFO, "InH Trj: param: if:%li tsF:%li teF: %li tv:%li",(int32_t)(inhalationTrajectoryInitialFlow*10.0f),(int32_t)(inhalationTrajectoryStartFlow*10.0f),(int32_t)(inhalationTrajectoryEndFlow*10.0f),(int32_t)targetVolume);
   
     inhalationTrajectoryCurrentTimeInCycle=0.0f;
     
@@ -468,7 +488,7 @@ static int updateControl(void)
       if ((motorHalGetPosition()<=exhalationTargetPosition)  || (motorHalGetStatus()==MOTOR_HAL_STATUS_LIMIT_TOP))
       {
         motorHalCommand(MOTOR_HAL_COMMAND_HOLD,0);
-        DEBUG_PRINT("Target Reached %li of %li",motorHalGetPosition(),exhalationTargetPosition);
+        LOG_PRINT(INFO, "Target Reached %li of %li",motorHalGetPosition(),exhalationTargetPosition);
         return 1;
       }
       checkForFirstFlow=1;
@@ -477,7 +497,7 @@ static int updateControl(void)
       if (generateFlowInhalationTrajectory(0)==STATE_INHALATION_TRAJECTORY_END)
       {
         motorHalCommand(MOTOR_HAL_COMMAND_HOLD,0);
-        DEBUG_PRINT("Target Reached");
+        LOG_PRINT(INFO, "Target Reached");
         return 1;
 
       }
@@ -496,7 +516,7 @@ static int updateControl(void)
         if (inhalationTrajectoryPhaseShiftEstimate>(((targetInhalationTime-inhalationTrajectoryPhaseShiftEstimate)*MAX_PHASE_SHIFT_COMPENSATION)/100))
           inhalationTrajectoryPhaseShiftEstimate=(((targetInhalationTime-inhalationTrajectoryPhaseShiftEstimate)*MAX_PHASE_SHIFT_COMPENSATION)/100);
 
-        DEBUG_PRINT("New phase shift: %li",inhalationTrajectoryPhaseShiftEstimate);
+        LOG_PRINT(INFO, "New phase shift: %li",inhalationTrajectoryPhaseShiftEstimate);
         checkForFirstFlow=0;
       }
 
@@ -577,7 +597,7 @@ static int updateControl(void)
     {
         controlLimitHit=CONTROL_LIMIT_HIT_VOLUME;
         controlOutputFiltered=0.0f;
-        DEBUG_PRINT("Volume limit hit at %li with output %li",sensors.currentVolume,(int32_t)controlOutputFiltered);
+        LOG_PRINT(INFO, "Volume limit hit at %li with output %li",sensors.currentVolume,(int32_t)controlOutputFiltered);
     }
 
     //dynamically limit to max pressure
@@ -585,7 +605,7 @@ static int updateControl(void)
     {
       controlOutputFiltered=0.0f;
       controlLimitHit=CONTROL_LIMIT_HIT_PRESSURE;
-      DEBUG_PRINT("Pressure limit hit at %li  with output %li",sensors.currentPressure,(int32_t)controlOutputFiltered);
+      LOG_PRINT(INFO, "Pressure limit hit at %li  with output %li",sensors.currentPressure,(int32_t)controlOutputFiltered);
     }
 
     if ((control.state==CONTROL_INHALATION)&&(controlLimitHit))
@@ -625,11 +645,39 @@ static int updateControl(void)
     
     lastFlowSensorInput=flowSensorInput;
 
+    //prepare to log data
+    static uint8_t logDividerCnt=0;
+
+    logDividerCnt++;
+
+    if (logDividerCnt==2)
+    {
+      logDividerCnt=0;
+      controlLogData.time=0; // fix up later
+      controlLogData.controlForceHome=controlForceHome;
+      controlLogData.controlOutputFiltered=controlOutputFiltered;
+      controlLogData.inhalationTrajectoryEndFlow=inhalationTrajectoryEndFlow;
+      controlLogData.inhalationTrajectoryInitialCycleCnt=inhalationTrajectoryInitialCycleCnt;
+      controlLogData.inhalationTrajectoryInitialFlow=inhalationTrajectoryInitialFlow;
+      controlLogData.inhalationTrajectoryPhaseShiftEstimate=inhalationTrajectoryPhaseShiftEstimate;
+      controlLogData.inhalationTrajectoryStartFlow=inhalationTrajectoryStartFlow;
+      controlLogData.targetAirFlow=targetAirFlow;
+      controlLogData.targetExhalationTime=targetExhalationTime;
+      controlLogData.targetHoldTime=targetHoldTime;
+      controlLogData.targetInhalationTime=targetInhalationTime;
+      controlLogData.controlLimitHit=controlLimitHit;
+      controlLogData.controlI=controlI;
+      controlLogData.currentFlow=sensors.currentFlow;
+      controlLogData.currentPressure=sensors.currentPressure;
+    
+      LOG_DATA(INFO, LOG_CONTROL_DATA_ID,(uint8_t*)&controlLogData,sizeof(controlLogData));
+    }
+
     metricsStop(&midControlTiming);
 
-    DEBUG_PRINT_EVERY(100,"Control Stats: Avg us: %u\n",midControlTiming.average);
+    LOG_PRINT_EVERY(100, DEBUG,"Control Stats: Avg us: %u\n",midControlTiming.average);
 
-    DEBUG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)controlOutputFiltered, (int32_t)(Ki*controlD), (int32_t)inhalationTrajectoryPhaseShiftEstimate);
+    LOG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)controlOutputFiltered, (int32_t)(Ki*controlD), (int32_t)inhalationTrajectoryPhaseShiftEstimate);
 
     // Return unfinished
     return 0;
@@ -658,7 +706,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
   while (true) {
     if (control.state == CONTROL_HOME)
     {
-      DEBUG_PRINT_EVERY(100, "state: CONTROL_HOME");
+      LOG_PRINT(INFO, "state: CONTROL_HOME");
 
        motorHalCommand(MOTOR_HAL_COMMAND_OPEN, 5000);
        PT_WAIT_UNTIL(pt, motorHalGetStatus()!=MOTOR_HAL_STATUS_MOVING);
@@ -682,7 +730,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
     }else
     if (control.state == CONTROL_IDLE) {
-      DEBUG_PRINT_EVERY(100, "state: CONTROL_IDLE");
+      LOG_PRINT(INFO, "state: CONTROL_IDLE");
 
       // Reset any parameters
       control.breathCount = 0;
@@ -706,7 +754,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       
     } else if (control.state == CONTROL_BEGIN_INHALATION) {
-      DEBUG_PRINT("state: CONTROL_BEGIN_INHALATION");
+      LOG_PRINT(INFO, "state: CONTROL_BEGIN_INHALATION");
      
       // Initialize all 
       measuredInhalationTime = 0;
@@ -723,7 +771,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_INHALATION;
       
     } else if (control.state == CONTROL_INHALATION) {
-      DEBUG_PRINT("state: CONTROL_INHALATION");
+      LOG_PRINT(INFO, "state: CONTROL_INHALATION");
       
       // Begin control loop timer when control starts
       timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
@@ -749,7 +797,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_BEGIN_HOLD_IN;
       
     } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
-      DEBUG_PRINT("state: CONTROL_BEGIN_HOLD_IN");
+      LOG_PRINT(INFO, "state: CONTROL_BEGIN_HOLD_IN");
 
       // Setup the hold timer
       timerHalBegin(&controlTimer, targetHoldTime, false);
@@ -761,7 +809,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_HOLD_IN;
       
     } else if (control.state == CONTROL_HOLD_IN) {
-      DEBUG_PRINT("state: CONTROL_HOLD_IN");
+      LOG_PRINT(INFO, "state: CONTROL_HOLD_IN");
 
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
       controlOutputFiltered=0.0f;
@@ -770,7 +818,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_BEGIN_EXHALATION;
       
     } else if (control.state == CONTROL_BEGIN_EXHALATION) {
-      DEBUG_PRINT("state: CONTROL_BEGIN_EXHALATION");
+      LOG_PRINT(INFO, "state: CONTROL_BEGIN_EXHALATION");
 
       
       breathTimerStateStart = timerHalCurrent(&breathTimer);
@@ -782,7 +830,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.state = CONTROL_EXHALATION;
 
     } else if (control.state == CONTROL_EXHALATION) {
-      DEBUG_PRINT("state: CONTROL_EXHALATION");
+      LOG_PRINT(INFO, "state: CONTROL_EXHALATION");
       
       // Begin control loop timer when control starts
       timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
@@ -818,7 +866,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       control.respirationRateMeasured = ((60 SEC) + ((currentBreathTime >> 1) USEC)) / (currentBreathTime USEC);
       control.breathCount++;
 
-      DEBUG_PRINT("Timing report [ms]: It: %li Ps: %li Et: %li I:E [1=1000]: %li RR:%li",(uint32_t)measuredInhalationTime/(uint32_t)1000, (uint32_t)inhalationTrajectoryPhaseShiftEstimate/(uint32_t)1000, (uint32_t)measuredExhalationTime/1000, (uint32_t)measuredInhalationTime*(uint32_t)1000/(uint32_t)measuredExhalationTime, (uint32_t)control.respirationRateMeasured);
+      LOG_PRINT(INFO, "Timing report [ms]: It: %li Ps: %li Et: %li I:E [1=1000]: %li RR:%li",(uint32_t)measuredInhalationTime/(uint32_t)1000, (uint32_t)inhalationTrajectoryPhaseShiftEstimate/(uint32_t)1000, (uint32_t)measuredExhalationTime/1000, (uint32_t)measuredInhalationTime*(uint32_t)1000/(uint32_t)measuredExhalationTime, (uint32_t)control.respirationRateMeasured);
       // Check if we need to continue onto another breath or if ventilation has stopped
 
       if (controlForceHome)
@@ -831,7 +879,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       
     } else {
-      DEBUG_PRINT("state: (unknown)");
+      LOG_PRINT(ERROR, "state: (unknown)");
 
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
 

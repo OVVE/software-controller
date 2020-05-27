@@ -46,10 +46,16 @@
 //
 //******************************************************************************
 
-// Global debug flag
-// If commented out, all debug features will be disabled
-#define DEBUG
+// Global log flag
+// If commented out, all logging features will be disabled
+#define LOG
 
+// Global log backends flags
+// Defines level of logging to particular backends
+#define LOG_BACKEND_LINK  INFO
+#define LOG_BACKEND_DEBUG VERBOSE
+
+// TOOD: Not working right now, come back to this later
 // Global plotting flag
 // In order to enable the standard Arduino Serial Plotter, all other types of
 // messages must be disabled and only a single module can plot a single set
@@ -58,25 +64,19 @@
 // example commented out below:
 // #define DEBUG_PLOTTING "control"
 
-// Global debug port
-// Defines which serial port all debug messages/plotting will be sent, default
-// is Serial, the USB Serial port
-// #define DEBUG_SERIAL_PORT Serial
+// HAL Logging Flags
+// Defines level of logging for that HAL
+// TODO: Add more HAL logging if needed
+#define LOG_MOTOR_HAL         DEBUG
 
-// HAL Debug Flags
-// If commented out, debug features from that HAL will be disabled
-// TODO: Add more HAL debug features if needed
-#define DEBUG_MOTOR_HAL
+// Module Logging Flags
+// Defines level of logging for that module
+#define LOG_CONTROL_MODULE    DEBUG
+#define LOG_SENSORS_MODULE    DEBUG
+#define LOG_LINK_MODULE       DEBUG
+#define LOG_PARAMETERS_MODULE DEBUG
 
-// Module Debug Flags
-// If commented out, debug features from that module will be disabled
-#define DEBUG_CONTROL_MODULE
-#define DEBUG_SENSORS_MODULE
-#define DEBUG_LINK_MODULE
-#define DEBUG_PARAMETERS_MODULE
-
-// Main Loop Debug Flags
-// If commented out, debug features from that module will be disabled
-#define DEBUG_MAIN_LOOP
-#define DEBUG_MAIN_LOOP_METRICS
+// Main Loop Loggign Flags
+// Defines level of logging for the main loop
+#define LOG_MAIN_LOOP         DEBUG
 

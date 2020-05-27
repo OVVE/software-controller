@@ -58,9 +58,6 @@
 #define CONTROLLER_BIT_START 0x80
 
 typedef struct __attribute__((packed)) {
-  uint16_t sequence_count;                   // bytes 0 - 1
-  uint8_t packet_version;                    // byte 2
-  uint8_t packet_type;                       // byte 3
   
   uint8_t mode_value;                        // byte 4
   uint8_t control_state;                     // byte 5
@@ -103,13 +100,9 @@ typedef struct __attribute__((packed)) {
   int16_t low_respiratory_rate_limit_set;    // bytes 48 - 49
   
   uint32_t alarm_bits;                       // bytes 50 - 53
-  uint16_t crc;                              // bytes 54 - 55
 } data_packet_def;
 
 typedef struct __attribute__((packed)) {
-  uint16_t sequence_count;                   // bytes 0 - 1
-  uint8_t packet_version;                    // byte 2
-  uint8_t packet_type;                       // byte 3
   
   uint8_t mode_value;                        // byte 4
   
@@ -135,7 +128,6 @@ typedef struct __attribute__((packed)) {
   int16_t low_respiratory_rate_limit_set;    // bytes 26 - 27
   
   uint32_t alarm_bits;                // bytes 28 - 31
-  uint16_t crc;                       // bytes 32 - 33  
 } command_packet_def;
 
 struct link {

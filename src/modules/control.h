@@ -28,7 +28,8 @@ struct control {
   uint32_t breathCount;
   
   // Alarms
-  struct alarm unknownStateAlarm;
+  int8_t   breathTimeoutAlarm;
+  int8_t   unknownStateAlarm;
 };
 
 // Public Variables

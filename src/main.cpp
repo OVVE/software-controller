@@ -14,9 +14,12 @@
 #include "util/alarm.h"
 #include "util/metrics.h"
 
-#ifdef DEBUG_MAIN_LOOP
-#define DEBUG_MODULE "main"
-#include "util/debug.h"
+#define LOG_MODULE "main"
+#define LOG_LEVEL  LOG_MAIN_LOOP
+#include "util/log.h"
+
+#if LOG_MAIN_LOOP >= DEBUG
+#define DEBUG_MAIN_LOOP_METRICS
 #endif
 
 #ifdef DEBUG_MAIN_LOOP_METRICS
@@ -29,12 +32,7 @@ static struct metrics linkModuleMetrics;
 #endif
 
 void mainSetup(void)
-{
-  DEBUG_BEGIN;
-  
-  // TODO: cleanup prints
-  DEBUG_PRINT("hal setup");
-  
+{ 
   // Initialize HAL
   // TODO: Handle failure conditions
   // TODO: refactor all HAL initiailization functions here, since more than one
@@ -42,8 +40,9 @@ void mainSetup(void)
 
   timerHalInit();
   alarmHalInit();
+  serialHalInit();
   
-  DEBUG_PRINT("module setup");
+  LOG_PRINT(INFO, "Initialization started, loading modules...");
 
   // TODO: Handle failure conditions
   controlModuleInit();
@@ -65,7 +64,7 @@ void mainSetup(void)
   //       initialization from hanging, but theres a bunch of stuff that needs
   //       to be refactored to allow this right now (namely, the motor HAL)
   watchdogHalInit();
-  DEBUG_PRINT("setup done");
+  LOG_PRINT(INFO, "Initialization complete!");
 }
 
 void mainLoop(void)
@@ -145,31 +144,31 @@ void mainLoop(void)
 
 #ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&scheduleMetrics);
-  DEBUG_PRINT_EVERY(25000, "Runtime Metrics:");
-  DEBUG_PRINT_EVERY(25000, " Main loop:  %10lu us : %10lu us : %10lu us",
-                    mainLoopMetrics.minimum,
-                    mainLoopMetrics.average,
-                    mainLoopMetrics.maximum);
-  DEBUG_PRINT_EVERY(25000, " Scheduler:  %10lu us : %10lu us : %10lu us",
-                    scheduleMetrics.minimum,
-                    scheduleMetrics.average,
-                    scheduleMetrics.maximum);
-  DEBUG_PRINT_EVERY(25000, " Control:    %10lu us : %10lu us : %10lu us",
-                    controlModuleMetrics.minimum,
-                    controlModuleMetrics.average,
-                    controlModuleMetrics.maximum);
-  DEBUG_PRINT_EVERY(25000, " Sensors:    %10lu us : %10lu us : %10lu us",
-                    sensorsModuleMetrics.minimum,
-                    sensorsModuleMetrics.average,
-                    sensorsModuleMetrics.maximum);
-  DEBUG_PRINT_EVERY(25000, " Parameters: %10lu us : %10lu us : %10lu us",
-                    parametersModuleMetrics.minimum,
-                    parametersModuleMetrics.average,
-                    parametersModuleMetrics.maximum);
-  DEBUG_PRINT_EVERY(25000, " Link:       %10lu us : %10lu us : %10lu us",
-                    linkModuleMetrics.minimum,
-                    linkModuleMetrics.average,
-                    linkModuleMetrics.maximum);
+  LOG_PRINT_EVERY(25000, DEBUG, "Runtime Metrics:");
+  LOG_PRINT_EVERY(25000, DEBUG, " Main loop:  %10lu us : %10lu us : %10lu us",
+                  mainLoopMetrics.minimum,
+                  mainLoopMetrics.average,
+                  mainLoopMetrics.maximum);
+  LOG_PRINT_EVERY(25000, DEBUG, " Scheduler:  %10lu us : %10lu us : %10lu us",
+                  scheduleMetrics.minimum,
+                  scheduleMetrics.average,
+                  scheduleMetrics.maximum);
+  LOG_PRINT_EVERY(25000, DEBUG, " Control:    %10lu us : %10lu us : %10lu us",
+                  controlModuleMetrics.minimum,
+                  controlModuleMetrics.average,
+                  controlModuleMetrics.maximum);
+  LOG_PRINT_EVERY(25000, DEBUG, " Sensors:    %10lu us : %10lu us : %10lu us",
+                  sensorsModuleMetrics.minimum,
+                  sensorsModuleMetrics.average,
+                  sensorsModuleMetrics.maximum);
+  LOG_PRINT_EVERY(25000, DEBUG, " Parameters: %10lu us : %10lu us : %10lu us",
+                  parametersModuleMetrics.minimum,
+                  parametersModuleMetrics.average,
+                  parametersModuleMetrics.maximum);
+  LOG_PRINT_EVERY(25000, DEBUG, " Link:       %10lu us : %10lu us : %10lu us",
+                  linkModuleMetrics.minimum,
+                  linkModuleMetrics.average,
+                  linkModuleMetrics.maximum);
   metricsStop(&mainLoopMetrics);
 #endif
 }
