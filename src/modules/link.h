@@ -7,7 +7,7 @@
 #include "../util/alarm.h"
 
 // only cause alarms when the consecutive dropped packets exceed this
-#define MAX_DROPPED_PACKETS 2
+#define MAX_DROPPED_PACKETS 1
 
 // alarm bits to set that are triggered by the microcontroller
 // link.cpp should check modules and set these bits

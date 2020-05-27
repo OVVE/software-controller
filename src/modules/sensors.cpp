@@ -455,7 +455,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
         airflowResponseCount += 1;
         airflowResponseFlag = true;
       }
-      LOG_PRINT_EVERY(10, INFO, "Airflow Diff: %i Airflow Response Count: %i", abs(airflow - previousAirflow[AIRFLOW_WINDOW -1]), airflowResponseCount);
+      LOG_PRINT_EVERY(50, DEBUG, "Airflow Diff: %i Airflow Response Count: %i", abs(airflow - previousAirflow[AIRFLOW_WINDOW -1]), airflowResponseCount);
       if (airflowResponseCount < control.breathCount) {
         LOG_PRINT_EVERY(1, INFO, "Airflow Unresponsive Alarm!");
         alarmSet(&sensors.badAirflowSensorAlarm);

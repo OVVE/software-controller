@@ -593,7 +593,7 @@ static int updateControl(void)
 
 //scale down target airflow if we are above our tidal volume target
 #define INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT 10.0f // in %
-    if ((control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
+    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
     {
         controlLimitHit=CONTROL_LIMIT_HIT_VOLUME;
         controlOutputFiltered=0.0f;
@@ -601,7 +601,7 @@ static int updateControl(void)
     }
 
     //dynamically limit to max pressure
-    if ((control.state==CONTROL_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
+    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
     {
       controlOutputFiltered=0.0f;
       controlLimitHit=CONTROL_LIMIT_HIT_PRESSURE;
@@ -650,7 +650,7 @@ static int updateControl(void)
 
     logDividerCnt++;
 
-    if (logDividerCnt==2)
+    if (logDividerCnt==4)
     {
       logDividerCnt=0;
       controlLogData.time=0; // fix up later
@@ -670,7 +670,7 @@ static int updateControl(void)
       controlLogData.currentFlow=sensors.currentFlow;
       controlLogData.currentPressure=sensors.currentPressure;
     
-      LOG_DATA(INFO, LOG_CONTROL_DATA_ID,(uint8_t*)&controlLogData,sizeof(controlLogData));
+      LOG_DATA(INFO, LINK_PACKET_TYPE_CONTROL,(uint8_t*)&controlLogData,sizeof(controlLogData));
     }
 
     metricsStop(&midControlTiming);

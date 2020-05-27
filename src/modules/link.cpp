@@ -287,13 +287,12 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
 }
 
 #define LINK_PUBLIC_DATA_TIMEOUT 100 // in ms
-#define LINK_DEBUG_MSG_TIMEOUT 20
 
 static PT_THREAD(serialSendThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
   static long lastPublicDataMillis=0;
-  static long lastDebugMsgMillis=0;
+
   //continously process tx data
   serialHalSendData();
 
@@ -308,13 +307,7 @@ static PT_THREAD(serialSendThreadMain(struct pt* pt))
     //directly start sending if possible
     serialHalSendData();
   }
-//check if we need to send the next public data packet
-  if (millis()>lastDebugMsgMillis+LINK_DEBUG_MSG_TIMEOUT)
-  {
-    lastDebugMsgMillis=millis();
-    
 
-  }
   
   PT_RESTART(pt);
   PT_END(pt);
@@ -332,7 +325,7 @@ PT_THREAD(serialThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
 
-  LOG_PRINT_EVERY(10000,DEBUG,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt);
+  LOG_PRINT_EVERY(10000,DEBUG,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL_CRC,FAIL_OTHER,SEQ): %li,%li,%li,%li Buf(TX/RX): %li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntWrongCrc,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt,serial_statistics.handleMaxTxBufferCnt,serial_statistics.handleMaxRxBufferCnt);
   PT_RESTART(pt);
   PT_END(pt);
 }
