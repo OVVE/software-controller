@@ -1,20 +1,6 @@
-// TODO: Document what this module does
-//
-// Link Module
-//
 #include <stdint.h>
 
-//#define USE_FAST_CRC
-#ifdef USE_FAST_CRC  // utils/crc16.h not found for DUE and the function used here to wrap it is causing timeouts
-                     // the header file has functions defined using inline assembly. It works fine on Mega with a 
-                     // standalone program, but using it with the controller is always taking too much time.
-                     
-#include <FastCRC.h>
-FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 that rpi is using
-#else
-#include <util/crc16.h>
-#endif
-
+#include "../config.h"
 #include "../pt/pt.h"
 #include "../modules/link.h"
 #include "../modules/module.h"
@@ -22,34 +8,38 @@ FastCRC16 CRC16;  // this is the class to create crc16 to match the CCITT crc16 
 #include "../modules/control.h"
 #include "../modules/sensors.h"
 #include "../hal/serial.h"
-#include "../util/alarm.h"
+
+#define LOG_MODULE "link"
+#define LOG_LEVEL  LOG_LINK_MODULE
+#include "../util/log.h"
+
 
 // Private Variables
 struct link comm;
 static struct pt serialThread;
 static struct pt serialReadThread;
 static struct pt serialSendThread;
-uint16_t sequence_count = 0;      // this is the sequence count stored in the data packet and confirmed in the command packet. wrapping is fine as crc checks are done.
-uint16_t last_sequence_count; // what to expect for next sequence, set in write and checked in read
 data_packet_def public_data_packet;
 command_packet_def public_command_packet;
-uint32_t lastDataPacketAlarmBits;
-uint32_t dropped_packet_count = 0;
-uint8_t ConsecutiveDroppedPacketCount = 0; 
- 
+
+uint32_t ConsecutiveDroppedPacketCount=0;
+
 // Public Variables
 // shared with serial.cpp
-uint8_t data_bytes[sizeof(data_packet_def)];
-uint16_t sizeof_data_bytes = sizeof(data_bytes);
-uint8_t command_bytes[sizeof(command_packet_def)];
-uint16_t sizeof_command_bytes = sizeof(command_bytes);
-extern bool watchdog_exceeded;  // timeout waiting for number of received bytes (command packet)
-extern bool clear_input;        // if there are issues with command packet data then let serial know to clear the input buffer
 extern struct parameters parameters;
 extern struct control control;
 extern struct sensors sensors;
 
 
+static uint32_t previousLocalAlarms;
+static uint32_t previousRemoteAlarms;
+
+extern struct parameters parameters;
+extern struct control control;
+extern struct sensors sensors;
+
+
+uint32_t lastDataPacketAlarmBits;
 
 static struct alarmProperties onCommunicationFailureAlarmProperties = {
   .priority = ALARM_PRIORITY_HIGH,
@@ -59,10 +49,6 @@ static struct alarmProperties onCommunicationFailureAlarmProperties = {
 
 void handleUIAlarms()
 {
-#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.print("command packet alarm bits: 0x");
-    SERIAL_DEBUG.println(public_command_packet.alarm_bits, HEX);
-#endif  
   if (public_command_packet.alarm_bits & ALARM_ECU_LOW_BATTERY && lastDataPacketAlarmBits & ALARM_ECU_LOW_BATTERY)
   {
     alarmSuppress(&sensors.lowBatteryAlarm);
@@ -127,63 +113,13 @@ void setDataPacketAlarmBits()
   lastDataPacketAlarmBits = public_data_packet.alarm_bits;
 }
 
-#ifndef USE_FAST_CRC
-uint16_t calc_crc_avrlib(unsigned char *bytes, int byteLength)
-{
- static uint16_t crc_base;
- crc_base = 0xFFFF;
-
- while(byteLength--)
- {
-   crc_base = _crc_xmodem_update(crc_base, (uint8_t)*bytes++);
- }
- return(crc_base);
-}
-#endif
-
 // update variables for modules to read after good sequence and crc from command packet
 void updateFromCommandPacket()
 {
   static uint8_t tmpMode;  // used for setting bits
   
-  if (public_command_packet.packet_version != PACKET_VERSION)
-  {
-#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.print("invalid packet version: 0x");
-    SERIAL_DEBUG.println(public_command_packet.packet_version, HEX);
-#endif
-    ++ConsecutiveDroppedPacketCount;
-    if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
-      alarmSet(&comm.onCommunicationFailureAlarm);
-    }
-    ++dropped_packet_count;
-    return;
-  }
-  if (public_command_packet.packet_type == PACKET_TYPE_FIRMWARE)
-  {
-    // TODO: handle fw updates
-#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.println("firmware packet update not available yet");
-#endif
-    return;
-  }    
-  // check to see that this is a data packet
-  if (public_command_packet.packet_type != PACKET_TYPE_COMMAND)
-  {
-#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.print("not a command packet set in packet type: 0x");
-    SERIAL_DEBUG.println(public_command_packet.packet_type, HEX);
-#endif 
-    return;
-  }
 
   comm.startVentilation = (public_command_packet.command & COMMAND_BIT_START) != 0x00;
-#ifdef SERIAL_DEBUG
-    SERIAL_DEBUG.print("command_packet.command: 0x");
-    SERIAL_DEBUG.println(public_command_packet.command, HEX);
-    SERIAL_DEBUG.print("startVentilation: ");
-    SERIAL_DEBUG.println(comm.startVentilation, DEC);
-#endif
   tmpMode = public_command_packet.mode_value;
   
   if (tmpMode != MODE_VC_CMV && tmpMode != MODE_SIMV)
@@ -210,14 +146,6 @@ void updateFromCommandPacket()
   comm.lowRespiratoryRateLimit = public_command_packet.low_respiratory_rate_limit_set;
  
   public_data_packet.battery_status = 0; // TBD set to real value when available
-#ifdef SERIAL_DEBUG
-        SERIAL_DEBUG.print("mode bits: 0x");
-        SERIAL_DEBUG.println(public_command_packet.mode_value, HEX);
-        SERIAL_DEBUG.print("start/stop value: 0x");
-        SERIAL_DEBUG.println(comm.startVentilation, HEX);
-        SERIAL_DEBUG.print("mode value: 0x");
-        SERIAL_DEBUG.println(comm.ventilationMode, HEX);        
-#endif  
   // Alarms
   handleUIAlarms();
 }
@@ -225,8 +153,6 @@ void updateFromCommandPacket()
 // get data from modules to be sent back to ui. this is called just before sequence count update and crc set
 void updateDataPacket()
 {
-  public_data_packet.packet_version = PACKET_VERSION;
-  public_data_packet.packet_type = PACKET_TYPE_DATA;
   
   // only set the lower 7 bits of mode value
   //public_data_packet.control_state = 0x7f & parameters.ventilationMode;
@@ -323,110 +249,73 @@ void updateDataPacket()
 
   
 }
+      
+int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint8_t* data)
+{
+  static command_packet_def command_packet;
+  static uint32_t lastSeqErrorCnt=0;
+  if ((packetType==LINK_PACKET_TYPE_COMMAND_PACKET) && (packetLen==sizeof(command_packet)))
+  {
+    memcpy((void *)&command_packet, (void *)data, sizeof(command_packet));
+    if ( (serial_statistics.sequenceNoWrongCnt != lastSeqErrorCnt))
+    {
+    if (serial_statistics.sequenceNoWrongCnt > MAX_DROPPED_PACKETS) {  
+      alarmSet(&comm.onCommunicationFailureAlarm);
+    }
+    } else
+      {
+        memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
+        updateFromCommandPacket();
+      }          
+    lastSeqErrorCnt=serial_statistics.sequenceNoWrongCnt;
+  }
+}
 
 static PT_THREAD(serialReadThreadMain(struct pt* pt))
 {
   static uint16_t calc_crc;
+  static uint32_t dropped_packet_count = 0;
   static uint32_t watchdog_count = 0;
-  static command_packet_def command_packet;
   
   PT_BEGIN(pt);
 
-  PT_WAIT_UNTIL(pt, serialHalGetData() != HAL_IN_PROGRESS);
+  serialHalHandleRx(linkProcessPacket);
+
   
-  if (watchdog_exceeded == true)
-  {
-    watchdog_count++;    
-    watchdog_exceeded = false;
-    clear_input = true;
-    ++ConsecutiveDroppedPacketCount;
-    if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
-      alarmSet(&comm.onCommunicationFailureAlarm);
-    }    
-  }
-  else
-  {
-    memcpy((void *)&command_packet, (void *)command_bytes, sizeof(command_packet));
-    if ((command_packet.sequence_count != last_sequence_count))
-    {
-      dropped_packet_count++;
-#ifdef SERIAL_DEBUG
-      SERIAL_DEBUG.print("unexpected sequence count: ");
-      SERIAL_DEBUG.println(command_packet.sequence_count, DEC);
-#endif    
-      clear_input = true;
-      ++ConsecutiveDroppedPacketCount;
-      if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
-        alarmSet(&comm.onCommunicationFailureAlarm);
-      }      
-    }
-    else
-    {
-#ifdef USE_FAST_CRC
-      calc_crc = CRC16.ccitt((uint8_t *)&command_packet, sizeof(command_packet) - 2);
-#else 
-      calc_crc = calc_crc_avrlib((uint8_t *)&command_packet, sizeof(command_packet) - 2); 
-#endif 
-      if (command_packet.crc != calc_crc)
-      {
-        dropped_packet_count++;
-        ++ConsecutiveDroppedPacketCount;
-        if (ConsecutiveDroppedPacketCount > MAX_DROPPED_PACKETS) {  
-          alarmSet(&comm.onCommunicationFailureAlarm);
-        }
-#ifdef SERIAL_DEBUG
-        SERIAL_DEBUG.print("bad CRC 0x ");
-        SERIAL_DEBUG.println(command_packet.crc, HEX);
-#endif  
-        clear_input = true;
-      }
-      else
-      {
-        ConsecutiveDroppedPacketCount = 0;
-        memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
-        updateFromCommandPacket();
-#ifdef SERIAL_DEBUG
-        SERIAL_DEBUG.print("Successful packet received CRC from command packet: ");
-        SERIAL_DEBUG.println(public_command_packet.crc, DEC);
-#endif           
-      }          
-    }
-  }  
-#ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("packet count: ");
-  SERIAL_DEBUG.println(sequence_count, DEC);
-  SERIAL_DEBUG.print("dropped packet count: ");
-  SERIAL_DEBUG.println(dropped_packet_count, DEC);
-  SERIAL_DEBUG.print("timeout count: ");
-  SERIAL_DEBUG.println(watchdog_count);
-  SERIAL_DEBUG.println(" ");
-#endif
   PT_RESTART(pt);
   PT_END(pt);
 }
 
+#define LINK_PUBLIC_DATA_TIMEOUT 100 // in ms
+#define LINK_DEBUG_MSG_TIMEOUT 20
+
 static PT_THREAD(serialSendThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-  last_sequence_count = sequence_count;  // set this for the next read as the sequence count will advance and wait for read to complete
-  ++sequence_count;
-  updateDataPacket();
-  public_data_packet.sequence_count = sequence_count;
-  //public_data_packet.packet_version = PACKET_VERSION;
-#ifdef USE_FAST_CRC
-   public_data_packet.crc = CRC16.ccitt((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);   
-#else  
-  public_data_packet.crc = calc_crc_avrlib((uint8_t *)&public_data_packet, sizeof(public_data_packet) - 2);
-#endif
+  static long lastPublicDataMillis=0;
+  static long lastDebugMsgMillis=0;
+  //continously process tx data
+  serialHalSendData();
 
-#ifdef SERIAL_DEBUG
-  SERIAL_DEBUG.print("Microcontroller sending sequence: ");
-  SERIAL_DEBUG.print(sequence_count, DEC);
-  SERIAL_DEBUG.print(", CRC: ");
-  SERIAL_DEBUG.println(public_data_packet.crc, DEC);
-#endif    
-  memcpy((void *)&data_bytes, (void *)&public_data_packet, sizeof(data_bytes));
-  PT_WAIT_UNTIL(pt, serialHalSendData() != HAL_IN_PROGRESS);
+  //check if we need to send the next public data packet
+  if (millis()>lastPublicDataMillis+LINK_PUBLIC_DATA_TIMEOUT)
+  {
+    lastPublicDataMillis=millis();
+    updateDataPacket();
+
+    serialHalSendPacket(LINK_PACKET_TYPE_PUBLICDATA_PACKET,sizeof(public_data_packet),(uint8_t*)&public_data_packet);
+
+    //directly start sending if possible
+    serialHalSendData();
+  }
+//check if we need to send the next public data packet
+  if (millis()>lastDebugMsgMillis+LINK_DEBUG_MSG_TIMEOUT)
+  {
+    lastDebugMsgMillis=millis();
+    
+
+  }
+  
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -441,7 +330,9 @@ PT_THREAD(serialThreadMain(struct pt* pt))
   
   if (!PT_SCHEDULE(serialReadThreadMain(&serialReadThread))) {
     PT_EXIT(pt);
-  }  
+  }
+
+  LOG_PRINT_EVERY(10000,DEBUG,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL,SEQ): %li,%li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongCrc+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt);
   PT_RESTART(pt);
   PT_END(pt);
 }
@@ -451,9 +342,7 @@ int linkModuleInit(void)
   if (serialHalInit() != HAL_OK) {
     return MODULE_FAIL;
   }
-  alarmInit(&comm.onCommunicationFailureAlarm, &onCommunicationFailureAlarmProperties);
-  lastDataPacketAlarmBits = 0x0;
-  
+
   PT_INIT(&serialSendThread);
   PT_INIT(&serialReadThread);
 
