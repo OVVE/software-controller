@@ -15,10 +15,10 @@
 
 #define SERIAL_MAX_DATA_SIZE 128
 #define SERIAL_PROTOCOL_VERSION 4
-#define SERIAL_HEADER_LENGTH (3+2+1+1+2) //3 start bytes, 2 seq numbers, 1 protocol version, 1 length, 2 CRC
+#define SERIAL_HEADER_LENGTH (3+2+1+1+1+2) //3 start bytes, 2 seq numbers, 1 protocol version, 1 id, 1 length, 2 CRC
 
 
-#define BAUD_RATE 125000 //due to 16 Mhz crystal without fractional baudrate divider any of these baudrate has 0% bitrate error: 1000000 500000 250000 125000 62500
+#define BAUD_RATE 500000 //due to 16 Mhz crystal without fractional baudrate divider any of these baudrate has 0% bitrate error: 1000000 500000 250000 125000 62500
 #define BAUD_RATE_DEBUG 500000 //due to 16 Mhz crystal without fractional baudrate divider any of these baudrate has 0% bitrate error: 1000000 500000 250000 125000 62500
 
 #define SERIAL_UI Serial1
