@@ -48,7 +48,7 @@
 #define BACKEND_LINK(lvl, id, buf, sz)                                        \
   do {                                                                         \
     if (lvl <= LOG_BACKEND_LINK) {                                             \
-        if (serialHalSendPacket(id,buf, sz) == HAL_OK)     \
+        if (serialHalSendPacket(id,sz,buf) == HAL_OK)     \
         {    \
             serial_statistics.textPacketsSentCnt++;                                            \
         }\
