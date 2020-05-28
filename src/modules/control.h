@@ -10,15 +10,14 @@
 // TODO: Consider different encoding?
 // TODO: Hold out states? error state?
 
-#define CONTROL_HOME              0
-#define CONTROL_IDLE              1
-#define CONTROL_BEGIN_INHALATION  2
-#define CONTROL_INHALATION        3
-#define CONTROL_BEGIN_HOLD_IN     4
-#define CONTROL_HOLD_IN           5
-#define CONTROL_BEGIN_EXHALATION  6
-#define CONTROL_EXHALATION        7
-
+#define CONTROL_STATE_IDLE             0x00
+#define CONTROL_STATE_BEGIN_INHALATION 0x01
+#define CONTROL_STATE_INHALATION       0x02
+#define CONTROL_STATE_BEGIN_HOLD_IN    0x03
+#define CONTROL_STATE_HOLD_IN          0x04
+#define CONTROL_STATE_BEGIN_EXHALATION 0x05
+#define CONTROL_STATE_EXHALATION       0x06
+#define CONTROL_STATE_HOME             0x07
 
 struct control {
   // Variables

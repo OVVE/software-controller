@@ -35,6 +35,8 @@
 #define PRESSURE_WINDOW                           (20)
 
 #define PRESSURE_RESPONSE_THRESHOLD               (500)
+#define PRESSURE_MINIMUM_RESPONSE_CYCLES          (20)
+#define PRESSURE_MINIMUM_BREATH_COUNT             (5)
 
 // TODO: Define these thresholds accurately
 #define PEEP_PRESSURE_FLAT_THRESHOLD             (20)
@@ -51,6 +53,8 @@
 #define AIRFLOW_WINDOW                             (20)
 
 #define AIRFLOW_RESPONSE_THRESHOLD                (500)
+
+#define AIRFLOW_MINIMUM_RESPONSE_CYCLES           (20)
 
 #define AIRFLOW_BIAS_SAMPLES                      32
 #define PRESSURE_BIAS_SAMPLES                      32
@@ -135,7 +139,6 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static int16_t previousPressure[PRESSURE_WINDOW];
   static uint8_t inhalationTimeout = 0;
   static int32_t pressureResponseCount = 0;
-  static bool pressureResponseFlag = false;
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
@@ -180,24 +183,24 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     previousPressure[0] = pressure;
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
-    // entry into CONTROL_HOLD_IN state
-    if ((control.state == CONTROL_HOLD_IN) && !setPeakPressure) {
+    // entry into CONTROL_STATE_HOLD_IN state
+    if ((control.state == CONTROL_STATE_HOLD_IN) && !setPeakPressure) {
       sensors.peakPressure = currentMaxPressure;
       currentMaxPressure = INT16_MIN;
       setPeakPressure = true;
     } else {
       currentMaxPressure = max(currentMaxPressure, pressure);
-      if (control.state == CONTROL_EXHALATION) {
+      if (control.state == CONTROL_STATE_EXHALATION) {
         setPeakPressure = false;
       }
     }
     
     // Derive Plateau Pressure from pressure readings during hold in; updating
-    // public value upon entry into CONTROL_EXHALATION state
-    if (control.state == CONTROL_HOLD_IN) {
+    // public value upon entry into CONTROL_STATE_EXHALATION state
+    if (control.state == CONTROL_STATE_HOLD_IN) {
       plateauPressureSum += pressure;
       plateauPressureSampleCount++;
-    } else if ((control.state == CONTROL_EXHALATION) &&
+    } else if ((control.state == CONTROL_STATE_EXHALATION) &&
                (plateauPressureSampleCount > 0)) {
       sensors.plateauPressure = plateauPressureSum / (int32_t)plateauPressureSampleCount;
       plateauPressureSum = 0;
@@ -207,7 +210,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 
     // Take the last 8 pressure values BEFORE we do the next breathing cycle. This should be a good average of our PEEP pressure.
 
-    if (control.state == CONTROL_INHALATION)
+    if (control.state == CONTROL_STATE_INHALATION)
     {
       //reset values
       if (peepPressureSumCnt)
@@ -231,7 +234,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
         peepPressureSum=0;
         peepPressureSumPos=0;
       }
-    }else if (control.state == CONTROL_EXHALATION)
+    }else if (control.state == CONTROL_STATE_EXHALATION)
     {
       peepPressureHistoryBuffer[peepPressureSumPos]=pressure;
 
@@ -245,7 +248,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     // Derive PEEP Pressure from pressure readings during exhalation after values
     // have "stabilized" (ie, the difference of any one point from their average
     // is less than some threshold)
-   /* if (control.state == CONTROL_EXHALATION) {
+   /* if (control.state == CONTROL_STATE_EXHALATION) {
       int32_t sum = 0;
       for (int i = 0; i < PRESSURE_WINDOW; i++) {
         sum += previousPressure[i];
@@ -270,7 +273,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     // Derive inhalation detection from pressure readings during exhalation by
     // looking for a dip in pressure below the PEEP threshold (or below an
     // absolute pressure threshold)
-    if ((control.state == CONTROL_EXHALATION) && !sensors.inhalationDetected) {
+    if ((control.state == CONTROL_STATE_EXHALATION) && !sensors.inhalationDetected) {
       if ((pressure < INHALATION_DETECTION_ABSOLUTE_THRESHOLD) ||
           (sensors.peepPressure - pressure > INHALATION_DETECTION_PEEP_THRESHOLD)) {
         sensors.inhalationDetected = true;
@@ -291,26 +294,32 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.lowPressureLimit);
       alarmSet(&sensors.lowPressureAlarm);
     }
+
     // Check pressure sensor for nominal response
-    if (control.state == CONTROL_INHALATION || control.state == CONTROL_EXHALATION) {
-      if (abs(pressure - previousPressure[PRESSURE_WINDOW -1]) > PRESSURE_RESPONSE_THRESHOLD && !pressureResponseFlag) {
-        pressureResponseCount += 1;
-        pressureResponseFlag = true;
+    if (control.state==CONTROL_STATE_IDLE)
+    {
+      pressureResponseCount=0;
+    }else if (control.state == CONTROL_STATE_INHALATION) {
+      if (pressureResponseCount==-1)
+          pressureResponseCount=0;
+      if (pressure > PRESSURE_RESPONSE_THRESHOLD ) {
+          pressureResponseCount += 1;
       }
-      // DEBUG_PRINT_EVERY(10, "Pressure Diff: %i Pressure Response Count: %i", abs(pressure - previousPressure[PRESSURE_WINDOW -1]), pressureResponseCount);
-      if (pressureResponseCount < control.breathCount) {
+    }else if(control.state==CONTROL_STATE_EXHALATION)
+    {
+      if (pressureResponseCount!=-1)
+        LOG_PRINT(INFO,"PressureResponseCnt: %li",pressureResponseCount);
+      //check if we got any response on the pressure sensor
+      if ((pressureResponseCount<PRESSURE_MINIMUM_RESPONSE_CYCLES) && (pressureResponseCount!=-1) && (control.breathCount>PRESSURE_MINIMUM_BREATH_COUNT)) //pressure might need to build up, so ignore the first couple breaths after a start
+      {
         LOG_PRINT_EVERY(1, INFO, "Pressure Unresponsive Alarm!");
         alarmSet(&sensors.badPressureSensorAlarm);
-        pressureResponseCount = control.breathCount;
       }
+      pressureResponseCount=-1;
     }
-    else if (control.state == CONTROL_HOLD_IN) {
-      // Reset flag if not in inhalation/exhalation
-      pressureResponseFlag = false;
-    }
-    
-    // DEBUG_PRINT_EVERY(100, "Pressure  = %c%u.%01u mmH2O",
-    //                   (pressure < 0) ? '-' : ' ', abs(pressure)/10, abs(pressure)%10);
+
+     LOG_PRINT_EVERY(100, INFO,"Pressure  = %c%u.%01u cmH2O",
+                       (pressure < 0) ? '-' : ' ', abs(pressure)/100, abs(pressure)%100);
 
     // Ensure this threads cannot block if it somehow elapses the timer too fast
     PT_YIELD(pt);
@@ -335,8 +344,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   static int airflowBiasCounter = AIRFLOW_BIAS_SAMPLES;
   static int16_t previousAirflow[AIRFLOW_WINDOW];
   static int16_t airflowResponseCount = 0;
-  static bool airflowResponseFlag = false;
-
+  
   PT_BEGIN(pt);
   
   // Find the bias of the sensor
@@ -401,14 +409,19 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     sensors.currentFlow = airflow;
     sensors.currentVolume = airvolume;
     
+    if (control.state==CONTROL_STATE_IDLE)
+    {
+      airvolume=0;
+      sensors.volumeIn = 0;
+    }
     // Derive Volume IN from current volume; updating the public value upon entry
-    // into CONTROL_HOLD_IN state
-    // if ((control.state == CONTROL_HOLD_IN) && !setVolumeIn) {
-    if ((control.state == CONTROL_EXHALATION) && !setVolumeIn) {
+    // into CONTROL_STATE_HOLD_IN state
+    // if ((control.state == CONTROL_STATE_HOLD_IN) && !setVolumeIn) {
+    if ((control.state == CONTROL_STATE_EXHALATION) && !setVolumeIn) {
       sensors.volumeIn = airvolume;
       setVolumeIn = true;
-    // } else if (control.state == CONTROL_EXHALATION) {
-    } else if (control.state == CONTROL_INHALATION) {
+    // } else if (control.state == CONTROL_STATE_EXHALATION) {
+    } else if (control.state == CONTROL_STATE_INHALATION) {
       setVolumeIn = false;
     }
     
@@ -429,16 +442,16 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     }
 
     // Determine if its time to reset the volume integrator, do it once in exhalation
-    if ((control.state == CONTROL_EXHALATION) && !volumeReset) {
+    if ((control.state == CONTROL_STATE_EXHALATION) && !volumeReset) {
       LOG_PRINT(INFO, "*** Reset Volume ***");
       airflowSum = 0;
       volumeReset = true;
-    } else if (control.state == CONTROL_INHALATION) {
+    } else if (control.state == CONTROL_STATE_INHALATION) {
       volumeReset = false;
     }
     
     // Alarms
-    if (control.state == CONTROL_HOLD_IN) {
+    if (control.state == CONTROL_STATE_HOLD_IN) {
       if (airvolume > parameters.highVolumeLimit) {
         LOG_PRINT_EVERY(10, INFO, "High Volume Alarm! Measured: %i ; Limit: %i", airvolume, parameters.highVolumeLimit);
         alarmSet(&sensors.highVolumeAlarm);
@@ -449,24 +462,29 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       }
     }
 
-    // Check airflow sensor for nominal response
-    if (control.state == CONTROL_INHALATION) {
-      if (abs(airflow - previousAirflow[AIRFLOW_WINDOW -1]) > AIRFLOW_RESPONSE_THRESHOLD && !airflowResponseFlag) {
+// Check pressure sensor for nominal response
+    if (control.state==CONTROL_STATE_IDLE)
+    {
+      airflowResponseCount=0;
+    }else if (control.state == CONTROL_STATE_INHALATION) {
+      if (airflowResponseCount==-1)
+          airflowResponseCount=0;
+      if (airflow > AIRFLOW_RESPONSE_THRESHOLD ) {
         airflowResponseCount += 1;
-        airflowResponseFlag = true;
       }
-      LOG_PRINT_EVERY(50, DEBUG, "Airflow Diff: %i Airflow Response Count: %i", abs(airflow - previousAirflow[AIRFLOW_WINDOW -1]), airflowResponseCount);
-      if (airflowResponseCount < control.breathCount) {
+    }else if(control.state==CONTROL_STATE_EXHALATION)
+    {
+      if (airflowResponseCount!=-1)
+        LOG_PRINT(INFO,"AirflowResponseCnt: %i",airflowResponseCount);
+      //check if we got any response on the pressure sensor
+      if ((airflowResponseCount<AIRFLOW_MINIMUM_RESPONSE_CYCLES) && (airflowResponseCount!=-1))
+      {
         LOG_PRINT_EVERY(1, INFO, "Airflow Unresponsive Alarm!");
         alarmSet(&sensors.badAirflowSensorAlarm);
-        airflowResponseCount = control.breathCount;
       }
+      airflowResponseCount=-1;
     }
-    else if (control.state == CONTROL_HOLD_IN) {
-      // Reset flag if not in inhalation/exhalation
-      airflowResponseFlag = false;
-    }
-    
+
     LOG_PRINT_EVERY(200, INFO, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
     // DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
