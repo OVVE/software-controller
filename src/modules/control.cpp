@@ -36,7 +36,7 @@
 
 // Public Variables
 struct control control = {
-  .state = CONTROL_HOME
+  .state = CONTROL_STATE_HOME
 };
 
 typedef struct __attribute__((packed)){
@@ -466,7 +466,7 @@ static int updateControl(void)
     float controlMax=200.0f; //max speed adjustment of current target velocity
     
 
-    if (control.state == CONTROL_EXHALATION)
+    if (control.state == CONTROL_STATE_EXHALATION)
     {
 	//deactivate controller for exhilation
         //goto a fixed movement and deactivate the controller
@@ -492,7 +492,7 @@ static int updateControl(void)
         return 1;
       }
       checkForFirstFlow=1;
-    }else if (control.state == CONTROL_INHALATION)
+    }else if (control.state == CONTROL_STATE_INHALATION)
     {
       if (generateFlowInhalationTrajectory(0)==STATE_INHALATION_TRAJECTORY_END)
       {
@@ -568,7 +568,7 @@ static int updateControl(void)
     //final control output is feed forward + limited controlOut
     controlOutLimited=Kf*targetAirFlow+controlOut;
 
-    if (control.state==CONTROL_INHALATION)
+    if (control.state==CONTROL_STATE_INHALATION)
     {
       //scale with motor angle from 0 to 90deg with scaling factor
       uint32_t currentPos=motorHalGetPosition();
@@ -593,7 +593,7 @@ static int updateControl(void)
 
 //scale down target airflow if we are above our tidal volume target
 #define INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT 10.0f // in %
-    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
+    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_STATE_INHALATION)&&(sensors.currentVolume>targetVolume*(1.0f+INHALATION_TRAJECTORY_MAX_VOLUME_OVERSHOOT/(100.0f))))
     {
         controlLimitHit=CONTROL_LIMIT_HIT_VOLUME;
         controlOutputFiltered=0.0f;
@@ -601,14 +601,14 @@ static int updateControl(void)
     }
 
     //dynamically limit to max pressure
-    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
+    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_STATE_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
     {
       controlOutputFiltered=0.0f;
       controlLimitHit=CONTROL_LIMIT_HIT_PRESSURE;
       LOG_PRINT(INFO, "Pressure limit hit at %li  with output %li",sensors.currentPressure,(int32_t)controlOutputFiltered);
     }
 
-    if ((control.state==CONTROL_INHALATION)&&(controlLimitHit))
+    if ((control.state==CONTROL_STATE_INHALATION)&&(controlLimitHit))
     {
       controlOutputFiltered=0.0f;
     }
@@ -675,7 +675,7 @@ static int updateControl(void)
 
     metricsStop(&midControlTiming);
 
-    LOG_PRINT_EVERY(100, DEBUG,"Control Stats: Avg us: %u\n",midControlTiming.average);
+    LOG_PRINT_EVERY(100, DEBUG,"Control Stats: Avg us: %u",midControlTiming.average);
 
     LOG_PLOT((int32_t)flowSensorInput, (int32_t)targetAirFlow, (int32_t)controlOutLimited, (int32_t)(Kp*controlP), (int32_t)controlOutputFiltered, (int32_t)(Ki*controlD), (int32_t)inhalationTrajectoryPhaseShiftEstimate);
 
@@ -704,9 +704,9 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
   // TV - (dependent upon lung compliance and PEEP setting)
 
   while (true) {
-    if (control.state == CONTROL_HOME)
+    if (control.state == CONTROL_STATE_HOME)
     {
-      LOG_PRINT(INFO, "state: CONTROL_HOME");
+      LOG_PRINT(INFO, "state: CONTROL_STATE_HOME");
 
        motorHalCommand(MOTOR_HAL_COMMAND_OPEN, 5000);
        PT_WAIT_UNTIL(pt, motorHalGetStatus()!=MOTOR_HAL_STATUS_MOVING);
@@ -724,13 +724,13 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
           controlForceHome=0;
        }
        
-       control.state=CONTROL_IDLE;
+       control.state=CONTROL_STATE_IDLE;
 
 
 
     }else
-    if (control.state == CONTROL_IDLE) {
-      LOG_PRINT(INFO, "state: CONTROL_IDLE");
+    if (control.state == CONTROL_STATE_IDLE) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_IDLE");
 
       // Reset any parameters
       control.breathCount = 0;
@@ -750,11 +750,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       //call with 1 here to start with the conservative initial guess based on user parameters
       generateFlowInhalationTrajectory(1);
 
-      control.state = CONTROL_BEGIN_INHALATION;
+      control.state = CONTROL_STATE_BEGIN_INHALATION;
 
       
-    } else if (control.state == CONTROL_BEGIN_INHALATION) {
-      LOG_PRINT(INFO, "state: CONTROL_BEGIN_INHALATION");
+    } else if (control.state == CONTROL_STATE_BEGIN_INHALATION) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_BEGIN_INHALATION");
      
       // Initialize all 
       measuredInhalationTime = 0;
@@ -768,10 +768,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       controlI=0.0f; //reset I-part
       controlOutputFiltered=0.0f;
-      control.state = CONTROL_INHALATION;
+      control.state = CONTROL_STATE_INHALATION;
       
-    } else if (control.state == CONTROL_INHALATION) {
-      LOG_PRINT(INFO, "state: CONTROL_INHALATION");
+    } else if (control.state == CONTROL_STATE_INHALATION) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_INHALATION");
       
       // Begin control loop timer when control starts
       timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
@@ -794,10 +794,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Update some things on state exit
       measuredInhalationTime = timerHalCurrent(&breathTimer);
         
-      control.state = CONTROL_BEGIN_HOLD_IN;
+      control.state = CONTROL_STATE_BEGIN_HOLD_IN;
       
-    } else if (control.state == CONTROL_BEGIN_HOLD_IN) {
-      LOG_PRINT(INFO, "state: CONTROL_BEGIN_HOLD_IN");
+    } else if (control.state == CONTROL_STATE_BEGIN_HOLD_IN) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_BEGIN_HOLD_IN");
 
       // Setup the hold timer
       timerHalBegin(&controlTimer, targetHoldTime, false);
@@ -806,19 +806,19 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       controlOutputFiltered=0.0f;
            
-      control.state = CONTROL_HOLD_IN;
+      control.state = CONTROL_STATE_HOLD_IN;
       
-    } else if (control.state == CONTROL_HOLD_IN) {
-      LOG_PRINT(INFO, "state: CONTROL_HOLD_IN");
+    } else if (control.state == CONTROL_STATE_HOLD_IN) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_HOLD_IN");
 
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
       controlOutputFiltered=0.0f;
 
       PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
-      control.state = CONTROL_BEGIN_EXHALATION;
+      control.state = CONTROL_STATE_BEGIN_EXHALATION;
       
-    } else if (control.state == CONTROL_BEGIN_EXHALATION) {
-      LOG_PRINT(INFO, "state: CONTROL_BEGIN_EXHALATION");
+    } else if (control.state == CONTROL_STATE_BEGIN_EXHALATION) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_BEGIN_EXHALATION");
 
       
       breathTimerStateStart = timerHalCurrent(&breathTimer);
@@ -827,10 +827,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       controlI=0.0f;
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
 
-      control.state = CONTROL_EXHALATION;
+      control.state = CONTROL_STATE_EXHALATION;
 
-    } else if (control.state == CONTROL_EXHALATION) {
-      LOG_PRINT(INFO, "state: CONTROL_EXHALATION");
+    } else if (control.state == CONTROL_STATE_EXHALATION) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_EXHALATION");
       
       // Begin control loop timer when control starts
       timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
@@ -871,10 +871,10 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       if (controlForceHome)
       {
-        control.state = CONTROL_HOME;
+        control.state = CONTROL_STATE_HOME;
       }else
       {
-        control.state = (parameters.startVentilation) ? CONTROL_BEGIN_INHALATION : CONTROL_HOME;
+        control.state = (parameters.startVentilation) ? CONTROL_STATE_BEGIN_INHALATION : CONTROL_STATE_HOME;
       }
       
       
@@ -884,7 +884,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
 
       // TODO: Error, unknown control state!!!
-      control.state = CONTROL_IDLE;
+      control.state = CONTROL_STATE_IDLE;
     }
     
     PT_YIELD(pt);
