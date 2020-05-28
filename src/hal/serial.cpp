@@ -1,5 +1,8 @@
 // TODO: Document what this module does
+/*#define SERIAL_TX_BUFFER_SIZE 256
+#define SERIAL_RX_BUFFER_SIZE 256
 
+#include "../../arduino_lib/HardwareSerial.h"*/
 #include <stdint.h>
 
 #include "../config.h"
@@ -13,7 +16,7 @@
 #define LOG_LEVEL  LOG_LINK_MODULE
 #include "../util/log.h"
 
-#define UI_TX_BUFFERSIZE 512
+#define UI_TX_BUFFERSIZE 1024
 #define DEBUG_TX_BUFFERSIZE 512
 
 typedef struct 
@@ -29,6 +32,8 @@ uint8_t debugTxBufferData[DEBUG_TX_BUFFERSIZE];
 
 txbuffer uiTxBuffer;
 txbuffer debugTxBuffer;
+
+static uint8_t lastByte=0;
 
 inline int serialTxBufferBytesAvailable(txbuffer* buffer)
 {
@@ -98,7 +103,7 @@ int serialHalInit(void)
   debugTxBuffer.head=0;
   debugTxBuffer.tail=0;
 
-  serial_statistics.handleMaxRxBufferCnt=10000;
+  serial_statistics.handleMaxTxBufferCnt=10000;
 
   SERIAL_PORT_DEBUG.begin(BAUD_RATE_DEBUG);
 
@@ -107,8 +112,8 @@ int serialHalInit(void)
   return HAL_OK;
 }
 
-#define SERIAL_RX_MAX_BYTES_PER_CYCLE 32
-#define SERIAL_TX_MAX_BYTES_PER_CYCLE 256
+#define SERIAL_RX_MAX_BYTES_PER_CYCLE 64
+#define SERIAL_TX_MAX_BYTES_PER_CYCLE 64
 
 #define SERIAL_RX_STATE_START1  0
 #define SERIAL_RX_STATE_START2  1
@@ -141,6 +146,9 @@ int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen
   static uint8_t msgLen;
 
   bytesAvailable=SERIAL_UI.available();
+  
+  if (bytesAvailable>serial_statistics.handleMaxRxBufferCnt)
+    serial_statistics.handleMaxRxBufferCnt=bytesAvailable;
 
   if (bytesAvailable>SERIAL_RX_MAX_BYTES_PER_CYCLE)
   {
@@ -270,11 +278,6 @@ int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
     static uint16_t sequenceNumber=0;
 
     //make sure that other packets are only accepted if buffer is <75%
-
-    //TEMPORARY!
-    if (packetType==LINK_PACKET_TYPE_TEXT)
-      return HAL_FAIL;
-    
     if (packetType!=LINK_PACKET_TYPE_PUBLICDATA_PACKET)
     {
       if (packetLength+SERIAL_HEADER_LENGTH>((2*serialTxBufferBytesAvailable(&uiTxBuffer))/4))
@@ -290,8 +293,6 @@ int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
         return HAL_FAIL;
       }
     }
-
-    
 
     if (packetLength>SERIAL_MAX_DATA_SIZE)
     {
@@ -332,16 +333,13 @@ int serialHalSendData()
     uint8_t ret;
     uint8_t byte;
 
-    if (serialTxBufferBytesAvailable(&uiTxBuffer)<serial_statistics.handleMaxRxBufferCnt)
-      serial_statistics.handleMaxRxBufferCnt=serialTxBufferBytesAvailable(&uiTxBuffer);
+    if (serialTxBufferBytesAvailable(&uiTxBuffer)<serial_statistics.handleMaxTxBufferCnt)
+      serial_statistics.handleMaxTxBufferCnt=serialTxBufferBytesAvailable(&uiTxBuffer);
 
     availableForWrite = SERIAL_UI.availableForWrite();
     
     if (availableForWrite>SERIAL_TX_MAX_BYTES_PER_CYCLE)
-    {
-      serial_statistics.handleMaxTxBufferCnt++;
       availableForWrite=SERIAL_TX_MAX_BYTES_PER_CYCLE;
-    }
 
     while (availableForWrite)
     {
