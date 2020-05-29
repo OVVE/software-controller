@@ -40,7 +40,7 @@
 #define BACKEND_DEBUG(lvl, id, buf, sz)                                       \
   do {   \
     if (lvl <= LOG_BACKEND_DEBUG) {         \
-        serialDebugWrite(buf,sz);                                            \
+        serialDebugWrite((unsigned char*) buf,sz);                                            \
     }                                                                    \
   } while (0);
 
@@ -48,7 +48,7 @@
 #define BACKEND_LINK(lvl, id, buf, sz)                                        \
   do {                                                                         \
     if (lvl <= LOG_BACKEND_LINK) {                                             \
-        if (serialHalSendPacket(id,sz,buf) == HAL_OK)     \
+        if (serialHalSendPacket(id,sz,(unsigned char*) buf) == HAL_OK)     \
         {    \
             serial_statistics.textPacketsSentCnt++;                                            \
         }\

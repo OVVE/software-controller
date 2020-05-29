@@ -10,6 +10,8 @@
 #include "../pt/pt.h"
 #include "../hal/hal.h"
 #include "../hal/serial.h"
+
+#include <Arduino.h>
 #include <util/crc16.h>
 
 #define LOG_MODULE "serial"

@@ -10,7 +10,7 @@
 #include "../../modules/sensors.h"
 
 #define LOG_MODULE "airflow"
-#define LOG_LEVEL  LOG_SENSORS_MODULE
+#define LOG_LEVEL  LOG_AIRFLOW_SENSOR_HAL
 #include "../../util/log.h"
 
 #define AIRFLOW_SENSOR_PIN 0
@@ -50,11 +50,11 @@ int airflowSensorHalGetValue(int16_t* value)
 {
   // Alarm for faulty airflow sensor
   if (reading > AIRFLOW_SENSOR_PMF4103A_MAX_VOUT MILLIVOLTS_TO_ADC) {
-    LOG_PRINT_EVERY(100, INFO, "Faulty airflow sensor! Measured: %i", (int)reading);
+    LOG_PRINT_EVERY(100, ERROR, "Faulty airflow sensor! Measured: %i", (int)reading);
     alarmSet(&sensors.badAirflowSensorAlarm);
   }
   else if (reading < AIRFLOW_SENSOR_PMF4103A_MIN_VOUT MILLIVOLTS_TO_ADC) {
-    LOG_PRINT_EVERY(100, INFO, "Faulty airflow sensor! Measured: %i", (int)reading);
+    LOG_PRINT_EVERY(100, ERROR, "Faulty airflow sensor! Measured: %i", (int)reading);
     alarmSet(&sensors.badAirflowSensorAlarm);
   }
 

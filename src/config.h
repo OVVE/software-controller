@@ -67,16 +67,18 @@
 // HAL Logging Flags
 // Defines level of logging for that HAL
 // TODO: Add more HAL logging if needed
-#define LOG_MOTOR_HAL         DEBUG
+#define LOG_MOTOR_HAL            DEBUG
+#define LOG_PRESSURE_SENSOR_HAL  DEBUG
+#define LOG_AIRFLOW_SENSOR_HAL   DEBUG
 
 // Module Logging Flags
 // Defines level of logging for that module
-#define LOG_CONTROL_MODULE    DEBUG
-#define LOG_SENSORS_MODULE    INFO
-#define LOG_LINK_MODULE       DEBUG
-#define LOG_PARAMETERS_MODULE DEBUG
+#define LOG_CONTROL_MODULE       DEBUG
+#define LOG_SENSORS_MODULE       INFO
+#define LOG_LINK_MODULE          DEBUG
+#define LOG_PARAMETERS_MODULE    DEBUG
 
 // Main Loop Loggign Flags
 // Defines level of logging for the main loop
-#define LOG_MAIN_LOOP         DEBUG
+#define LOG_MAIN_LOOP            DEBUG
 

@@ -9,8 +9,9 @@
 #include "../../util/alarm.h"
 #include "../../modules/sensors.h"
 
-#define DEBUG_MODULE "pressure"
-#include "../../util/debug.h"
+#define LOG_MODULE "pressure"
+#define LOG_LEVEL  LOG_PRESSURE_SENSOR_HAL
+#include "../../util/log.h"
 
 #define PRESSURE_SENSOR_PIN 1
 
@@ -55,11 +56,11 @@ int pressureSensorHalGetValue(int16_t* value)
 #if defined(PRESSURE_SENSOR_MPXV7025)
   // Alarm for faulty pressure sensor
   if (reading > PRESSURE_SENSOR_MPXV7025_MAX_VOUT MILLIVOLTS_TO_ADC) {
-    DEBUG_PRINT_EVERY(100, "Faulty pressure sensor (HIGH)! Measured: %i , Limit: %i", (int)reading, (int)(PRESSURE_SENSOR_MPXV7025_MAX_VOUT MILLIVOLTS_TO_ADC));
+    LOG_PRINT_EVERY(100, ERROR, "Faulty pressure sensor (HIGH)! Measured: %i , Limit: %i", (int)reading, (int)(PRESSURE_SENSOR_MPXV7025_MAX_VOUT MILLIVOLTS_TO_ADC));
     alarmSet(&sensors.badPressureSensorAlarm);
   }
   else if (reading < PRESSURE_SENSOR_MPXV7025_MIN_VOUT MILLIVOLTS_TO_ADC) {
-    DEBUG_PRINT_EVERY(100, "Faulty pressure sensor (LOW)! Measured: %i , Limit: %i", (int)reading, (int)(PRESSURE_SENSOR_MPXV7025_MIN_VOUT MILLIVOLTS_TO_ADC));
+    LOG_PRINT_EVERY(100, ERROR, "Faulty pressure sensor (LOW)! Measured: %i , Limit: %i", (int)reading, (int)(PRESSURE_SENSOR_MPXV7025_MIN_VOUT MILLIVOLTS_TO_ADC));
     alarmSet(&sensors.badPressureSensorAlarm);
   }
 

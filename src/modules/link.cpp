@@ -8,13 +8,14 @@
 #include "../modules/control.h"
 #include "../modules/sensors.h"
 #include "../hal/serial.h"
+#include "../hal/timer.h"
 
 #define LOG_MODULE "link"
 #define LOG_LEVEL  LOG_LINK_MODULE
 #include "../util/log.h"
 
-//how many ms until we sound an alarm that we didn't hear anything from the UI
-#define UI_PACKET_RECEIVE_TIMEOUT 2000 
+#define UI_COMM_LINK_PACKET_TIMEOUT (2 SEC) 
+#define UI_COMM_LINK_INIT_TIMEOUT   (30 SEC)
 
 // Private Variables
 struct link comm;
@@ -40,7 +41,7 @@ extern struct parameters parameters;
 extern struct control control;
 extern struct sensors sensors;
 
-static long lastUiPacketReceivedTime=0;
+static struct timer commLinkTimer;
 
 uint32_t lastDataPacketAlarmBits;
 
@@ -267,7 +268,7 @@ int linkProcessPacket(uint8_t packetType, uint8_t packetLen, uint8_t* data)
     
       memcpy((void *)&public_command_packet, (void *)&command_packet, sizeof(public_command_packet));
       updateFromCommandPacket();
-      lastUiPacketReceivedTime=millis();
+      timerHalBegin(&commLinkTimer, UI_COMM_LINK_PACKET_TIMEOUT, false);
   }
 }
 
@@ -291,15 +292,15 @@ static PT_THREAD(serialReadThreadMain(struct pt* pt))
 static PT_THREAD(serialSendThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
-  static long lastPublicDataMillis=0;
+  static struct timer dataPacketTimer = {0};
 
   //continously process tx data
   serialHalSendData();
 
   //check if we need to send the next public data packet
-  if (millis()>lastPublicDataMillis+LINK_PUBLIC_DATA_TIMEOUT)
+  if (timerHalRun(&dataPacketTimer) == HAL_TIMEOUT)
   {
-    lastPublicDataMillis=millis();
+    timerHalBegin(&dataPacketTimer, LINK_PUBLIC_DATA_TIMEOUT, false);
     updateDataPacket();
 
     serialHalSendPacket(LINK_PACKET_TYPE_PUBLICDATA_PACKET,sizeof(public_data_packet),(uint8_t*)&public_data_packet);
@@ -325,11 +326,12 @@ PT_THREAD(serialThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
 
-  if ((lastUiPacketReceivedTime) && (millis()-lastUiPacketReceivedTime>UI_PACKET_RECEIVE_TIMEOUT) && (control.state!=CONTROL_STATE_IDLE))
+  if (timerHalRun(&commLinkTimer) == HAL_TIMEOUT)
   {
-       LOG_PRINT(INFO,"Uart RX Comm Timeout Hit!");
-       alarmSet(&comm.onCommunicationFailureAlarm);
-       lastUiPacketReceivedTime=0;
+    if (!alarmGet(&comm.onCommunicationFailureAlarm)) {
+       LOG_PRINT(ERROR,"Uart RX Comm Timeout Hit!");
+    }
+    alarmSet(&comm.onCommunicationFailureAlarm);
   }
   LOG_PRINT_EVERY(10000,DEBUG,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL_CRC,FAIL_OTHER,SEQ): %li,%li,%li,%li Buf(TX/RX): %li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntWrongCrc,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt,serial_statistics.handleMaxTxBufferCnt,serial_statistics.handleMaxRxBufferCnt);
   PT_RESTART(pt);
@@ -343,6 +345,8 @@ int linkModuleInit(void)
   }
 
   alarmInit(&comm.onCommunicationFailureAlarm,&onCommunicationFailureAlarmProperties);
+  
+  timerHalBegin(&commLinkTimer, UI_COMM_LINK_INIT_TIMEOUT, false);
 
   PT_INIT(&serialSendThread);
   PT_INIT(&serialReadThread);
