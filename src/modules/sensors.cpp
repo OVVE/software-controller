@@ -412,6 +412,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     if (control.state==CONTROL_STATE_IDLE)
     {
       airvolume=0;
+      airflowSum=0;
       sensors.volumeIn = 0;
     }
     // Derive Volume IN from current volume; updating the public value upon entry
