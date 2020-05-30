@@ -33,7 +33,7 @@
 #define PRESSURE_SAMPLING_PERIOD                 (10 MSEC)
 
 #define PRESSURE_WINDOW                           (20)
-#define PRESSURE_ALARM_WINDOW               (int16_t)((150 MSEC) / PRESSURE_SAMPLING_PERIOD)
+#define PRESSURE_ALARM_WINDOW                    ((150 MSEC) / PRESSURE_SAMPLING_PERIOD)
 
 #define PRESSURE_RESPONSE_THRESHOLD               (500)
 #define PRESSURE_MINIMUM_RESPONSE_CYCLES          (20)
@@ -141,7 +141,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static uint8_t inhalationTimeout = 0;
   static int32_t pressureResponseCount = 0;
   static int16_t pressureAlarmAvg = 0;
-  static int16_t pressureAlarmSum = 0;
+  static int32_t pressureAlarmSum = 0;
   static int16_t previousPressureAlarm[PRESSURE_ALARM_WINDOW];
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
@@ -193,7 +193,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     previousPressureAlarm[0] = pressure;
     pressureAlarmAvg = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
-    LOG_PRINT_EVERY(1, INFO, "Current Pressure: %i ; Pressure Avg: %i", pressure, pressureAlarmAvg);
+    LOG_PRINT_EVERY(10, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, pressureAlarmAvg);
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
     // entry into CONTROL_STATE_HOLD_IN state
