@@ -31,6 +31,8 @@
 
 #define MAX_PEAK_PRESSURE 40.0f
 
+#define CONTROL_INITIAL_PHASESHIFT_MS 200L
+
 // Uncomment the following to enable the current closed loop control
  #define CONTROL_CLOSED_LOOP
 
@@ -142,7 +144,7 @@ static float inhalationTrajectoryEndFlow=1.0f; //modified end flow
 static float inhalationTrajectoryInitialFlow=1.0f; //flow calculation based on square form
 static float inhalationTrajectoryLastVolume=0.0f; //volume delivered in last cycle
 static float inhalationTrajectoryCurrentTimeInCycle=0.0f; //0..1
-static int32_t inhalationTrajectoryPhaseShiftEstimate=0; //compressing the air in the bag causes a delay of flow and we therefore need to estimate the phase shift in timing to allow enough inhale time
+static int32_t inhalationTrajectoryPhaseShiftEstimate=CONTROL_INITIAL_PHASESHIFT_MS*(int32_t)1000; //compressing the air in the bag causes a delay of flow and we therefore need to estimate the phase shift in timing to allow enough inhale time
 static uint8_t inhalationTrajectoryInitialCycleCnt=0;
 static uint8_t controlForceHome=0;
 static uint8_t controlLimitHit=CONTROL_LIMIT_HIT_NONE;
@@ -740,7 +742,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       exhalationTargetPosition=MOTOR_HAL_INIT_POSITION;
       inhalationTrajectoryInitialFlow=0.0f;
       controlOutputFiltered=0.0f;
-      inhalationTrajectoryPhaseShiftEstimate=0;
+      inhalationTrajectoryPhaseShiftEstimate=CONTROL_INITIAL_PHASESHIFT_MS*(int32_t)1000;
 
       motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
 
