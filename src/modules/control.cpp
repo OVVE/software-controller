@@ -653,7 +653,7 @@ static int updateControl(void)
     if (logDividerCnt==4)
     {
       logDividerCnt=0;
-      controlLogData.time=0; // fix up later
+      controlLogData.time=millis(); 
       controlLogData.controlForceHome=controlForceHome;
       controlLogData.controlOutputFiltered=controlOutputFiltered;
       controlLogData.inhalationTrajectoryEndFlow=inhalationTrajectoryEndFlow;
