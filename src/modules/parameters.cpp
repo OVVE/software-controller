@@ -100,9 +100,9 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       tmpParameters[0].lowRespiratoryRateLimit = comm.lowRespiratoryRateLimit;
 
       // TODO: Remove these lines when limit can be set elsewhere
-      tmpParameters[0].highPressureLimit = 2000;
+      tmpParameters[0].highPressureLimit = 4000;
       tmpParameters[0].lowPressureLimit = -1000;
-      tmpParameters[0].highVolumeLimit = 600;
+      tmpParameters[0].highVolumeLimit = 900;
       tmpParameters[0].lowVolumeLimit = 90;
     }
     
