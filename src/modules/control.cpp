@@ -8,6 +8,7 @@
 
 #include "../config.h"
 
+#include "../hal/sys.h"
 #include "../hal/motor.h"
 #include "../hal/timer.h"
 
@@ -655,7 +656,7 @@ static int updateControl(void)
     if (logDividerCnt==4)
     {
       logDividerCnt=0;
-      controlLogData.time=millis(); 
+      controlLogData.time=sysHalTime(); 
       controlLogData.controlForceHome=controlForceHome;
       controlLogData.controlOutputFiltered=controlOutputFiltered;
       controlLogData.inhalationTrajectoryEndFlow=inhalationTrajectoryEndFlow;
