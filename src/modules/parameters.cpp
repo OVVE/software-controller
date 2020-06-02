@@ -91,19 +91,12 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       tmpParameters[0].respirationRateRequested = comm.respirationRateRequested;
       tmpParameters[0].ieRatioRequested = comm.ieRatioRequested;
       tmpParameters[0].pressureRequested = comm.pressureRequested;
-      // TODO: When the UI actually sends good values for these limits; uncomment these lines
-      //tmpParameters[0].highVolumeLimit = comm.highVolumeLimit;
-      //tmpParameters[0].lowVolumeLimit = comm.lowVolumeLimit;
-      //tmpParameters[0].highPressureLimit = comm.highPressureLimit;
-      //tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
+      tmpParameters[0].highVolumeLimit = comm.highVolumeLimit;
+      tmpParameters[0].lowVolumeLimit = comm.lowVolumeLimit;
+      tmpParameters[0].highPressureLimit = comm.highPressureLimit;
+      tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
       tmpParameters[0].highRespiratoryRateLimit = comm.highRespiratoryRateLimit;
       tmpParameters[0].lowRespiratoryRateLimit = comm.lowRespiratoryRateLimit;
-
-      // TODO: Remove these lines when limit can be set elsewhere
-      tmpParameters[0].highPressureLimit = 4000;
-      tmpParameters[0].lowPressureLimit = -1000;
-      tmpParameters[0].highVolumeLimit = 900;
-      tmpParameters[0].lowVolumeLimit = 90;
     }
     
     if (!checkParameters(&tmpParameters[0])) {

@@ -29,8 +29,6 @@
 
 #define INHALATION_OVERTIME(t) ((t) * 4 / 3)
 
-#define MAX_PEAK_PRESSURE 40.0f
-
 #define CONTROL_INITIAL_PHASESHIFT_MS 200L
 
 // Uncomment the following to enable the current closed loop control
@@ -603,7 +601,7 @@ static int updateControl(void)
     }
 
     //dynamically limit to max pressure
-    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_STATE_INHALATION)&&((float)sensors.currentPressure/100.f>(0.90f*MAX_PEAK_PRESSURE)))
+    if ((controlLimitHit==CONTROL_LIMIT_HIT_NONE)&&(control.state==CONTROL_STATE_INHALATION)&&(sensors.averagePressure>parameters.highPressureLimit))
     {
       controlOutputFiltered=0.0f;
       controlLimitHit=CONTROL_LIMIT_HIT_PRESSURE;
