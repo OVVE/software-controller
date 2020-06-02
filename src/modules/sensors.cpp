@@ -140,7 +140,6 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static int16_t previousPressure[PRESSURE_WINDOW];
   static uint8_t inhalationTimeout = 0;
   static int32_t pressureResponseCount = 0;
-  static int16_t pressureAlarmAvg = 0;
   static int32_t pressureAlarmSum = 0;
   static int16_t previousPressureAlarm[PRESSURE_ALARM_WINDOW];
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
@@ -192,8 +191,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       pressureAlarmSum += previousPressureAlarm[i];
     }
     previousPressureAlarm[0] = pressure;
-    pressureAlarmAvg = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
-    LOG_PRINT_EVERY(10, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, pressureAlarmAvg);
+    sensors.averagePressure = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
+    LOG_PRINT_EVERY(10, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, sensors.averagePressure);
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
     // entry into CONTROL_STATE_HOLD_IN state
@@ -299,11 +298,11 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     
     // Alarms
-    if (pressureAlarmAvg > parameters.highPressureLimit) {
+    if (sensors.averagePressure > parameters.highPressureLimit) {
       LOG_PRINT_EVERY(100, INFO, "High Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.highPressureLimit);
       alarmSet(&sensors.highPressureAlarm);
     }
-    if (pressureAlarmAvg < parameters.lowPressureLimit) {
+    if (sensors.averagePressure < parameters.lowPressureLimit) {
       LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.lowPressureLimit);
       alarmSet(&sensors.lowPressureAlarm);
     }
@@ -315,7 +314,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }else if (control.state == CONTROL_STATE_INHALATION) {
       if (pressureResponseCount==-1)
           pressureResponseCount=0;
-      if (pressureAlarmAvg > PRESSURE_RESPONSE_THRESHOLD ) {
+      if (sensors.averagePressure > PRESSURE_RESPONSE_THRESHOLD ) {
           pressureResponseCount += 1;
       }
     }else if(control.state==CONTROL_STATE_EXHALATION)

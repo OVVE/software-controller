@@ -16,6 +16,7 @@ struct sensors {
   int32_t volumeOut;
   int32_t volumePerMinute;
   int32_t currentPressure;
+  int32_t averagePressure;
   int32_t peakPressure;
   int32_t plateauPressure;
   int32_t peepPressure;
