@@ -15,7 +15,7 @@ int estopHalInit(void)
   return HAL_OK;
 }
 
-bool estopHalCheck(void)
+bool estopHalAsserted(void)
 {
   return (digitalRead(ESTOP_PIN) == ESTOP_ASSERTION_LEVEL);
 }
