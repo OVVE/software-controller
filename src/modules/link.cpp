@@ -331,7 +331,7 @@ PT_THREAD(serialThreadMain(struct pt* pt))
        alarmSet(&comm.onCommunicationFailureAlarm);
        lastUiPacketReceivedTime=0;
   }
-  LOG_PRINT_EVERY(10000,DEBUG,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL_CRC,FAIL_OTHER,SEQ): %li,%li,%li,%li Buf(TX/RX): %li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntWrongCrc,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt,serial_statistics.handleMaxTxBufferCnt,serial_statistics.handleMaxRxBufferCnt);
+  LOG_PRINT_EVERY(10000,INFO,"Serial Stats: TX(OK,FAIL): %li,%li RX (OK,FAIL_CRC,FAIL_OTHER,SEQ): %li,%li,%li,%li Buf(TX/RX): %li,%li ",serial_statistics.packetsCntSentOk,serial_statistics.packetsCntSentBufferOverFlow,serial_statistics.packetsCntReceivedOk,serial_statistics.packetsCntWrongCrc,serial_statistics.packetsCntHeaderSyncFailed+serial_statistics.packetsCntWrongLength+serial_statistics.packetsCntWrongVersion,serial_statistics.sequenceNoWrongCnt,serial_statistics.handleMaxTxBufferCnt,serial_statistics.handleMaxRxBufferCnt);
   PT_RESTART(pt);
   PT_END(pt);
 }
