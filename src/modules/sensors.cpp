@@ -192,7 +192,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     previousPressureAlarm[0] = pressure;
     sensors.averagePressure = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
-    LOG_PRINT_EVERY(10, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, sensors.averagePressure);
+    LOG_PRINT_EVERY(15, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, (int16_t) sensors.averagePressure);
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
     // entry into CONTROL_STATE_HOLD_IN state
@@ -298,13 +298,15 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     
     // Alarms
-    if (sensors.averagePressure > parameters.highPressureLimit) {
-      LOG_PRINT_EVERY(100, INFO, "High Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.highPressureLimit);
-      alarmSet(&sensors.highPressureAlarm);
-    }
-    if (sensors.averagePressure < parameters.lowPressureLimit) {
-      LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.lowPressureLimit);
-      alarmSet(&sensors.lowPressureAlarm);
+    if ((control.state != CONTROL_STATE_HOME) && (control.state != CONTROL_STATE_IDLE)) {
+      if (sensors.averagePressure > parameters.highPressureLimit) {
+        LOG_PRINT_EVERY(100, INFO, "High Pressure Alarm! Measured: %i ; Limit: %i", (int16_t) sensors.averagePressure, parameters.highPressureLimit);
+        alarmSet(&sensors.highPressureAlarm);
+      }
+      if (sensors.averagePressure < parameters.lowPressureLimit) {
+        LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", (int16_t) sensors.averagePressure, parameters.lowPressureLimit);
+        alarmSet(&sensors.lowPressureAlarm);
+      }
     }
 
     // Check pressure sensor for nominal response
@@ -500,7 +502,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 
     LOG_PRINT_EVERY(200, INFO, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
-    // DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
+    LOG_PRINT_EVERY(200, INFO, "AirVolume = %d mL", airvolume);
     
     // Ensure this threads cannot block if it somehow elapses the timer too fast
     PT_YIELD(pt);
