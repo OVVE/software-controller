@@ -72,7 +72,7 @@
 // Module Logging Flags
 // Defines level of logging for that module
 #define LOG_CONTROL_MODULE    DEBUG
-#define LOG_SENSORS_MODULE    INFO
+#define LOG_SENSORS_MODULE    DEBUG
 #define LOG_LINK_MODULE       DEBUG
 #define LOG_PARAMETERS_MODULE DEBUG
 
