@@ -19,6 +19,7 @@ struct sensors {
   int32_t peakPressure;
   int32_t plateauPressure;
   int32_t peepPressure;
+  int32_t virtualInhalationSensor;
   bool    inhalationDetected;
   bool    exhalationDetected;
   

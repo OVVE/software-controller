@@ -486,6 +486,38 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       airflowResponseCount=-1;
     }
 
+    static int32_t vihValue;
+    static int32_t lastPressure;
+    static int32_t lastFlow;
+    static int32_t lastControlOutput;
+    if (control.allowPatientSync)
+    {
+      vihValue=sensors.peepPressure-sensors.currentPressure; //negative pressure 
+      if (vihValue<0)
+        vihValue=0;
+      
+      if (vihValue>500)
+        vihValue=500;
+
+      vihValue*=(lastPressure-sensors.currentPressure);
+      vihValue/=50; //implicit *10
+
+      if (vihValue<0)
+        vihValue=0;
+      sensors.virtualInhalationSensor=(7*sensors.virtualInhalationSensor+3*vihValue)/10;
+    }else
+    {
+      vihValue=0;
+      sensors.virtualInhalationSensor=0;
+    }
+    
+    
+    
+    lastPressure=sensors.currentPressure;
+    lastFlow=sensors.currentFlow;        
+    
+    sensors.volumeOut=sensors.virtualInhalationSensor;
+
     LOG_PRINT_EVERY(200, INFO, "Airflow   = %c%u.%02u SLM",
                       (airflow < 0) ? '-' : ' ', abs(airflow)/100, abs(airflow)%100);
     // DEBUG_PRINT_EVERY(200, "AirVolume = %d mL", airvolume);
@@ -557,6 +589,8 @@ int sensorsModuleInit(void)
   alarmInit(&sensors.lowVolumeAlarm, &lowVolumeAlarmProperties);
   alarmInit(&sensors.highRespiratoryRateAlarm, &highRespiratoryRateAlarmProperties);
   alarmInit(&sensors.lowRespiratoryRateAlarm, &lowRespiratoryRateAlarmProperties);
+
+  sensors.virtualInhalationSensor=0;
 
   PT_INIT(&sensorsThread);
   PT_INIT(&sensorsPressureThread);

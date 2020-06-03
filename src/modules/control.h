@@ -25,10 +25,12 @@ struct control {
   uint32_t respirationRateMeasured;
   uint32_t ieRatioMeasured;
   uint32_t breathCount;
-  
+  float outputFiltered;
   // Alarms
   int8_t   breathTimeoutAlarm;
   int8_t   unknownStateAlarm;
+
+  uint8_t allowPatientSync;
 };
 
 // Public Variables
