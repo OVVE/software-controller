@@ -2,6 +2,7 @@
 #include "config.h"
 
 #include "hal/alarm.h"
+#include "hal/estop.h"
 #include "hal/timer.h"
 #include "hal/watchdog.h"
 
@@ -31,6 +32,14 @@ static struct metrics parametersModuleMetrics;
 static struct metrics linkModuleMetrics;
 #endif
 
+static struct alarmProperties estopAlarmProperties = {
+  .priority = ALARM_PRIORITY_SEVERE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
+
+static struct alarm estopAlarm;
+
 void mainSetup(void)
 { 
   // Initialize HAL
@@ -40,6 +49,7 @@ void mainSetup(void)
 
   timerHalInit();
   alarmHalInit();
+  estopHalInit();
   serialHalInit();
   
   LOG_PRINT(INFO, "Initialization started, loading modules...");
@@ -49,6 +59,8 @@ void mainSetup(void)
   sensorsModuleInit();
   parametersModuleInit();
   linkModuleInit();
+  
+  alarmInit(&estopAlarm, &estopAlarmProperties);
 
 #ifdef DEBUG_MAIN_LOOP_METRICS
   metricsReset(&mainLoopMetrics);
@@ -114,6 +126,13 @@ void mainLoop(void)
 #ifdef DEBUG_MAIN_LOOP_METRICS
   metricsStop(&linkModuleMetrics);
 #endif
+
+  // Check the Estop, asserting an alarm if active
+  if (estopHalAsserted()) {
+    alarmSet(&estopAlarm);
+  } else {
+    alarmSuppress(&estopAlarm);
+  }
 
   // Scan through all alarms, looking for any set warning that need to be addressed
   struct alarmProperties properties = {0};

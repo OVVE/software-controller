@@ -10,6 +10,6 @@
 int estopHalInit(void);
 
 // TODO: Doc
-bool estopHalCheck(void);
+bool estopHalAsserted(void);
 
 #endif /* __ESTOP_HAL_H__ */
