@@ -33,6 +33,7 @@
 #define PRESSURE_SAMPLING_PERIOD                 (10 MSEC)
 
 #define PRESSURE_WINDOW                           (20)
+#define PRESSURE_ALARM_WINDOW                    ((150 MSEC) / PRESSURE_SAMPLING_PERIOD)
 
 #define PRESSURE_RESPONSE_THRESHOLD               (500)
 #define PRESSURE_MINIMUM_RESPONSE_CYCLES          (20)
@@ -139,6 +140,9 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static int16_t previousPressure[PRESSURE_WINDOW];
   static uint8_t inhalationTimeout = 0;
   static int32_t pressureResponseCount = 0;
+  static int16_t pressureAlarmAvg = 0;
+  static int32_t pressureAlarmSum = 0;
+  static int16_t previousPressureAlarm[PRESSURE_ALARM_WINDOW];
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
@@ -181,6 +185,15 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       previousPressure[i] = previousPressure[i - 1];
     }
     previousPressure[0] = pressure;
+
+    pressureAlarmSum = 0;
+    for (int i = PRESSURE_ALARM_WINDOW - 1; i > 0; i--) {
+      previousPressureAlarm[i] = previousPressureAlarm[i - 1];
+      pressureAlarmSum += previousPressureAlarm[i];
+    }
+    previousPressureAlarm[0] = pressure;
+    pressureAlarmAvg = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
+    LOG_PRINT_EVERY(10, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, pressureAlarmAvg);
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
     // entry into CONTROL_STATE_HOLD_IN state
@@ -286,11 +299,11 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     
     // Alarms
-    if (pressure > parameters.highPressureLimit) {
+    if (pressureAlarmAvg > parameters.highPressureLimit) {
       LOG_PRINT_EVERY(100, INFO, "High Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.highPressureLimit);
       alarmSet(&sensors.highPressureAlarm);
     }
-    if (pressure < parameters.lowPressureLimit) {
+    if (pressureAlarmAvg < parameters.lowPressureLimit) {
       LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", pressure, parameters.lowPressureLimit);
       alarmSet(&sensors.lowPressureAlarm);
     }
@@ -302,7 +315,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }else if (control.state == CONTROL_STATE_INHALATION) {
       if (pressureResponseCount==-1)
           pressureResponseCount=0;
-      if (pressure > PRESSURE_RESPONSE_THRESHOLD ) {
+      if (pressureAlarmAvg > PRESSURE_RESPONSE_THRESHOLD ) {
           pressureResponseCount += 1;
       }
     }else if(control.state==CONTROL_STATE_EXHALATION)
