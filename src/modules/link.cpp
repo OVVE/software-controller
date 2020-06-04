@@ -73,7 +73,11 @@ void handleUIAlarms()
   if (public_command_packet.alarm_bits & ALARM_ECU_LOW_PRESSURE && lastDataPacketAlarmBits & ALARM_ECU_LOW_PRESSURE)
   {
     alarmSuppress(&sensors.lowPressureAlarm);
-  } 
+  }
+  if (public_command_packet.alarm_bits & ALARM_ECU_CONTINUOUS_PRESSURE && lastDataPacketAlarmBits & ALARM_ECU_CONTINUOUS_PRESSURE)
+  {
+    alarmSuppress(&sensors.continuousPressureAlarm);
+  }   
   if (public_command_packet.alarm_bits & ALARM_ECU_HIGH_VOLUME && lastDataPacketAlarmBits & ALARM_ECU_HIGH_VOLUME)
   {
     alarmSuppress(&sensors.highVolumeAlarm);
@@ -110,6 +114,7 @@ void setDataPacketAlarmBits()
   public_data_packet.alarm_bits = alarmGet(&sensors.badAirflowSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_FLOW_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_FLOW_SENSOR;
   public_data_packet.alarm_bits = alarmGet(&sensors.highPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_PRESSURE;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_PRESSURE;
+  public_data_packet.alarm_bits = alarmGet(&sensors.continuousPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_CONTINUOUS_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_CONTINUOUS_PRESSURE;
   public_data_packet.alarm_bits = alarmGet(&sensors.highVolumeAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_VOLUME;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowVolumeAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_VOLUME : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_VOLUME; 
   public_data_packet.alarm_bits = alarmGet(&sensors.highRespiratoryRateAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_RESPIRATORY_RATE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_RESPIRATORY_RATE;
