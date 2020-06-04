@@ -46,6 +46,9 @@
 #define INHALATION_DETECTION_PEEP_THRESHOLD     (800)
 #define INHALATION_TIMEOUT                      (400 MSEC)
 
+#define CONTINUOUS_PRESSURE_TIMEOUT              (15 SEC)
+#define CONTINUOUS_PRESSURE_THRESHOLD            (1000) // 10cmH2O
+
 //
 // Airflow Sensor Parameters
 //
@@ -110,6 +113,11 @@ static struct alarmProperties lowPressureAlarmProperties = {
   .preventWatchdog = false,
   .suppressionTimeout = (120 SEC),
 };
+static struct alarmProperties continuousPressureAlarmProperties = {
+  .priority = ALARM_PRIORITY_HIGH,
+  .preventWatchdog = false,
+  .suppressionTimeout = (120 SEC),
+};
 static struct alarmProperties highVolumeAlarmProperties = {
   .priority = ALARM_PRIORITY_HIGH,
   .preventWatchdog = false,
@@ -142,6 +150,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static int32_t pressureResponseCount = 0;
   static int32_t pressureAlarmSum = 0;
   static int16_t previousPressureAlarm[PRESSURE_ALARM_WINDOW];
+  static struct timer continuousPressureAlarmTimer;
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
@@ -306,6 +315,14 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       if (sensors.averagePressure < parameters.lowPressureLimit) {
         LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", (int16_t) sensors.averagePressure, parameters.lowPressureLimit);
         alarmSet(&sensors.lowPressureAlarm);
+      }
+      if (sensors.averagePressure > CONTINUOUS_PRESSURE_THRESHOLD) {
+        timerHalBegin(&continuousPressureAlarmTimer, CONTINUOUS_PRESSURE_TIMEOUT, false);
+      } else if (timerHalRun(&continuousPressureAlarmTimer) == HAL_TIMEOUT) {
+        if (alarmGet(&sensors.continuousPressureAlarm)) {
+          LOG_PRINT(ERROR, "Continuous Pressure Alarm!");
+        }
+        alarmSet(&sensors.continuousPressureAlarm);
       }
     }
 
@@ -567,6 +584,7 @@ int sensorsModuleInit(void)
   alarmInit(&sensors.badAirflowSensorAlarm, &badAirflowSensorAlarmProperties);
   alarmInit(&sensors.highPressureAlarm, &highPressureAlarmProperties);
   alarmInit(&sensors.lowPressureAlarm, &lowPressureAlarmProperties);
+  alarmInit(&sensors.continuousPressureAlarm, &continuousPressureAlarmProperties);
   alarmInit(&sensors.highVolumeAlarm, &highVolumeAlarmProperties);
   alarmInit(&sensors.lowVolumeAlarm, &lowVolumeAlarmProperties);
   alarmInit(&sensors.highRespiratoryRateAlarm, &highRespiratoryRateAlarmProperties);

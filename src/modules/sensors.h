@@ -30,6 +30,7 @@ struct sensors {
   struct alarm badAirflowSensorAlarm;
   struct alarm highPressureAlarm;
   struct alarm lowPressureAlarm;
+  struct alarm continuousPressureAlarm;
   struct alarm highVolumeAlarm;
   struct alarm lowVolumeAlarm;
   struct alarm highRespiratoryRateAlarm;
