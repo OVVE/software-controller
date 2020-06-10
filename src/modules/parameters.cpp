@@ -80,7 +80,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
  
   while (1) {
     // TODO: Determine all the conditions that update the parameters; placeholder for now
-    PT_WAIT_UNTIL(pt, differentLinkAndParameters());
+    PT_WAIT_UNTIL(pt, differentLinkAndParameters() || estopHalAsserted());
     
     tmpParameters[0] = parameters;
     if (differentLinkAndParameters()) {
@@ -97,6 +97,8 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
       tmpParameters[0].lowPressureLimit = comm.lowPressureLimit;
       tmpParameters[0].highRespiratoryRateLimit = comm.highRespiratoryRateLimit;
       tmpParameters[0].lowRespiratoryRateLimit = comm.lowRespiratoryRateLimit;
+    } else if (estopHalAsserted()) {
+      tmpParameters[0].startVentilation = false;
     }
     
     if (!checkParameters(&tmpParameters[0])) {

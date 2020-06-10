@@ -35,7 +35,7 @@ static struct metrics linkModuleMetrics;
 static struct alarmProperties estopAlarmProperties = {
   .priority = ALARM_PRIORITY_SEVERE,
   .preventWatchdog = false,
-  .suppressionTimeout = (120 SEC),
+  .suppressionTimeout = (100 MSEC),
 };
 
 static struct alarm estopAlarm;
