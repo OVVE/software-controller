@@ -10,6 +10,7 @@
 
 #include "../config.h"
 
+#include "../hal/estop.h"
 #include "../hal/motor.h"
 #include "../hal/timer.h"
 
@@ -756,7 +757,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
 
       // Wait for the parameters to enter the run state before
-      PT_WAIT_UNTIL(pt, parameters.startVentilation);
+      PT_WAIT_UNTIL(pt, parameters.startVentilation && !estopHalAsserted());
       
       //call with 1 here to start with the conservative initial guess based on user parameters
       generateFlowInhalationTrajectory(1);
@@ -794,7 +795,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         // If the control still hasnt reached its destination and the timeout
         // condition hasnt been met, continue the control loop, waiting for the
         // next control cycle; otherwise exit this state
-        if (!controlComplete && !checkInhalationTimeout()) {
+        if (!controlComplete && !checkInhalationTimeout() && !estopHalAsserted()) {
           PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
         } else {
           break;
@@ -805,7 +806,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Update some things on state exit
       measuredInhalationTime = timerHalCurrent(&breathTimer);
         
-      control.state = CONTROL_STATE_BEGIN_HOLD_IN;
+      if (estopHalAsserted()) {
+        control.state = CONTROL_STATE_IDLE;
+      } else {
+        control.state = CONTROL_STATE_BEGIN_HOLD_IN;
+      }
       
     } else if (control.state == CONTROL_STATE_BEGIN_HOLD_IN) {
       LOG_PRINT(INFO, "state: CONTROL_STATE_BEGIN_HOLD_IN");
@@ -855,7 +860,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         // next control cycle; otherwise move on to the next steps in exhalation
         // TODO: Consider what a timeout here means, it means the motor wasn't
         //       able to get all the way back, should we really keep going?
-        if (!controlComplete && !checkExhalationTimeout()) {
+        if (!controlComplete && !checkExhalationTimeout() && !estopHalAsserted()) {
           PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
         } else {
           break;
@@ -868,7 +873,9 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       // At this point, either wait for the breath timer to expire or find a new
       // breath to sync with
-      PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS)));
+      if (!estopHalAsserted()) {
+        PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS)));
+      }
       
       // Calculate and update the measured times
       uint32_t currentBreathTime = timerHalCurrent(&breathTimer);
@@ -880,14 +887,15 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       LOG_PRINT(INFO, "Timing report [ms]: It: %li Ps: %li Et: %li I:E [1=1000]: %li RR:%li",(uint32_t)measuredInhalationTime/(uint32_t)1000, (uint32_t)inhalationTrajectoryPhaseShiftEstimate/(uint32_t)1000, (uint32_t)measuredExhalationTime/1000, (uint32_t)measuredInhalationTime*(uint32_t)1000/(uint32_t)measuredExhalationTime, (uint32_t)control.respirationRateMeasured);
       // Check if we need to continue onto another breath or if ventilation has stopped
 
-      if (controlForceHome)
-      {
+      if (estopHalAsserted()) {
+        control.state = CONTROL_STATE_IDLE;
+      } else if (controlForceHome) {
         control.state = CONTROL_STATE_HOME;
-      }else
-      {
-        control.state = (parameters.startVentilation) ? CONTROL_STATE_BEGIN_INHALATION : CONTROL_STATE_HOME;
+      } else if (parameters.startVentilation) {
+        control.state = CONTROL_STATE_BEGIN_INHALATION;
+      } else {
+        control.state = CONTROL_STATE_HOME;
       }
-      
       
     } else {
       LOG_PRINT(ERROR, "state: (unknown)");
