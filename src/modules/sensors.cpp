@@ -46,7 +46,8 @@
 #define INHALATION_DETECTION_PEEP_THRESHOLD     (800)
 #define INHALATION_TIMEOUT                      (400 MSEC)
 
-#define CONTINUOUS_PRESSURE_TIMEOUT              (15 SEC)
+#define CONTINUOUS_PRESSURE_PERIOD               (500 MSEC)
+#define CONTINUOUS_PRESSURE_WINDOW               ((15 SEC) / CONTINUOUS_PRESSURE_PERIOD)
 #define CONTINUOUS_PRESSURE_THRESHOLD            (1000) // 10cmH2O
 
 //
@@ -63,8 +64,8 @@
 #define AIRFLOW_BIAS_SAMPLES                      32
 #define PRESSURE_BIAS_SAMPLES                      32
 
-#define VOLUME_MINUTE_PERIOD                      (5 SEC)
-#define VOLUME_MINUTE_WINDOW                     (60 SEC) / VOLUME_MINUTE_PERIOD
+#define MINUTE_VOLUME_PERIOD                      (4 SEC)
+#define MINUTE_VOLUME_WINDOW                    ((60 SEC) / MINUTE_VOLUME_PERIOD)
 
 // Public variables
 struct sensors sensors;
@@ -149,8 +150,12 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static uint8_t inhalationTimeout = 0;
   static int32_t pressureResponseCount = 0;
   static int32_t pressureAlarmSum = 0;
-  static int16_t previousPressureAlarm[PRESSURE_ALARM_WINDOW];
-  static struct timer continuousPressureAlarmTimer;
+  static int16_t previousPressureAlarm[PRESSURE_ALARM_WINDOW] = {0};
+  static int16_t continuousPressureAlarmMin[CONTINUOUS_PRESSURE_WINDOW] = {0};
+  static int16_t continuousPressureAlarmMax[CONTINUOUS_PRESSURE_WINDOW] = {0};
+  static uint8_t continuousPressureAlarmTimeout = 0;
+  static int16_t continuousPressureAlarmCurrentMin = INT16_MAX;
+  static int16_t continuousPressureAlarmCurrentMax = INT16_MIN;
 #ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
@@ -316,13 +321,38 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
         LOG_PRINT_EVERY(1,INFO,  "Low Pressure Alarm! Measured: %i ; Limit: %i", (int16_t) sensors.averagePressure, parameters.lowPressureLimit);
         alarmSet(&sensors.lowPressureAlarm);
       }
-      if (sensors.averagePressure > CONTINUOUS_PRESSURE_THRESHOLD) {
-        timerHalBegin(&continuousPressureAlarmTimer, CONTINUOUS_PRESSURE_TIMEOUT, false);
-      } else if (timerHalRun(&continuousPressureAlarmTimer) == HAL_TIMEOUT) {
-        if (alarmGet(&sensors.continuousPressureAlarm)) {
-          LOG_PRINT(ERROR, "Continuous Pressure Alarm!");
+      // Continuous pressure alarm fires if the  pressure does not have a delta 
+      // of at least 10cmH2O between min and max values over the past 15 [sec].
+      // Instead of storing all the data, just store the mins and maxes for 500
+      // [msec] blocks and use these are proxies for their periods, shifting
+      // them out every 500 [msec].
+      if (continuousPressureAlarmTimeout++ == (uint8_t) (CONTINUOUS_PRESSURE_PERIOD / PRESSURE_SAMPLING_PERIOD)) {
+        int16_t currentMin = INT16_MAX;
+        int16_t currentMax = INT16_MIN;
+        
+        for (int i = CONTINUOUS_PRESSURE_WINDOW - 1; i > 0; i--) {
+          continuousPressureAlarmMin[i] = continuousPressureAlarmMin[i - 1];
+          continuousPressureAlarmMax[i] = continuousPressureAlarmMax[i - 1];
+          currentMin = min(currentMin, continuousPressureAlarmMin[i]);
+          currentMax = max(currentMax, continuousPressureAlarmMax[i]);
         }
-        alarmSet(&sensors.continuousPressureAlarm);
+        continuousPressureAlarmMin[0] = continuousPressureAlarmCurrentMin;
+        continuousPressureAlarmMax[0] = continuousPressureAlarmCurrentMax;
+        currentMin = min(currentMin, continuousPressureAlarmMin[0]);
+        currentMax = max(currentMax, continuousPressureAlarmMax[0]);
+        
+        if ((currentMax - currentMin) < CONTINUOUS_PRESSURE_THRESHOLD) {
+          if (alarmGet(&sensors.continuousPressureAlarm)) {
+            LOG_PRINT(ERROR, "Continuous Pressure Alarm!");
+          }
+          alarmSet(&sensors.continuousPressureAlarm);
+        }
+        
+        continuousPressureAlarmCurrentMin = INT16_MAX;
+        continuousPressureAlarmCurrentMax = INT16_MIN;
+      } else {
+        continuousPressureAlarmCurrentMin = min(continuousPressureAlarmCurrentMin, pressure);
+        continuousPressureAlarmCurrentMax = max(continuousPressureAlarmCurrentMax, pressure);
       }
     }
 
@@ -367,9 +397,9 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   static int32_t airflowSum = 0;
   static uint32_t previousSampleTime = 0;
   static bool setVolumeIn = false;
-  static int16_t volumeMinuteWindow[VOLUME_MINUTE_WINDOW] = {0};
-  static uint8_t volumeMinuteTimeout = 0;
-  static int16_t maxVolume = INT16_MIN;
+  static int32_t minuteVolumeWindow[MINUTE_VOLUME_WINDOW] = {0};
+  static uint8_t minuteVolumeTimeout = 0;
+  static int32_t minuteVolumeSum;
   static bool volumeReset = false;
   static int16_t airflowBias = 0;
   static int airflowBiasCounter = AIRFLOW_BIAS_SAMPLES;
@@ -440,12 +470,6 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     sensors.currentFlow = airflow;
     sensors.currentVolume = airvolume;
     
-    if (control.state==CONTROL_STATE_IDLE)
-    {
-      airvolume=0;
-      airflowSum=0;
-      sensors.volumeIn = 0;
-    }
     // Derive Volume IN from current volume; updating the public value upon entry
     // into CONTROL_STATE_HOLD_IN state
     // if ((control.state == CONTROL_STATE_HOLD_IN) && !setVolumeIn) {
@@ -459,22 +483,28 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     
     // Volume OUT cannot be derived from flow sensor due to position and direction
     
-    // Derive Volume/min from current volume by remembering the max volume over
-    // last minute volume period and shifting it into the window, updating the
-    // minute volume by subtracting out the old value and adding in the new one
-    maxVolume = max(maxVolume, airvolume);
-    if (volumeMinuteTimeout++ == (uint8_t) (VOLUME_MINUTE_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
-      sensors.volumePerMinute -= volumeMinuteWindow[VOLUME_MINUTE_WINDOW - 1];
-      sensors.volumePerMinute += maxVolume;
-      for (int i = VOLUME_MINUTE_WINDOW - 1; i > 0; i--) {
-        volumeMinuteWindow[i] = volumeMinuteWindow[i - 1];
+    // Derive Minute Volume by running a parallel acculumator over
+    if (minuteVolumeTimeout++ == (uint8_t) (MINUTE_VOLUME_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
+      sensors.minuteVolume -= minuteVolumeWindow[MINUTE_VOLUME_WINDOW - 1];
+      sensors.minuteVolume += minuteVolumeSum / 1000L;
+      for (int i = MINUTE_VOLUME_WINDOW - 1; i > 0; i--) {
+        minuteVolumeWindow[i] = minuteVolumeWindow[i - 1];
       }
-      volumeMinuteWindow[0] = maxVolume;
-      maxVolume = INT16_MIN;
+      minuteVolumeWindow[0] = minuteVolumeSum / 1000L;
+      minuteVolumeSum = 0;
+      LOG_PRINT(DEBUG, "Minute Volume = %ld mL", sensors.minuteVolume);
+    } else {
+      // Same math as the airflowSum; see above
+      minuteVolumeSum += ((int32_t) airflow) * ((int32_t) dt) / 6000L;
     }
 
-    // Determine if its time to reset the volume integrator, do it once in exhalation
-    if ((control.state == CONTROL_STATE_EXHALATION) && !volumeReset) {
+    // Determine if its time to reset the volume integrator, do it in idle and
+    // once in exhalation
+    if (control.state==CONTROL_STATE_IDLE) {
+      airflowSum = 0;
+      minuteVolumeSum = 0;
+      sensors.volumeIn = 0;
+    } else if ((control.state == CONTROL_STATE_EXHALATION) && !volumeReset) {
       LOG_PRINT(INFO, "*** Reset Volume ***");
       airflowSum = 0;
       volumeReset = true;
