@@ -165,7 +165,7 @@ float inhalationTrajectoryVolume()
 #define INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE 5.0f //in %
 #define INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE 0.5f //in %
 
-#define INHALATION_TRAJECTORY_MAX_SCALE 3.0f //max initial Flow to current flow scale
+#define INHALATION_TRAJECTORY_MAX_SCALE 4.0f //max initial Flow to current flow scale
 
 void inhalationTrajectoryUpdateStartAndEndFlow(void)
 {
@@ -183,10 +183,7 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
     LOG_PRINT(INFO, "inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
 
     //currently deactivated here
-    //scale up start
-    inhalationTrajectoryStartFlow*=newScale;
-
-    //scale down end
+    // only scale down end. Scaling up both will be done by inhalationTrajectoryUpdateVolumeScale()
     inhalationTrajectoryEndFlow/=newScale;
   }else
   {
@@ -197,10 +194,7 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
     if (inhalationTrajectoryStartFlow>inhalationTrajectoryEndFlow)
     {
       //currently deactivated here
-      //scale up start
-      inhalationTrajectoryStartFlow*=newScale;
-
-      //scale down end
+      // only scale down end. Scaling up both will be done by inhalationTrajectoryUpdateVolumeScale()
       inhalationTrajectoryEndFlow/=newScale;
     }
   }
@@ -217,15 +211,13 @@ float inhalationTrajectoryUpdateVolumeScale(void)
   else
     newScale=targetVolume/inhalationTrajectoryLastVolume;
 
-  LOG_PRINT(INFO, "inh trj: vol: %li lastVol: %li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume);
+  LOG_PRINT(INFO, "inh trj: vol: %li lastVol: %li scale:%li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume,(int32_t)(newScale*1000.0f));
   //limit adaption rate
   if (newScale>(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
  
   if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
-
-  LOG_PRINT(INFO, "inh trj:  scale:%li",(int32_t)((float)newScale*1000.0f));
 
   inhalationTrajectoryStartFlow*=newScale;
   inhalationTrajectoryEndFlow*=newScale;
@@ -249,7 +241,7 @@ float inhalationTrajectoryUpdateToNewVolume(void)
   else
     newScale=targetVolume/inhalationTrajectoryLastVolume;
 
-  LOG_PRINT(INFO, "inh trj new vol: vol: %li lastVol: %li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume);
+  LOG_PRINT(INFO, "inh trj: vol: %li lastVol: %li scale:%li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume,(int32_t)(newScale*1000.0f));
 
   //limit adaption rate
   if (newScale>(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
@@ -257,8 +249,6 @@ float inhalationTrajectoryUpdateToNewVolume(void)
  
   if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
-
-  LOG_PRINT(INFO, "inh trj:  scale:%li",(int32_t)newScale*1000.0f);
   
   inhalationTrajectoryStartFlow*=newScale;
   inhalationTrajectoryEndFlow*=newScale;
@@ -502,7 +492,7 @@ static int updateControl(void)
 
       }
 
-      #define MAX_PHASE_SHIFT_COMPENSATION 25 //in %
+      #define MAX_PHASE_SHIFT_COMPENSATION 400L //in ms
 
       if ((checkForFirstFlow)&& (sensors.currentFlow>CONTROL_INITIAL_BAG_POSITION_FLOW_TRIGGER))
       {
@@ -513,8 +503,8 @@ static int updateControl(void)
         if (inhalationTrajectoryPhaseShiftEstimate<0)
           inhalationTrajectoryPhaseShiftEstimate=0;
 
-        if (inhalationTrajectoryPhaseShiftEstimate>(((targetInhalationTime-inhalationTrajectoryPhaseShiftEstimate)*MAX_PHASE_SHIFT_COMPENSATION)/100))
-          inhalationTrajectoryPhaseShiftEstimate=(((targetInhalationTime-inhalationTrajectoryPhaseShiftEstimate)*MAX_PHASE_SHIFT_COMPENSATION)/100);
+        if (inhalationTrajectoryPhaseShiftEstimate>(int32_t)MAX_PHASE_SHIFT_COMPENSATION*1000L)
+          inhalationTrajectoryPhaseShiftEstimate=(int32_t)MAX_PHASE_SHIFT_COMPENSATION*1000L;
 
         LOG_PRINT(INFO, "New phase shift: %li",inhalationTrajectoryPhaseShiftEstimate);
         checkForFirstFlow=0;
