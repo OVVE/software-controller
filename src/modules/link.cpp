@@ -1,5 +1,7 @@
 #include <stdint.h>
 
+#include <Arduino.h>
+
 #include "../config.h"
 #include "../pt/pt.h"
 #include "../modules/link.h"

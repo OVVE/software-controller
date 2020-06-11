@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+#include <Arduino.h>
+
 #include "../pt/pt.h"
 
 #include "../config.h"

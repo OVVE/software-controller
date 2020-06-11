@@ -2,7 +2,7 @@
 
 #ifndef __SERIAL_HAL_H__
 #define __SERIAL_HAL_H__
-#include <Arduino.h>
+
 #include "../hal/hal.h"
 
 //MSG IDs

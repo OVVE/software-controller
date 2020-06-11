@@ -5,6 +5,8 @@
 #include "../../arduino_lib/HardwareSerial.h"*/
 #include <stdint.h>
 
+#include <Arduino.h>
+
 #include "../config.h"
 
 #include "../pt/pt.h"
