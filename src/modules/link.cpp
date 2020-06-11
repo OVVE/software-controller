@@ -206,7 +206,7 @@ void updateDataPacket()
 
   public_data_packet.volume_in_measured = sensors.volumeIn;
   public_data_packet.volume_out_measured = sensors.volumeOut;  
-  public_data_packet.volume_rate_measured = sensors.volumePerMinute;
+  public_data_packet.volume_rate_measured = sensors.minuteVolume;
 
   public_data_packet.high_pressure_limit_set = parameters.highPressureLimit; 
   public_data_packet.low_pressure_limit_set = parameters.lowPressureLimit;   
