@@ -179,14 +179,26 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
     float diff=sensors.peakPressure-sensors.plateauPressure;
     if (diff>INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE)
       diff=INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE;
-        
+    
+    float oldVol=inhalationTrajectoryVolume();
     float newScale=(1.0f+(INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE/100.0f)*diff/(float)INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE); 
 
     LOG_PRINT(INFO, "inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
-
-    //currently deactivated here
+ 
     // only scale down end. Scaling up both will be done by inhalationTrajectoryUpdateVolumeScale()
     inhalationTrajectoryEndFlow/=newScale;
+
+    newScale=inhalationTrajectoryVolume()/oldVol;
+
+    inhalationTrajectoryStartFlow*=newScale;
+    inhalationTrajectoryEndFlow*=newScale;
+
+    if (inhalationTrajectoryStartFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
+       inhalationTrajectoryStartFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+
+    if (inhalationTrajectoryEndFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
+       inhalationTrajectoryEndFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+
   }else
   {
     float newScale=(1.0f-(INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE/100.0f)); 
@@ -195,9 +207,20 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
 
     if (inhalationTrajectoryStartFlow>inhalationTrajectoryEndFlow)
     {
-      //currently deactivated here
       // only scale down end. Scaling up both will be done by inhalationTrajectoryUpdateVolumeScale()
       inhalationTrajectoryEndFlow/=newScale;
+
+    float oldVol=inhalationTrajectoryVolume();
+    newScale=inhalationTrajectoryVolume()/oldVol;
+
+    inhalationTrajectoryStartFlow*=newScale;
+    inhalationTrajectoryEndFlow*=newScale;
+
+    if (inhalationTrajectoryStartFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
+      inhalationTrajectoryStartFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+
+    if (inhalationTrajectoryEndFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
+      inhalationTrajectoryEndFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
     }
   }
 }
