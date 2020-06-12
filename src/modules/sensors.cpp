@@ -192,7 +192,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     previousPressureAlarm[0] = pressure;
     sensors.averagePressure = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
-    LOG_PRINT_EVERY(15, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, (int16_t) sensors.averagePressure);
+    //LOG_PRINT_EVERY(15, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, (int16_t) sensors.averagePressure);
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
     // entry into CONTROL_STATE_HOLD_IN state

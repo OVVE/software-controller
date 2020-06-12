@@ -49,8 +49,8 @@ typedef struct __attribute__((packed)){
   float targetAirFlow;
   float controlI;
   float controlOutputFiltered;
-  float inhalationTrajectoryStartFlow; //modified start flow
-  float inhalationTrajectoryEndFlow; //modified end flow
+  float volumeScale; //modified start flow
+  float startEndScale; //modified end flow
   float inhalationTrajectoryInitialFlow; //flow calculation based on square form
   int32_t inhalationTrajectoryPhaseShiftEstimate; //compressing the air in the bag causes a delay of flow and we therefore need to estimate the phase shift in timing to allow enough inhale time
   int32_t currentFlow;
@@ -148,7 +148,8 @@ static int32_t inhalationTrajectoryPhaseShiftEstimate=CONTROL_INITIAL_PHASESHIFT
 static uint8_t inhalationTrajectoryInitialCycleCnt=0;
 static uint8_t controlForceHome=0;
 static uint8_t controlLimitHit=CONTROL_LIMIT_HIT_NONE;
-
+static float controlStartEndFlowScale=1.0f;
+static float controlVolumeScale=1.0f;
 
 #define INITIAL_FLOW_SAFETY_FACTOR 0.5f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
 float initialFlow()
@@ -166,8 +167,14 @@ float inhalationTrajectoryVolume()
 #define INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE 1000 //in 0.1mmH20 //TODO: Verify these values.
 #define INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE 5.0f //in %
 #define INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE 0.5f //in %
+#define INHALATION_TRAJECTORY_MAX_START_END_SCALE 3.0f
+#define INHALATION_TRAJECTORY_MAX_SCALE 5.0f //max initial Flow to current flow scale
 
-#define INHALATION_TRAJECTORY_MAX_SCALE 4.0f //max initial Flow to current flow scale
+void inhalationTrajectoryCalcStartEnd()
+{
+  inhalationTrajectoryStartFlow=inhalationTrajectoryInitialFlow*controlVolumeScale*controlStartEndFlowScale;
+  inhalationTrajectoryEndFlow=inhalationTrajectoryInitialFlow*controlVolumeScale/controlStartEndFlowScale;
+}
 
 void inhalationTrajectoryUpdateStartAndEndFlow(void)
 {
@@ -177,6 +184,7 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
   if (sensors.peakPressure-sensors.plateauPressure>INHALATION_TRAJECTORY_PRESSURE_DIFFERENCE_DEADZONE)
   {
     float diff=sensors.peakPressure-sensors.plateauPressure;
+
     if (diff>INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE)
       diff=INHALATION_TRAJECTORY_MAX_PRESSURE_DIFFERENCE;
     
@@ -185,19 +193,11 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
 
     LOG_PRINT(INFO, "inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
  
-    // only scale down end. Scaling up both will be done by inhalationTrajectoryUpdateVolumeScale()
-    inhalationTrajectoryEndFlow/=newScale;
+    controlStartEndFlowScale*=newScale;
 
-    newScale=inhalationTrajectoryVolume()/oldVol;
+    if (controlStartEndFlowScale>INHALATION_TRAJECTORY_MAX_START_END_SCALE)
+      controlStartEndFlowScale=INHALATION_TRAJECTORY_MAX_START_END_SCALE;
 
-    inhalationTrajectoryStartFlow*=newScale;
-    inhalationTrajectoryEndFlow*=newScale;
-
-    if (inhalationTrajectoryStartFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-       inhalationTrajectoryStartFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
-
-    if (inhalationTrajectoryEndFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-       inhalationTrajectoryEndFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
 
   }else
   {
@@ -205,24 +205,20 @@ void inhalationTrajectoryUpdateStartAndEndFlow(void)
 
     LOG_PRINT(INFO, "inh trj: peak: %li plateau: %li scale:%li",(int32_t)((float)sensors.peakPressure*100.0f),(int32_t)((float)sensors.plateauPressure*100.0f),(int32_t)((float)newScale*1000.0f));
 
-    if (inhalationTrajectoryStartFlow>inhalationTrajectoryEndFlow)
+    if (controlStartEndFlowScale>1.0f)
     {
-      // only scale down end. Scaling up both will be done by inhalationTrajectoryUpdateVolumeScale()
-      inhalationTrajectoryEndFlow/=newScale;
-
-    float oldVol=inhalationTrajectoryVolume();
-    newScale=inhalationTrajectoryVolume()/oldVol;
-
-    inhalationTrajectoryStartFlow*=newScale;
-    inhalationTrajectoryEndFlow*=newScale;
-
-    if (inhalationTrajectoryStartFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-      inhalationTrajectoryStartFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
-
-    if (inhalationTrajectoryEndFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-      inhalationTrajectoryEndFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+      controlStartEndFlowScale*=newScale;
+      
+      if (controlStartEndFlowScale>INHALATION_TRAJECTORY_MAX_START_END_SCALE)
+        controlStartEndFlowScale=INHALATION_TRAJECTORY_MAX_START_END_SCALE;
+    }else
+    {
+      controlStartEndFlowScale=1.0f;
     }
+    
   }
+
+  inhalationTrajectoryCalcStartEnd();
 }
 
 #define INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE 8.0f //in %
@@ -244,14 +240,12 @@ float inhalationTrajectoryUpdateVolumeScale(void)
   if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
 
-  inhalationTrajectoryStartFlow*=newScale;
-  inhalationTrajectoryEndFlow*=newScale;
+  controlVolumeScale*=newScale;
 
-  if (inhalationTrajectoryStartFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-    inhalationTrajectoryStartFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+  if (controlVolumeScale>INHALATION_TRAJECTORY_MAX_SCALE)
+    controlVolumeScale=INHALATION_TRAJECTORY_MAX_SCALE;
 
-  if (inhalationTrajectoryEndFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-    inhalationTrajectoryEndFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+  inhalationTrajectoryCalcStartEnd();
 
 }
 
@@ -275,15 +269,12 @@ float inhalationTrajectoryUpdateToNewVolume(void)
   if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
     newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
   
-  inhalationTrajectoryStartFlow*=newScale;
-  inhalationTrajectoryEndFlow*=newScale;
+  controlVolumeScale*=newScale;
 
-    if (inhalationTrajectoryStartFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-    inhalationTrajectoryStartFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
+  if (controlVolumeScale>INHALATION_TRAJECTORY_MAX_SCALE)
+    controlVolumeScale=INHALATION_TRAJECTORY_MAX_SCALE;
 
-  if (inhalationTrajectoryEndFlow>INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow)
-    inhalationTrajectoryEndFlow=INHALATION_TRAJECTORY_MAX_SCALE*inhalationTrajectoryInitialFlow;
-
+  inhalationTrajectoryCalcStartEnd();
 }
 
 #define STATE_INHALATION_TRAJECTORY_INIT 0
@@ -324,6 +315,8 @@ static int generateFlowInhalationTrajectory(uint8_t init)
   
     inhalationTrajectoryLastVolume=(float)sensors.volumeIn;
     inhalationTrajectoryInitialFlow=initialFlow();
+    controlStartEndFlowScale=1.0f;
+    controlVolumeScale=1.0f;
     inhalationTrajectoryStartFlow=inhalationTrajectoryInitialFlow;
     inhalationTrajectoryEndFlow=inhalationTrajectoryInitialFlow;
 
@@ -342,14 +335,14 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     if (controlLimitHit==CONTROL_LIMIT_HIT_PRESSURE)
     {
      //we hit a limit, make a down adjustment of the current trajectory and don't change it for 2 more cycles
-      inhalationTrajectoryStartFlow*=0.95;
-      inhalationTrajectoryEndFlow*=0.95;
+      controlVolumeScale*=0.95;
+      inhalationTrajectoryCalcStartEnd();
       inhalationTrajectoryInitialCycleCnt=1;
       controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
     }else if (controlLimitHit==CONTROL_LIMIT_HIT_VOLUME)
     {
-      inhalationTrajectoryStartFlow*=0.99;
-      inhalationTrajectoryEndFlow*=0.99;
+      controlVolumeScale*=0.99;
+      inhalationTrajectoryCalcStartEnd();
       inhalationTrajectoryInitialCycleCnt=1;
       controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
     }
@@ -395,10 +388,13 @@ static int generateFlowInhalationTrajectory(uint8_t init)
       inhalationTrajectoryInitialFlow=initialFlow();
       inhalationTrajectoryStartFlow=inhalationTrajectoryInitialFlow;
       inhalationTrajectoryEndFlow=inhalationTrajectoryInitialFlow;
+      controlStartEndFlowScale=1.0f;
+      controlVolumeScale=1.0f;
+
       inhalationTrajectoryInitialCycleCnt--;
     }
 
-    LOG_PRINT(INFO, "InH Trj: param: if:%li tsF:%li teF: %li tv:%li",(int32_t)(inhalationTrajectoryInitialFlow*10.0f),(int32_t)(inhalationTrajectoryStartFlow*10.0f),(int32_t)(inhalationTrajectoryEndFlow*10.0f),(int32_t)targetVolume);
+    LOG_PRINT(INFO, "InH Trj: param: if:%li tsF:%li teF: %li tv:%li vS:%li seS:%li",(int32_t)(inhalationTrajectoryInitialFlow*10.0f),(int32_t)(inhalationTrajectoryStartFlow*10.0f),(int32_t)(inhalationTrajectoryEndFlow*10.0f),(int32_t)targetVolume,(int32_t)(controlVolumeScale*1000.0f),(int32_t)(controlStartEndFlowScale*1000.0f));
   
     inhalationTrajectoryCurrentTimeInCycle=0.0f;
     
@@ -671,11 +667,11 @@ static int updateControl(void)
       controlLogData.time=millis(); 
       controlLogData.controlForceHome=controlForceHome;
       controlLogData.controlOutputFiltered=controlOutputFiltered;
-      controlLogData.inhalationTrajectoryEndFlow=inhalationTrajectoryEndFlow;
+      controlLogData.startEndScale=controlStartEndFlowScale;
       controlLogData.inhalationTrajectoryInitialCycleCnt=inhalationTrajectoryInitialCycleCnt;
       controlLogData.inhalationTrajectoryInitialFlow=inhalationTrajectoryInitialFlow;
       controlLogData.inhalationTrajectoryPhaseShiftEstimate=inhalationTrajectoryPhaseShiftEstimate;
-      controlLogData.inhalationTrajectoryStartFlow=inhalationTrajectoryStartFlow;
+      controlLogData.volumeScale=controlVolumeScale;
       controlLogData.targetAirFlow=targetAirFlow;
       controlLogData.targetExhalationTime=targetExhalationTime;
       controlLogData.targetHoldTime=targetHoldTime;
