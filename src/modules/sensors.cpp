@@ -342,14 +342,15 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
         currentMax = max(currentMax, continuousPressureAlarmMax[0]);
         
         if ((currentMax - currentMin) < CONTINUOUS_PRESSURE_THRESHOLD) {
-          if (alarmGet(&sensors.continuousPressureAlarm)) {
-            LOG_PRINT(ERROR, "Continuous Pressure Alarm!");
-          }
+          LOG_PRINT_EVERY(2, ERROR, "Continuous Pressure Alarm! (%d - %d)", currentMin, currentMax);
           alarmSet(&sensors.continuousPressureAlarm);
+        } else {
+          LOG_PRINT(DEBUG, "CP Window: %d - %d", currentMin, currentMax);
         }
         
         continuousPressureAlarmCurrentMin = INT16_MAX;
         continuousPressureAlarmCurrentMax = INT16_MIN;
+        continuousPressureAlarmTimeout = 0;
       } else {
         continuousPressureAlarmCurrentMin = min(continuousPressureAlarmCurrentMin, pressure);
         continuousPressureAlarmCurrentMax = max(continuousPressureAlarmCurrentMax, pressure);
@@ -398,7 +399,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   static uint32_t previousSampleTime = 0;
   static bool setVolumeIn = false;
   static int32_t minuteVolumeWindow[MINUTE_VOLUME_WINDOW] = {0};
-  static uint8_t minuteVolumeTimeout = 0;
+  static uint16_t minuteVolumeTimeout = 0;
   static int32_t minuteVolumeSum;
   static bool volumeReset = false;
   static int16_t airflowBias = 0;
@@ -484,7 +485,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
     // Volume OUT cannot be derived from flow sensor due to position and direction
     
     // Derive Minute Volume by running a parallel acculumator over
-    if (minuteVolumeTimeout++ == (uint8_t) (MINUTE_VOLUME_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
+    if (minuteVolumeTimeout++ == (uint16_t) (MINUTE_VOLUME_PERIOD / AIRFLOW_SAMPLING_PERIOD)) {
       sensors.minuteVolume -= minuteVolumeWindow[MINUTE_VOLUME_WINDOW - 1];
       sensors.minuteVolume += minuteVolumeSum / 1000L;
       for (int i = MINUTE_VOLUME_WINDOW - 1; i > 0; i--) {
@@ -492,6 +493,7 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       }
       minuteVolumeWindow[0] = minuteVolumeSum / 1000L;
       minuteVolumeSum = 0;
+      minuteVolumeTimeout = 0;
       LOG_PRINT(DEBUG, "Minute Volume = %ld mL", sensors.minuteVolume);
     } else {
       // Same math as the airflowSum; see above
