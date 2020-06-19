@@ -46,6 +46,7 @@
 #define INHALATION_DETECTION_PEEP_THRESHOLD     (800)
 #define INHALATION_TIMEOUT                      (400 MSEC)
 
+#define CONTINUOUS_PRESSURE_MIN_BREATH           (0)
 #define CONTINUOUS_PRESSURE_PERIOD               (500 MSEC)
 #define CONTINUOUS_PRESSURE_WINDOW               ((15 SEC) / CONTINUOUS_PRESSURE_PERIOD)
 #define CONTINUOUS_PRESSURE_THRESHOLD            (1000) // 10cmH2O
@@ -341,7 +342,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
         currentMin = min(currentMin, continuousPressureAlarmMin[0]);
         currentMax = max(currentMax, continuousPressureAlarmMax[0]);
         
-        if ((currentMax - currentMin) < CONTINUOUS_PRESSURE_THRESHOLD) {
+        if ((control.breathCount > CONTINUOUS_PRESSURE_MIN_BREATH) &&
+            ((currentMax - currentMin) < CONTINUOUS_PRESSURE_THRESHOLD)) {
           LOG_PRINT_EVERY(2, ERROR, "Continuous Pressure Alarm! (%d - %d)", currentMin, currentMax);
           alarmSet(&sensors.continuousPressureAlarm);
         } else {
