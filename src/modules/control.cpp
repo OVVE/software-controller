@@ -807,7 +807,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       measuredInhalationTime = timerHalCurrent(&breathTimer);
         
       if (estopHalAsserted()) {
-        control.state = CONTROL_STATE_IDLE;
+        control.state = CONTROL_STATE_HALT;
       } else {
         control.state = CONTROL_STATE_BEGIN_HOLD_IN;
       }
@@ -888,7 +888,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // Check if we need to continue onto another breath or if ventilation has stopped
 
       if (estopHalAsserted()) {
-        control.state = CONTROL_STATE_IDLE;
+        control.state = CONTROL_STATE_HALT;
       } else if (controlForceHome) {
         control.state = CONTROL_STATE_HOME;
       } else if (parameters.startVentilation) {
@@ -896,6 +896,15 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       } else {
         control.state = CONTROL_STATE_HOME;
       }
+    
+    } else if (control.state = CONTROL_STATE_HALT) {
+      LOG_PRINT(ERROR, "state: CONTROL_STATE_HALT - ESTOP ASSERTED");
+      
+      PT_WAIT_UNTIL(pt, !estopHalAsserted());
+      
+      LOG_PRINT(WARNING, "estop deasserted, homing motor...");
+      
+      control.state = CONTROL_STATE_HOME;
       
     } else {
       LOG_PRINT(ERROR, "state: (unknown)");
