@@ -7,6 +7,7 @@
 
 #include "../pt/pt.h"
 
+#include "../hal/estop.h"
 #include "../hal/storage.h"
 
 #include "../modules/link.h"
