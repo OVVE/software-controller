@@ -18,6 +18,7 @@
 #define CONTROL_STATE_BEGIN_EXHALATION 0x05
 #define CONTROL_STATE_EXHALATION       0x06
 #define CONTROL_STATE_HOME             0x07
+#define CONTROL_STATE_HALT             0x08
 
 struct control {
   // Variables
