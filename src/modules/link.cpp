@@ -15,6 +15,9 @@
 #define LOG_LEVEL  LOG_LINK_MODULE
 #include "../util/log.h"
 
+// TODO: look into a nicer way
+extern struct alarm estopAlarm;
+
 //how many ms until we sound an alarm that we didn't hear anything from the UI
 #define UI_PACKET_RECEIVE_TIMEOUT 2000 
 
@@ -112,6 +115,7 @@ void setDataPacketAlarmBits()
   public_data_packet.alarm_bits = alarmGet(&sensors.lowBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_BATTERY : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_BATTERY;
   public_data_packet.alarm_bits = alarmGet(&sensors.badPressureSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_PRESSURE_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_PRESSURE_SENSOR;
   public_data_packet.alarm_bits = alarmGet(&sensors.badAirflowSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_FLOW_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_FLOW_SENSOR;
+  public_data_packet.alarm_bits = alarmGet(&estopAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_ESTOP_PRESSED : public_data_packet.alarm_bits &= ~ALARM_ECU_ESTOP_PRESSED;
   public_data_packet.alarm_bits = alarmGet(&sensors.highPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_HIGH_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_HIGH_PRESSURE;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_PRESSURE;
   public_data_packet.alarm_bits = alarmGet(&sensors.continuousPressureAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_CONTINUOUS_PRESSURE : public_data_packet.alarm_bits &= ~ALARM_ECU_CONTINUOUS_PRESSURE;
