@@ -129,8 +129,12 @@ void mainLoop(void)
 
   // Check the Estop, asserting an alarm if active
   if (estopHalAsserted()) {
+    if (!alarmGet(&estopAlarm)) {
+      LOG_PRINT(ERROR, "ESTOP Asserted!");
+    }
     alarmSet(&estopAlarm);
-  } else {
+  } else if (alarmGet(&estopAlarm)) {
+    LOG_PRINT(INFO, "ESTOP Deasserted, suppressing alarm");
     alarmSuppress(&estopAlarm);
   }
 
