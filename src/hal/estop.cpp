@@ -7,11 +7,11 @@
 #include "../hal/estop.h"
 
 #define ESTOP_PIN                4
-#define ESTOP_ASSERTION_LEVEL HIGH
+#define ESTOP_ASSERTION_LEVEL  LOW
 
 int estopHalInit(void)
 {
-  pinMode(ESTOP_PIN, OUTPUT);
+  pinMode(ESTOP_PIN, INPUT);
   return HAL_OK;
 }
 
