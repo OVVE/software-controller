@@ -38,7 +38,7 @@ static struct alarmProperties estopAlarmProperties = {
   .suppressionTimeout = (100 MSEC),
 };
 
-static struct alarm estopAlarm;
+struct alarm estopAlarm;
 
 void mainSetup(void)
 { 
