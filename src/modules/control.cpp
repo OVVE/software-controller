@@ -900,6 +900,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state = CONTROL_STATE_HALT) {
       LOG_PRINT(ERROR, "state: CONTROL_STATE_HALT - ESTOP ASSERTED");
       
+      motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
+      
       PT_WAIT_UNTIL(pt, !estopHalAsserted());
       
       LOG_PRINT(WARNING, "estop deasserted, homing motor...");
@@ -909,7 +911,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else {
       LOG_PRINT(ERROR, "state: (unknown)");
 
-      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
+      motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
 
       // TODO: Error, unknown control state!!!
       control.state = CONTROL_STATE_IDLE;
