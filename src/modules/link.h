@@ -44,18 +44,10 @@
 #define PACKET_TYPE_COMMAND 2
 #define PACKET_TYPE_FIRMWARE 3
 
-// control state
-#define CONTROL_STATE_IDLE             0x00
-#define CONTROL_STATE_BEGIN_INHALATION 0x01
-#define CONTROL_STATE_INHALATION       0x02
-#define CONTROL_STATE_BEGIN_HOLD       0x03
-#define CONTROL_STATE_HOLD             0x04
-#define CONTROL_STATE_BEGIN_EXHALATION 0x05
-#define CONTROL_STATE_EXHALATION       0x06
-
-#define COMMAND_BIT_START     0x01
-#define COMMAND_BIT_FW        0x04
-#define COMMAND_BIT_POWEROFF  0x10
+#define COMMAND_BIT_START           0x01
+#define COMMAND_BIT_CALIBRATIONSTEP 0x02
+#define COMMAND_BIT_FW              0x10
+#define COMMAND_BIT_POWEROFF        0x20
 
 #define CONTROLLER_BIT_START 0x80
 
@@ -135,6 +127,7 @@ typedef struct __attribute__((packed)) {
 struct link {
   // Variables
   uint8_t  startVentilation;
+  uint8_t  calibrationStep;
   uint8_t  powerOff;
   uint8_t  ventilationMode;
   uint16_t volumeRequested;

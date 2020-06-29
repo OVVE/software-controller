@@ -13,6 +13,7 @@
 struct parameters {
   // Variables
   uint8_t  startVentilation;
+  uint8_t  calibrationStep;
   uint8_t  ventilationMode;
   int16_t  volumeRequested;
   int16_t  pressureRequested;
