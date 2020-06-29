@@ -206,7 +206,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       pressureAlarmSum += previousPressureAlarm[i];
     }
     previousPressureAlarm[0] = pressure;
-    sensors.averagePressure = (pressureAlarmSum / PRESSURE_ALARM_WINDOW);
+    sensors.averagePressure = (pressureAlarmSum / ((int32_t) PRESSURE_ALARM_WINDOW));
     //LOG_PRINT_EVERY(15, DEBUG, "Current Pressure: %i ; Pressure Avg: %i", pressure, (int16_t) sensors.averagePressure);
     
     // Derive Peak Pressure from pressure readings; updating the public value upon
@@ -252,7 +252,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
           peepPressureSum+=peepPressureHistoryBuffer[i];
         }
         
-        sensors.peepPressure = peepPressureSum/peepPressureSumCnt;
+        sensors.peepPressure = peepPressureSum/(int32_t)peepPressureSumCnt;
 
         for (uint8_t i=0;i<SENSORS_PEEP_AVG_CNT;i++)
           peepPressureHistoryBuffer[i]=0;
