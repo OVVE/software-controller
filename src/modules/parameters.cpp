@@ -40,6 +40,7 @@ static bool differentLinkAndParameters(void)
 {
   // TODO: Come up with a better solution
   return ((comm.startVentilation != parameters.startVentilation) ||
+          (comm.calibrationStep != parameters.calibrationStep) ||
           (comm.ventilationMode != parameters.ventilationMode) ||
           (comm.volumeRequested != parameters.volumeRequested) ||
           (comm.respirationRateRequested != parameters.respirationRateRequested) ||
@@ -87,6 +88,7 @@ static PT_THREAD(parametersThreadMain(struct pt* pt))
     if (differentLinkAndParameters()) {
       // Copy over the paramaters from the comm module
       tmpParameters[0].startVentilation = comm.startVentilation;
+      tmpParameters[0].calibrationStep = comm.calibrationStep;
       tmpParameters[0].ventilationMode = comm.ventilationMode;
       tmpParameters[0].volumeRequested = comm.volumeRequested;
       tmpParameters[0].respirationRateRequested = comm.respirationRateRequested;

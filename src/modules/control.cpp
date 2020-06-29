@@ -736,12 +736,40 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
           controlForceHome=0;
        }
        
-       control.state=CONTROL_STATE_IDLE;
+       if (sensors.calibrated == SENSORS_ALL_CALIBRATED) {
+         control.state=CONTROL_STATE_IDLE;
+       } else {
+         control.state = CONTROL_STATE_UNCALIBRATED;
+       }
 
+    } else if (control.state == CONTROL_STATE_UNCALIBRATED) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_UNCALIBRATED");
+      
+      LOG_PRINT(WARNING, "system uncalibrated, waiting for UI to calibrate...");
+      
+      PT_WAIT_UNTIL(pt, parameters.calibrationStep);
+      control.state = CONTROL_STATE_SENSOR_CALIBRATION;
 
+    } else if (control.state == CONTROL_STATE_SENSOR_CALIBRATION) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_SENSOR_CALIBRATION");
+      
+      // Wait until the sensors have all begun calibratation, then wait
+      // for calibration to compelete
+      PT_WAIT_UNTIL(pt, sensors.calibrated == 0);
+      
+      LOG_PRINT(DEBUG, "sensors uncalibrated, waiting for calibration...");
+      
+      PT_WAIT_UNTIL(pt, sensors.calibrated == SENSORS_ALL_CALIBRATED);
+      
+      control.state = CONTROL_STATE_SENSOR_CALIBRATION_DONE;
 
-    }else
-    if (control.state == CONTROL_STATE_IDLE) {
+    } else if (control.state == CONTROL_STATE_SENSOR_CALIBRATION_DONE) {
+      LOG_PRINT(INFO, "state: CONTROL_STATE_SENSOR_CALIBRATION_DONE");
+      
+      PT_WAIT_UNTIL(pt, !parameters.calibrationStep);
+      control.state = CONTROL_STATE_IDLE;
+      
+    } else if (control.state == CONTROL_STATE_IDLE) {
       LOG_PRINT(INFO, "state: CONTROL_STATE_IDLE");
 
       // Reset any parameters
@@ -757,13 +785,16 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
 
       // Wait for the parameters to enter the run state before
-      PT_WAIT_UNTIL(pt, parameters.startVentilation && !estopHalAsserted());
+      PT_WAIT_UNTIL(pt, (parameters.startVentilation || parameters.calibrationStep) && !estopHalAsserted());
       
-      //call with 1 here to start with the conservative initial guess based on user parameters
-      generateFlowInhalationTrajectory(1);
+      if (parameters.startVentilation) {
+        //call with 1 here to start with the conservative initial guess based on user parameters
+        generateFlowInhalationTrajectory(1);
 
-      control.state = CONTROL_STATE_BEGIN_INHALATION;
-
+        control.state = CONTROL_STATE_BEGIN_INHALATION;
+      } else if (parameters.calibrationStep) {
+        control.state = CONTROL_STATE_SENSOR_CALIBRATION;
+      }
       
     } else if (control.state == CONTROL_STATE_BEGIN_INHALATION) {
       LOG_PRINT(INFO, "state: CONTROL_STATE_BEGIN_INHALATION");

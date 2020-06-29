@@ -157,28 +157,12 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
   static uint8_t continuousPressureAlarmTimeout = 0;
   static int16_t continuousPressureAlarmCurrentMin = INT16_MAX;
   static int16_t continuousPressureAlarmCurrentMax = INT16_MIN;
-#ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
+  static int32_t pressureBiasSum = 0;
   static int16_t pressureBias = 0;
   static int pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
-  static int32_t pressureSum=0;
-#endif
+
   PT_BEGIN(pt);
 
-#ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
-    // Find the bias of the sensor
-  while (pressureBiasCounter--) {
-    PT_WAIT_UNTIL(pt, pressureSensorHalFetch() != HAL_IN_PROGRESS);
-    int16_t pressure;
-    pressureSensorHalGetValue(&pressure);
-    pressureSum += pressure;
-  }
-  
-  pressureBias = pressureSum / PRESSURE_BIAS_SAMPLES;
-  pressureSum = 0;
-  
-  LOG_PRINT(INFO, "Pressure bias = %c%u.%02u cmH20",
-            (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
-#endif
   // Kick off sampling timer
   timerHalBegin(&pressureTimer, PRESSURE_SAMPLING_PERIOD, true);
   
@@ -188,9 +172,9 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     
     int16_t pressure;
     pressureSensorHalGetValue(&pressure); // get pressure, in [0.1mmH2O]
-#ifdef PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
+
     pressure-=pressureBias;
-#endif
+
     // Update public interface with the pressure value
     sensors.currentPressure = pressure;
 
@@ -312,6 +296,27 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       sensors.inhalationDetected = false;
     }
     
+    // Calibration
+    if (control.state == CONTROL_STATE_SENSOR_CALIBRATION) {
+      if (pressureBiasCounter == PRESSURE_BIAS_SAMPLES) {
+        pressureBiasSum = pressure;
+        sensors.calibrated &= ~SENSORS_PRESSURE_CALIBRATED;
+        pressureBiasCounter--;
+      } else if (pressureBiasCounter > 0) {
+        pressureBiasSum += pressure;
+        pressureBiasCounter--;
+      } else {
+        if (!(sensors.calibrated & SENSORS_PRESSURE_CALIBRATED)) {
+          pressureBias = pressureBiasSum / PRESSURE_BIAS_SAMPLES;
+          LOG_PRINT(INFO, "Pressure bias = %c%u.%02u cmH20",
+                    (pressureBias < 0) ? '-' : ' ', abs(pressureBias)/100, abs(pressureBias)%100);
+          sensors.calibrated |= SENSORS_PRESSURE_CALIBRATED;
+        }
+      }
+    } else if (pressureBiasCounter == 0) {
+      pressureBiasCounter = PRESSURE_BIAS_SAMPLES;
+    }
+    
     // Alarms
     if ((control.state != CONTROL_STATE_HOME) && (control.state != CONTROL_STATE_IDLE)) {
       if (sensors.averagePressure > parameters.highPressureLimit) {
@@ -382,7 +387,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
       pressureResponseCount=-1;
     }
 
-     LOG_PRINT_EVERY(100, INFO,"Pressure  = %c%u.%01u cmH2O",
+     LOG_PRINT_EVERY(100, INFO,"Pressure  = %c%u.%02u cmH2O",
                        (pressure < 0) ? '-' : ' ', abs(pressure)/100, abs(pressure)%100);
 
     // Ensure this threads cannot block if it somehow elapses the timer too fast
@@ -398,6 +403,7 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
 static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
 {
   static int32_t airflowSum = 0;
+  static int32_t airflowBiasSum = 0;
   static uint32_t previousSampleTime = 0;
   static bool setVolumeIn = false;
   static int32_t minuteVolumeWindow[MINUTE_VOLUME_WINDOW] = {0};
@@ -410,20 +416,6 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
   static int16_t airflowResponseCount = 0;
   
   PT_BEGIN(pt);
-  
-  // Find the bias of the sensor
-  while (airflowBiasCounter--) {
-    PT_WAIT_UNTIL(pt, airflowSensorHalFetch() != HAL_IN_PROGRESS);
-    int16_t airflow;
-    airflowSensorHalGetValue(&airflow);
-    airflowSum += airflow;
-  }
-  
-  airflowBias = airflowSum / AIRFLOW_BIAS_SAMPLES;
-  airflowSum = 0;
-  
-  LOG_PRINT(INFO, "Airflow bias = %c%u.%02u SLM",
-            (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
 
   // Kick off sampling timer
   timerHalBegin(&airflowTimer, AIRFLOW_SAMPLING_PERIOD, true);
@@ -514,6 +506,27 @@ static PT_THREAD(sensorsAirFlowThreadMain(struct pt* pt))
       volumeReset = true;
     } else if (control.state == CONTROL_STATE_INHALATION) {
       volumeReset = false;
+    }
+    
+    // Calibration
+    if (control.state == CONTROL_STATE_SENSOR_CALIBRATION) {
+      if (airflowBiasCounter == AIRFLOW_BIAS_SAMPLES) {
+        airflowBiasSum = airflow;
+        sensors.calibrated &= ~SENSORS_AIRFLOW_CALIBRATED;
+        airflowBiasCounter--;
+      } else if (airflowBiasCounter > 0) {
+        airflowBiasSum += airflow;
+        airflowBiasCounter--;
+      } else {
+        if (!(sensors.calibrated & SENSORS_AIRFLOW_CALIBRATED)) {
+          airflowBias = airflowBiasSum / AIRFLOW_BIAS_SAMPLES;
+          LOG_PRINT(INFO, "Airflow bias = %c%u.%02u SLM",
+                    (airflowBias < 0) ? '-' : ' ', abs(airflowBias)/100, abs(airflowBias)%100);
+          sensors.calibrated |= SENSORS_AIRFLOW_CALIBRATED;
+        }
+      }
+    } else if (airflowBiasCounter == 0) {
+      airflowBiasCounter = AIRFLOW_BIAS_SAMPLES;
     }
     
     // Alarms

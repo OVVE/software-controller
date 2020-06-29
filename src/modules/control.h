@@ -10,15 +10,18 @@
 // TODO: Consider different encoding?
 // TODO: Hold out states? error state?
 
-#define CONTROL_STATE_IDLE             0x00
-#define CONTROL_STATE_BEGIN_INHALATION 0x01
-#define CONTROL_STATE_INHALATION       0x02
-#define CONTROL_STATE_BEGIN_HOLD_IN    0x03
-#define CONTROL_STATE_HOLD_IN          0x04
-#define CONTROL_STATE_BEGIN_EXHALATION 0x05
-#define CONTROL_STATE_EXHALATION       0x06
-#define CONTROL_STATE_HOME             0x07
-#define CONTROL_STATE_HALT             0x08
+#define CONTROL_STATE_UNCALIBRATED            0x00
+#define CONTROL_STATE_IDLE                    0x01
+#define CONTROL_STATE_BEGIN_INHALATION        0x02
+#define CONTROL_STATE_INHALATION              0x03
+#define CONTROL_STATE_BEGIN_HOLD_IN           0x04
+#define CONTROL_STATE_HOLD_IN                 0x05
+#define CONTROL_STATE_BEGIN_EXHALATION        0x06
+#define CONTROL_STATE_EXHALATION              0x07
+#define CONTROL_STATE_HOME                    0x08
+#define CONTROL_STATE_HALT                    0x09
+#define CONTROL_STATE_SENSOR_CALIBRATION      0x0a
+#define CONTROL_STATE_SENSOR_CALIBRATION_DONE 0x0b
 
 struct control {
   // Variables

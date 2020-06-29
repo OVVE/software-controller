@@ -7,6 +7,10 @@
 
 #include "../util/alarm.h"
 
+#define SENSORS_AIRFLOW_CALIBRATED  0x01
+#define SENSORS_PRESSURE_CALIBRATED 0x02
+#define SENSORS_ALL_CALIBRATED (SENSORS_AIRFLOW_CALIBRATED | SENSORS_PRESSURE_CALIBRATED)
+
 // TODO: Units?
 struct sensors {
   // Variables
@@ -22,6 +26,8 @@ struct sensors {
   int32_t peepPressure;
   bool    inhalationDetected;
   bool    exhalationDetected;
+  
+  uint8_t calibrated;
   
   // Alarms
   struct alarm onBatteryAlarm;
