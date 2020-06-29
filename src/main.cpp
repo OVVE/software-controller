@@ -1,7 +1,10 @@
 
+#include <stdbool.h>
+
 #include "config.h"
 
 #include "hal/i2c.h"
+#include "hal/sys.h"
 #include "hal/alarm.h"
 #include "hal/estop.h"
 #include "hal/timer.h"
@@ -25,6 +28,19 @@
 #define DEBUG_MAIN_LOOP_METRICS
 #endif
 
+#define POWEROFF_TIMEOUT   (10 SEC)
+#define POWEROFF_BEEP_TIME (500 MSEC)
+#define POWERON_BEEP_TIME  (250 MSEC)
+
+#define POWEROFF_STEP0  0
+#define POWEROFF_STEP1  1
+#define POWEROFF_STEP2  2
+#define POWEROFF_STEP3  3
+
+#define POWERON_STEP0  0
+#define POWERON_STEP1  1
+#define POWERON_STEP2  2
+
 #ifdef DEBUG_MAIN_LOOP_METRICS
 static struct metrics mainLoopMetrics;
 static struct metrics scheduleMetrics;
@@ -34,13 +50,29 @@ static struct metrics parametersModuleMetrics;
 static struct metrics linkModuleMetrics;
 #endif
 
+static struct timer powerTimer;
+static uint8_t powerOffStep = POWEROFF_STEP0;
+static uint8_t powerOnStep = POWERON_STEP1;
+
 static struct alarmProperties estopAlarmProperties = {
+  .priority = ALARM_PRIORITY_SEVERE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (100 MSEC),
+};
+static struct alarmProperties powerOnAlarmProperties = {
+  .priority = ALARM_PRIORITY_SEVERE,
+  .preventWatchdog = false,
+  .suppressionTimeout = (100 MSEC),
+};
+static struct alarmProperties powerOffAlarmProperties = {
   .priority = ALARM_PRIORITY_SEVERE,
   .preventWatchdog = false,
   .suppressionTimeout = (100 MSEC),
 };
 
 struct alarm estopAlarm;
+struct alarm powerOnAlarm;
+struct alarm powerOffAlarm;
 
 void mainSetup(void)
 { 
@@ -49,6 +81,7 @@ void mainSetup(void)
   // TODO: refactor all HAL initiailization functions here, since more than one
   //       module might be using a single HAL (like timer)
 
+  watchdogHalInit();
   timerHalInit();
   alarmHalInit();
   estopHalInit();
@@ -64,6 +97,8 @@ void mainSetup(void)
   linkModuleInit();
   
   alarmInit(&estopAlarm, &estopAlarmProperties);
+  alarmInit(&powerOnAlarm, &powerOnAlarmProperties);
+  alarmInit(&powerOffAlarm, &powerOffAlarmProperties);
 
 #ifdef DEBUG_MAIN_LOOP_METRICS
   metricsReset(&mainLoopMetrics);
@@ -73,12 +108,7 @@ void mainSetup(void)
   metricsReset(&parametersModuleMetrics);
   metricsReset(&linkModuleMetrics);
 #endif
-
-  // TODO: For now, move the watchdog initialization here; this will need to go
-  //       back to the top of setup to allow the watchdog to prevent HAL/module
-  //       initialization from hanging, but theres a bunch of stuff that needs
-  //       to be refactored to allow this right now (namely, the motor HAL)
-  watchdogHalInit();
+  
   LOG_PRINT(INFO, "Initialization complete!");
 }
 
@@ -139,6 +169,57 @@ void mainLoop(void)
   } else if (alarmGet(&estopAlarm)) {
     LOG_PRINT(INFO, "ESTOP Deasserted, suppressing alarm");
     alarmSuppress(&estopAlarm);
+  }
+  
+  // Handle power on
+  switch (powerOnStep) {
+    case POWERON_STEP0:
+      alarmSet(&powerOnAlarm);
+      timerHalBegin(&powerTimer, POWERON_BEEP_TIME, false);
+      powerOnStep = POWERON_STEP1;
+    case POWERON_STEP1:
+      if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
+        alarmSuppress(&powerOnAlarm);
+        powerOnStep = POWERON_STEP2;
+      }
+      break;
+  }
+  
+  // Handle power off
+  if (parameters.startVentilation) {
+    if (powerOffStep != POWEROFF_STEP0 || comm.powerOff) {
+      LOG_PRINT_EVERY(500, ERROR, "Continuing/starting to ventilate during power off!");
+    } else if (sysHalPowerButtonAsserted()) {
+      LOG_PRINT_EVERY(500, WARNING, "Power button hit when ventilating, ignoring...");
+    }
+  } else {
+    switch (powerOffStep) {
+      case POWEROFF_STEP0:
+        if (comm.powerOff) {
+          powerOffStep = POWEROFF_STEP2;
+        } if (sysHalPowerButtonAsserted()) {
+          LOG_PRINT(INFO, "Power button pushed, preparing to power off...");
+          timerHalBegin(&powerTimer, POWEROFF_TIMEOUT, false);
+          powerOffStep = POWEROFF_STEP1;
+        }
+        break;
+      case POWEROFF_STEP1:
+        if (comm.powerOff || (timerHalRun(&powerTimer) == HAL_TIMEOUT)) {
+          powerOffStep = POWEROFF_STEP2;
+        }
+        break;
+      case POWEROFF_STEP2:
+        alarmSet(&powerOffAlarm);
+        timerHalBegin(&powerTimer, POWEROFF_BEEP_TIME, false);
+        powerOffStep = POWEROFF_STEP3;
+        break;
+      case POWEROFF_STEP3:
+        if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
+          LOG_PRINT(INFO, "Powering off...");
+          sysHalPowerOff();
+        }
+        break;
+    }
   }
 
   // Scan through all alarms, looking for any set warning that need to be addressed
