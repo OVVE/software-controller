@@ -20,10 +20,12 @@ uint32_t sysHalTime(void)
   return (uint32_t) millis();
 }
 
-int sysHalPowerOff(void)
+void sysHalPowerOff(void)
 {
   digitalWrite(POWEROFF_PIN, POWEROFF_DEASSERT);
-  return HAL_OK;
+  
+  // Wait for either the system to power off, or the watchdog to fire...
+  while(1);
 }
 
 bool sysHalPowerButtonAsserted(void)
