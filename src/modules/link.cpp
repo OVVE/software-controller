@@ -134,6 +134,7 @@ void updateFromCommandPacket()
   
 
   comm.startVentilation = (public_command_packet.command & COMMAND_BIT_START) != 0x00;
+  comm.powerOff = (public_command_packet.command & COMMAND_BIT_POWEROFF) != 0x00;
   tmpMode = public_command_packet.mode_value;
   
   if (tmpMode != MODE_VC_CMV && tmpMode != MODE_SIMV)
