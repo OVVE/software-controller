@@ -23,7 +23,7 @@ int sysHalInit(void);
 uint32_t sysHalTime(void);
 
 // TODO: Doc
-int sysHalPowerOff(void);
+void sysHalPowerOff(void);
 
 // TODO: Doc
 bool sysHalPowerButtonAsserted(void);
