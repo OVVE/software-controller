@@ -6,10 +6,21 @@
 //******************************************************************************
 
 //==============================================================================
+// Unit Settings
+//==============================================================================
+
+// Prefines for unit version:
+//  Hardware v0: Preproduction units with variety of hardware
+//  Hardware v1: Production candidate unit, fixed set of hardware
+//#define HARDWARE_V0
+#define HARDWARE_V1
+
+//==============================================================================
 // Motor Settings
 //==============================================================================
 
 // Motor
+#if defined(HARDWARE_V0)
 #define MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
 // #define MOTOR_STEPPERONLINE__23HS30_2804S_HG10
 // #define MOTOR_STEPPERONLINE__23HS22_2804S_HG15
@@ -17,11 +28,20 @@
 // #define MOTOR_STEPPERONLINE__23HS22_2804S_HG50
 
 #define MOTOR_ACCELERATION
+#elif defined(HARDWARE_V1)
+#define MOTOR_NANOTEC__ST6018D4508__GP56_T2_26_HR
+
+#define MOTOR_ACCELERATION
+#endif
 
 // Motor Controller
+#if defined(HARDWARE_V0)
 #define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
 // #define MOTOR_CONTROLLER_STEPPERONLINE_ISD08
 // #define MOTOR_CONTROLLER_STEPPERONLINE_DM332T
+#elif defined(HARDWARE_V1)
+#define MOTOR_CONTROLLER_NANOTEC__CL4_E_2_12_5VDI
+#endif
 
 //==============================================================================
 // Sensor Settings
@@ -29,9 +49,13 @@
 
 // Pressure Sensor
 // Determine which pressure sensor is installed in the system
+#if defined(HARDWARE_V0)
 // #define PRESSURE_SENSOR_MPXV7025
 // #define PRESSURE_SENSOR_MPXV7007
 #define PRESSURE_SENSOR_SSCDRRN100MDAA5
+#elif defined(HARDWARE_V1)
+#define PRESSURE_SENSOR_SSCDRRN100MDAA5
+#endif
 
 //calibrate the bias of the pressure sensor at startup. Requires the user to make sure that the sensor sees environmental pressure at startup as well.
 // #define PRESSURE_SENSOR_CALIBRATION_AT_STARTUP
