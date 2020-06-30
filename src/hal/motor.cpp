@@ -26,8 +26,13 @@
                               // moving, which consumes power.
 #define PIN_MOTOR_STEP      7 // Each pulse moves the motor by a (micro)step.
 
+#if defined(HARDWARE_V0)
 #define PIN_MOTOR_DIRECTION_OPEN  LOW
 #define PIN_MOTOR_DIRECTION_CLOSE HIGH
+#elif defined(HARDWARE_V1)
+#define PIN_MOTOR_DIRECTION_OPEN  HIGH
+#define PIN_MOTOR_DIRECTION_CLOSE LOW
+#endif
 
 #define PIN_MOTOR_ENABLE_FALSE LOW
 #define PIN_MOTOR_ENABLE_TRUE  HIGH
