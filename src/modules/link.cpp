@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdbool.h>
 
 #include <Arduino.h>
 
@@ -17,6 +18,7 @@
 
 // TODO: look into a nicer way
 extern struct alarm estopAlarm;
+extern bool powerOff;
 
 //how many ms until we sound an alarm that we didn't hear anything from the UI
 #define UI_PACKET_RECEIVE_TIMEOUT 2000 
@@ -338,7 +340,7 @@ PT_THREAD(serialThreadMain(struct pt* pt))
     PT_EXIT(pt);
   }
 
-  if ((lastUiPacketReceivedTime) && (millis()-lastUiPacketReceivedTime>UI_PACKET_RECEIVE_TIMEOUT) && (control.state!=CONTROL_STATE_IDLE))
+  if ((lastUiPacketReceivedTime) && (millis()-lastUiPacketReceivedTime>UI_PACKET_RECEIVE_TIMEOUT) && (control.state!=CONTROL_STATE_IDLE) && !powerOff)
   {
        LOG_PRINT(INFO,"Uart RX Comm Timeout Hit!");
        alarmSet(&comm.onCommunicationFailureAlarm);
