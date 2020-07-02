@@ -28,14 +28,16 @@
 #define DEBUG_MAIN_LOOP_METRICS
 #endif
 
-#define POWEROFF_TIMEOUT   (10 SEC)
-#define POWEROFF_BEEP_TIME (500 MSEC)
-#define POWERON_BEEP_TIME  (250 MSEC)
+#define POWEROFF_TIMEOUT    (10 SEC)
+#define POWEROFF_BEEP_TIME  (500 MSEC)
+#define POWEROFF_DELAY_TIME (5 SEC)
+#define POWERON_BEEP_TIME   (250 MSEC)
 
 #define POWEROFF_STEP0  0
 #define POWEROFF_STEP1  1
 #define POWEROFF_STEP2  2
 #define POWEROFF_STEP3  3
+#define POWEROFF_STEP4  4
 
 #define POWERON_STEP0  0
 #define POWERON_STEP1  1
@@ -53,6 +55,7 @@ static struct metrics linkModuleMetrics;
 static struct timer powerTimer;
 static uint8_t powerOffStep = POWEROFF_STEP0;
 static uint8_t powerOnStep = POWERON_STEP1;
+bool powerOff = false;
 
 static struct alarmProperties estopAlarmProperties = {
   .priority = ALARM_PRIORITY_SEVERE,
@@ -211,9 +214,18 @@ void mainLoop(void)
       case POWEROFF_STEP2:
         alarmSet(&powerOffAlarm);
         timerHalBegin(&powerTimer, POWEROFF_BEEP_TIME, false);
+        powerOff = true;
         powerOffStep = POWEROFF_STEP3;
         break;
       case POWEROFF_STEP3:
+        if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
+          LOG_PRINT(INFO, "Waiting 5s before power off...");
+          alarmSuppress(&powerOffAlarm);
+          timerHalBegin(&powerTimer, POWEROFF_DELAY_TIME, false);
+          powerOffStep = POWEROFF_STEP4;
+        }
+        break;
+      case POWEROFF_STEP4:
         if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
           LOG_PRINT(INFO, "Powering off...");
           sysHalPowerOff();
