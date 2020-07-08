@@ -68,6 +68,12 @@
 #define MINUTE_VOLUME_PERIOD                      (4 SEC)
 #define MINUTE_VOLUME_WINDOW                    ((60 SEC) / MINUTE_VOLUME_PERIOD)
 
+//
+// Battery Sampling Parameters
+//
+#define BATTERY_SAMPLING_PERIOD                (500 MSEC)
+#define BATTERY_LOW_LIMIT                        20  // 20%
+
 // Public variables
 struct sensors sensors;
 
@@ -79,6 +85,7 @@ static struct pt sensorsBatteryThread;
 
 static struct timer pressureTimer;
 static struct timer airflowTimer;
+static struct timer batteryTimer;
 
 #define SENSORS_PEEP_AVG_CNT 8
 static uint8_t peepPressureSumCnt;
@@ -582,9 +589,27 @@ static PT_THREAD(sensorsBatteryThreadMain(struct pt* pt))
 {
   PT_BEGIN(pt);
   
-  // TODO: battery sensor
+  // Kick off sampling timer
+  timerHalBegin(&batteryTimer, BATTERY_SAMPLING_PERIOD, true);
   
-  PT_RESTART(pt);
+  while (1) {
+    // Fetch the latest sample from the sensor
+    PT_WAIT_UNTIL(pt, batterySensorHalFetch() != HAL_IN_PROGRESS);
+    
+    batterySensorHalGetValue(&sensors.batteryPercent, &sensors.batteryCharging);
+    
+    if (!sensors.batteryCharging) {
+      alarmSet(&sensors.onBatteryAlarm);
+    }
+    
+    if (sensors.batteryPercent <= BATTERY_LOW_LIMIT) {
+      alarmSet(&sensors.lowBatteryAlarm);
+    }
+  
+    PT_WAIT_UNTIL(pt, timerHalRun(&batteryTimer) != HAL_IN_PROGRESS);
+  }
+
+  // Should never reach here
   PT_END(pt);
 }
 

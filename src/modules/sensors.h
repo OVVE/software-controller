@@ -26,6 +26,8 @@ struct sensors {
   int32_t peepPressure;
   bool    inhalationDetected;
   bool    exhalationDetected;
+  uint8_t batteryPercent;
+  bool    batteryCharging;
   
   uint8_t calibrated;
   

@@ -186,13 +186,9 @@ void updateDataPacket()
   }
   
   setDataPacketAlarmBits();
-  //public_data_packet.battery_status = 0x7f & battery.percent; // could not find battery_status in modules
-  // if (battery.charging) {
-       // public_data_packet.battery_status |= BATTERY_CHARGING; // turn bit 7 ON independent of lower bits
-  // }
-  //   else {
-  //     public_data_packet.battery_status &= ~BATTERY_CHARGING;  // turn bit 7 OFF independent of lower bits
-  //   }
+  
+  public_data_packet.battery_status = (0x7f & sensors.batteryPercent) | (sensors.batteryCharging << 7);
+
   public_data_packet.respiratory_rate_set = parameters.respirationRateRequested;  // same field on control structure
 
   public_data_packet.respiratory_rate_measured = control.respirationRateMeasured;
