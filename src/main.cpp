@@ -85,6 +85,7 @@ void mainSetup(void)
   //       module might be using a single HAL (like timer)
 
   watchdogHalInit();
+  sysHalInit();
   timerHalInit();
   alarmHalInit();
   estopHalInit();
