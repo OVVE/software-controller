@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+#include "../../config.h"
+
 #include "../../hal/hal.h"
 #include "../../hal/i2c.h"
 
