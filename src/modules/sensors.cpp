@@ -586,12 +586,18 @@ static PT_THREAD(sensorsBatteryThreadMain(struct pt* pt))
     batterySensorHalGetValue(&sensors.batteryPercent, &sensors.batteryCharging);
     
     if (!sensors.batteryCharging) {
+      if (!alarmGet(&sensors.onBatteryAlarm)) {
+        LOG_PRINT(WARNING, "AC power lost!");
+      }
       alarmSet(&sensors.onBatteryAlarm);
     }
     
     if (sensors.batteryPercent <= BATTERY_LOW_LIMIT) {
+      LOG_PRINT_EVERY(2, WARNING, "Battery low! (%u%%)", sensors.batteryPercent);
       alarmSet(&sensors.lowBatteryAlarm);
     }
+    
+    LOG_PRINT_EVERY(4, INFO, "battery: charging (%d), %u%%", sensors.batteryCharging, sensors.batteryPercent);
   
     PT_WAIT_UNTIL(pt, timerHalRun(&batteryTimer) != HAL_IN_PROGRESS);
   }
