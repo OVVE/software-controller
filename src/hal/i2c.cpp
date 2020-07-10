@@ -7,6 +7,8 @@
 
 #include <Arduino.h>
 
+#include "../config.h"
+
 #include "../hal/i2c.h"
 
 #define LOG_MODULE "i2c"
@@ -37,9 +39,7 @@ int i2cHalInit(void)
   //     = 100 KHz
   TWBR = 72;
   TWSR = 0;
-  
-  LOG_PRINT(VERBOSE, "I2C init");
-    
+      
   return HAL_OK;
 }
 
