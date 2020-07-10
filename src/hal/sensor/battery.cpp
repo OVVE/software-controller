@@ -9,7 +9,7 @@
 #include "../../hal/sensor/battery.h"
 
 #define LOG_MODULE "battery"
-#define LOG_LEVEL  LOG_SENSOR_MODULE
+#define LOG_LEVEL LOG_BATTERY_SENSOR_HAL
 #include "../../util/log.h"
 
 #define INA226_REG_CONFIG      0x00
@@ -113,6 +113,7 @@ static int ina226GetRegisters(uint8_t deviceAddr, struct ina226Registers* regs)
       }
       
       if (status & bit(3)) {
+        LOG_PRINT(VERBOSE, "Conversion complete!");
         // Conversion complete, move on to getting the values
         step = GET_VSHUNT;
       } else {
@@ -122,21 +123,25 @@ static int ina226GetRegisters(uint8_t deviceAddr, struct ina226Registers* regs)
       if (ina226ReadRegister(deviceAddr, INA226_REG_SHUNT_VOLT, (uint16_t*) &(regs->vshunt)) == HAL_IN_PROGRESS) {
         return HAL_IN_PROGRESS;
       }
+      LOG_PRINT(VERBOSE, "Got vshunt %d", regs->vshunt);
       step = GET_VBUS;
     case GET_VBUS:
       if (ina226ReadRegister(deviceAddr, INA226_REG_BUS_VOLT, (uint16_t*) &(regs->vbus)) == HAL_IN_PROGRESS) {
         return HAL_IN_PROGRESS;
       }
+      LOG_PRINT(VERBOSE, "Got vshunt %d", regs->vbus);
       step = GET_CURRENT;
     case GET_CURRENT:
       if (ina226ReadRegister(deviceAddr, INA226_REG_CURRENT, (uint16_t*) &(regs->current)) == HAL_IN_PROGRESS) {
         return HAL_IN_PROGRESS;
       }
+      LOG_PRINT(VERBOSE, "Got current %d", regs->current);
       step = GET_POWER;
     case GET_POWER:
       if (ina226ReadRegister(deviceAddr, INA226_REG_POWER, (uint16_t*) &(regs->power)) == HAL_IN_PROGRESS) {
         return HAL_IN_PROGRESS;
       }
+      LOG_PRINT(VERBOSE, "Got power %d", regs->power);
       step = GET_STATUS;
   }
   
@@ -171,10 +176,10 @@ int batterySensorHalFetch(void)
       }
   }
   
-  LOG_PRINT(VERBOSE, "Charger: %d %u %d %u",
+  LOG_PRINT(VERBOSE, "Charger: %d %d %d %d",
             chargerRegs.vshunt, chargerRegs.vbus,
             chargerRegs.current, chargerRegs.power);
-  LOG_PRINT(VERBOSE, "Battery: %d %u %d %u",
+  LOG_PRINT(VERBOSE, "Battery: %d %d %d %d",
             batteryRegs.vshunt, batteryRegs.vbus,
             batteryRegs.current, batteryRegs.power);         
   
