@@ -1,10 +1,12 @@
 
 #include "config.h"
 
+#include "hal/i2c.h"
 #include "hal/alarm.h"
 #include "hal/estop.h"
 #include "hal/timer.h"
 #include "hal/watchdog.h"
+#include "hal/sensor/battery.h"
 
 #include "modules/link.h"
 #include "modules/module.h"
@@ -50,7 +52,10 @@ void mainSetup(void)
   timerHalInit();
   alarmHalInit();
   estopHalInit();
+  i2cHalInit();
   serialHalInit();
+  
+  batterySensorHalInit();
   
   LOG_PRINT(INFO, "Initialization started, loading modules...");
 
