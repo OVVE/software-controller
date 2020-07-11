@@ -152,7 +152,7 @@ static uint8_t controlLimitHit=CONTROL_LIMIT_HIT_NONE;
 static float controlStartEndFlowScale=1.0f;
 static float controlVolumeScale=1.0f;
 
-#define INITIAL_FLOW_SAFETY_FACTOR 0.5f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
+#define INITIAL_FLOW_SAFETY_FACTOR 0.6f //start unmeasured ventilation at lower value and rather increase over time than to deliver too much
 float initialFlow()
 {
   float timeInS=(float)targetInhalationTime/(float)(1.0f SEC);
@@ -250,41 +250,13 @@ float inhalationTrajectoryUpdateVolumeScale(void)
 
 }
 
-//in case the user requested a new volume we take the current form, but scale up to 50% in one cyle
-#define INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_NEW_VOLUME_PER_CYCLE 50.0f //in %
-float inhalationTrajectoryUpdateToNewVolume(void)
-{
-  float newScale;
-  
-  if (inhalationTrajectoryLastVolume==0.0f)
-    newScale=1.0f;
-  else
-    newScale=targetVolume/inhalationTrajectoryLastVolume;
-
-  LOG_PRINT(INFO, "inh trj: vol: %li lastVol: %li scale:%li",(int32_t)targetVolume,(int32_t)inhalationTrajectoryLastVolume,(int32_t)(newScale*1000.0f));
-
-  //limit adaption rate
-  if (newScale>(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
-    newScale=(1.0f+(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
- 
-  if (newScale<(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f)))
-    newScale=(1.0f-(INHALATION_TRAJECTORY_MAX_VOLUME_ADJUSTMENT_PER_CYCLE/100.0f));
-  
-  controlVolumeScale*=newScale;
-
-  if (controlVolumeScale>INHALATION_TRAJECTORY_MAX_SCALE)
-    controlVolumeScale=INHALATION_TRAJECTORY_MAX_SCALE;
-
-  inhalationTrajectoryCalcStartEnd();
-}
-
 #define STATE_INHALATION_TRAJECTORY_INIT 0
 #define STATE_INHALATION_TRAJECTORY_RAISE_FLOW 1
 #define STATE_INHALATION_TRAJECTORY_LOWER_FLOW 2
 #define STATE_INHALATION_TRAJECTORY_END 3
 
 #define INHALATION_TRAJECTORY_RAMP_UP_TIME 5.0f //in %
-#define INHALATION_TRAJECTORY_NON_ADAPTED_CYCLES 3 //how many breathing cycles do we wait after the user started the process before we adapt to our sensor measurements
+#define INHALATION_TRAJECTORY_NON_ADAPTED_CYCLES 2 //how many breathing cycles do we wait after the user started the process before we adapt to our sensor measurements
 static int generateFlowInhalationTrajectory(uint8_t init)
 {
   float currentTime;
@@ -331,24 +303,7 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     return inhalationTrajectoryState;
   }
   
-  if (controlLimitHit)
-  {
-    if (controlLimitHit==CONTROL_LIMIT_HIT_PRESSURE)
-    {
-     //we hit a limit, make a down adjustment of the current trajectory and don't change it for 2 more cycles
-      controlVolumeScale*=0.95;
-      inhalationTrajectoryCalcStartEnd();
-      inhalationTrajectoryInitialCycleCnt=1;
-      controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
-    }else if (controlLimitHit==CONTROL_LIMIT_HIT_VOLUME)
-    {
-      controlVolumeScale*=0.99;
-      inhalationTrajectoryCalcStartEnd();
-      inhalationTrajectoryInitialCycleCnt=1;
-      controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
-    }
-    
-  }
+
 
   targetAirFlow=0.0f;
 
@@ -357,6 +312,9 @@ static int generateFlowInhalationTrajectory(uint8_t init)
   
   if (inhalationTrajectoryState==STATE_INHALATION_TRAJECTORY_INIT)
   {
+    uint32_t lastTargetInhalationTime=targetInhalationTime;
+    uint32_t lastVolumeRequested=targetVolume;
+    
     // Collect all set points from parameters
     totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
     targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
@@ -366,23 +324,46 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     targetVolume = parameters.volumeRequested;
     targetHoldTime = HOLD_TIME; // fixed value
     
-    if (controlLimitHit)
-      controlLimitHit=CONTROL_LIMIT_HIT_NONE;
-
+   
     inhalationTrajectoryLastVolume=(float)sensors.volumeIn;
-
+#define MAX_TIME_CHANGE_BY_PARAMETERS_BEFORE_RESET 20 //in %
+#define MAX_VOLUME_CHANGE_BY_PARAMETERS_BEFORE_RESET 20 //in %
     if (!inhalationTrajectoryInitialCycleCnt)
     {
       //check if volume or timing got changed during an active process
-      if (inhalationTrajectoryInitialFlow!=initialFlow())
+      if ((abs(100-(lastTargetInhalationTime*100/targetInhalationTime))>MAX_TIME_CHANGE_BY_PARAMETERS_BEFORE_RESET)
+        || (abs(100-(lastVolumeRequested*100/targetVolume))>MAX_VOLUME_CHANGE_BY_PARAMETERS_BEFORE_RESET))
       {
+        LOG_PRINT(INFO, "InH Trj: params changed too much -> reset T: %li;%li V: %li;%li",(int32_t)(targetInhalationTime),(int32_t)(lastTargetInhalationTime),(int32_t)(lastVolumeRequested),(int32_t)targetVolume);
+  
+        inhalationTrajectoryInitialCycleCnt=2;
         inhalationTrajectoryInitialFlow=initialFlow();
-        inhalationTrajectoryUpdateStartAndEndFlow();
-        inhalationTrajectoryUpdateToNewVolume();
+        inhalationTrajectoryStartFlow=inhalationTrajectoryInitialFlow;
+        inhalationTrajectoryEndFlow=inhalationTrajectoryInitialFlow;
+        controlStartEndFlowScale=1.0f;
+        controlVolumeScale=1.0f;
       }else
       {
-        inhalationTrajectoryUpdateStartAndEndFlow();
-        inhalationTrajectoryUpdateVolumeScale();
+        if (controlLimitHit)
+        {
+          if (controlLimitHit==CONTROL_LIMIT_HIT_PRESSURE)
+          {
+          //we hit a limit, make a down adjustment of the current trajectory 
+            controlVolumeScale*=0.95;
+            inhalationTrajectoryCalcStartEnd();
+            controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
+          }else if (controlLimitHit==CONTROL_LIMIT_HIT_VOLUME)
+          {
+            controlVolumeScale*=0.99;
+            inhalationTrajectoryCalcStartEnd();
+            controlLimitHit=CONTROL_LIMIT_GOT_HANDLED;
+          }
+          
+        }else
+        {
+            inhalationTrajectoryUpdateStartAndEndFlow();
+            inhalationTrajectoryUpdateVolumeScale();
+        }
       }
     }else
     {
@@ -401,6 +382,9 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     
     targetAirFlow=.0f;
     inhalationTrajectoryState=STATE_INHALATION_TRAJECTORY_RAISE_FLOW;
+
+    if (controlLimitHit)
+          controlLimitHit=CONTROL_LIMIT_HIT_NONE;
 
 
   }else if (inhalationTrajectoryState==STATE_INHALATION_TRAJECTORY_RAISE_FLOW)
