@@ -92,7 +92,7 @@
 // Defines level of logging for that HAL
 // TODO: Add more HAL logging if needed
 #define LOG_MOTOR_HAL          DEBUG
-#define LOG_I2C_HAL            VERBOSE
+#define LOG_I2C_HAL            DEBUG
 #define LOG_BATTERY_SENSOR_HAL DEBUG
 
 // Module Logging Flags
