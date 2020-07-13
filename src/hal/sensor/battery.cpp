@@ -62,13 +62,21 @@ static int ina226ReadRegister(uint8_t deviceAddr, uint8_t reg, uint16_t* value)
   switch (step) {
     case WRITE_REG:
       if (i2cHalWrite(deviceAddr, &reg, sizeof(reg)) == HAL_IN_PROGRESS) {
-        return HAL_IN_PROGRESS;
+        break;
       } else {
         step = READ_DATA;
       }
     case READ_DATA:
-      return i2cHalRead(deviceAddr, (uint8_t*) value, sizeof(*value));
+      if (i2cHalRead(deviceAddr, (uint8_t*) value, sizeof(*value)) == HAL_IN_PROGRESS) {
+        // INA226 comes in MSB first, so reorder to be little endian
+        *value = (*value << 8) | (*value >> 8);
+        break;
+      } else {
+        step = WRITE_REG;
+        return HAL_OK;
+      }
   }
+  return HAL_IN_PROGRESS;
 }
 
 static int ina226WriteRegister(uint8_t deviceAddr, uint8_t reg, uint16_t value)
@@ -113,13 +121,13 @@ static int ina226GetRegisters(uint8_t deviceAddr, struct ina226Registers* regs)
       if (ina226ReadRegister(deviceAddr, INA226_REG_MASK, &status) == HAL_IN_PROGRESS) {
         return HAL_IN_PROGRESS;
       }
-      
+
       if (status & bit(3)) {
         LOG_PRINT(VERBOSE, "Conversion complete!");
         // Conversion complete, move on to getting the values
         step = GET_VSHUNT;
       } else {
-        break;
+        return HAL_IN_PROGRESS;
       }
     case GET_VSHUNT:
       if (ina226ReadRegister(deviceAddr, INA226_REG_SHUNT_VOLT, (uint16_t*) &(regs->vshunt)) == HAL_IN_PROGRESS) {
@@ -174,16 +182,15 @@ int batterySensorHalFetch(void)
     case BATTERY:
       if (ina226GetRegisters(BATTERY_DEVICE_ADDR, &batteryRegs) == HAL_OK) {
         step = CHARGER;
+        LOG_PRINT(DEBUG, "Charger: %d %d %d %d",
+                  chargerRegs.vshunt, chargerRegs.vbus,
+                  chargerRegs.current, chargerRegs.power);
+        LOG_PRINT(DEBUG, "Battery: %d %d %d %d",
+                  batteryRegs.vshunt, batteryRegs.vbus,
+                  batteryRegs.current, batteryRegs.power);  
         return HAL_OK;
       }
   }
-  
-  LOG_PRINT(VERBOSE, "Charger: %d %d %d %d",
-            chargerRegs.vshunt, chargerRegs.vbus,
-            chargerRegs.current, chargerRegs.power);
-  LOG_PRINT(VERBOSE, "Battery: %d %d %d %d",
-            batteryRegs.vshunt, batteryRegs.vbus,
-            batteryRegs.current, batteryRegs.power);         
   
   return HAL_IN_PROGRESS;
 }

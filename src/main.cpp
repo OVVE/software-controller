@@ -54,9 +54,7 @@ void mainSetup(void)
   estopHalInit();
   i2cHalInit();
   serialHalInit();
-  
-  batterySensorHalInit();
-  
+
   LOG_PRINT(INFO, "Initialization started, loading modules...");
 
   // TODO: Handle failure conditions

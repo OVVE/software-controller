@@ -39,7 +39,7 @@ int i2cHalInit(void)
   //     = 100 KHz
   TWBR = 72;
   TWSR = 0;
-      
+
   return HAL_OK;
 }
 
@@ -64,6 +64,7 @@ int i2cHalWrite(uint8_t deviceAddr, uint8_t* data, uint8_t size)
       if (TWSR != TW_START) {
         LOG_PRINT(VERBOSE, "write: failed to sent start");
         state = I2C_STATE_IDLE;
+        TWCR = bit(TWINT) | bit(TWSTO);
         return HAL_FAIL;
       }
       // Now send device address
@@ -113,14 +114,14 @@ int i2cHalWrite(uint8_t deviceAddr, uint8_t* data, uint8_t size)
         state = I2C_STATE_PREP_DATA;
         break;
       }
-      
+    
     case I2C_STATE_SENT_STOP:
-      if (i2cHalInProgress()) {
-        // Still working on it
+      if (bit_is_set(TWCR, TWSTO)) {
+        // STOP is different and clears TWSTO instead of TWINT
         break;
       }
-      state = I2C_STATE_IDLE;
       LOG_PRINT(VERBOSE, "write: stop sent, complete");
+      state = I2C_STATE_IDLE;
       return HAL_OK;
   }
   
@@ -148,6 +149,7 @@ int i2cHalRead(uint8_t deviceAddr, uint8_t* data, uint8_t size)
       if (TWSR != TW_START) {
         LOG_PRINT(VERBOSE, "read: failed to sent start");
         state = I2C_STATE_IDLE;
+        TWCR = bit(TWINT) | bit(TWSTO);
         return HAL_FAIL;
       }
       // Now send device address
@@ -204,12 +206,12 @@ int i2cHalRead(uint8_t deviceAddr, uint8_t* data, uint8_t size)
       }
       
     case I2C_STATE_SENT_STOP:
-      if (i2cHalInProgress()) {
-        // Still working on it
+      if (bit_is_set(TWCR, TWSTO)) {
+        // STOP is different and clears TWSTO instead of TWINT
         break;
       }
-      state = I2C_STATE_IDLE;
       LOG_PRINT(VERBOSE, "read: stop sent, complete");
+      state = I2C_STATE_IDLE;
       return HAL_OK;
   }
   
