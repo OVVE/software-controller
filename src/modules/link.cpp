@@ -57,6 +57,10 @@ static struct alarmProperties onCommunicationFailureAlarmProperties = {
 
 void handleUIAlarms()
 {
+  if (public_command_packet.alarm_bits & ALARM_ECU_POWER_LOSS && lastDataPacketAlarmBits & ALARM_ECU_POWER_LOSS)
+  {
+    alarmSuppress(&sensors.onBatteryAlarm);
+  }
   if (public_command_packet.alarm_bits & ALARM_ECU_LOW_BATTERY && lastDataPacketAlarmBits & ALARM_ECU_LOW_BATTERY)
   {
     alarmSuppress(&sensors.lowBatteryAlarm);
@@ -112,6 +116,7 @@ void setDataPacketAlarmBits()
   // ALARM_ECU_ESTOP_PRESSED
   // what alarm bit - public_data_packet.alarm_bits = alarmGet(&sensors.onBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU... : public_data_packet.alarm_bits &= ~ALARM_ECU;
   
+  public_data_packet.alarm_bits = alarmGet(&sensors.onBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_POWER_LOSS : public_data_packet.alarm_bits &= ~ALARM_ECU_POWER_LOSS;
   public_data_packet.alarm_bits = alarmGet(&sensors.lowBatteryAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_LOW_BATTERY : public_data_packet.alarm_bits &= ~ALARM_ECU_LOW_BATTERY;
   public_data_packet.alarm_bits = alarmGet(&sensors.badPressureSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_PRESSURE_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_PRESSURE_SENSOR;
   public_data_packet.alarm_bits = alarmGet(&sensors.badAirflowSensorAlarm) ? public_data_packet.alarm_bits |= ALARM_ECU_BAD_FLOW_SENSOR : public_data_packet.alarm_bits &= ~ALARM_ECU_BAD_FLOW_SENSOR;

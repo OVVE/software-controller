@@ -95,10 +95,10 @@ static int32_t peepPressureHistoryBuffer[SENSORS_PEEP_AVG_CNT];
 static struct alarmProperties onBatteryAlarmProperties = {
   .priority = ALARM_PRIORITY_MODERATE,
   .preventWatchdog = false,
-  .suppressionTimeout = (120 SEC),
+  .suppressionTimeout = (1200 SEC),
 };
 static struct alarmProperties lowBatteryAlarmProperties = {
-  .priority = ALARM_PRIORITY_MODERATE,
+  .priority = ALARM_PRIORITY_HIGH,
   .preventWatchdog = false,
   .suppressionTimeout = (120 SEC),
 };
