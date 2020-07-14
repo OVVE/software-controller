@@ -50,9 +50,9 @@ static uint32_t energyInBattery = 0;
 
 struct ina226Registers {
   int16_t  vshunt;
-  int16_t  vbus;
+  int16_t  vbus; // Unsigned, but MSb is always 0 so can be treated as signed
   int16_t  current;
-  int16_t  power;
+  uint16_t power; // Though never explicitly said, power seems to be unsigned
 };
 
 static struct ina226Registers chargerRegs;
@@ -154,7 +154,7 @@ static int ina226GetRegisters(uint8_t deviceAddr, struct ina226Registers* regs)
       if (ina226ReadRegister(deviceAddr, INA226_REG_POWER, (uint16_t*) &(regs->power)) == HAL_IN_PROGRESS) {
         return HAL_IN_PROGRESS;
       }
-      LOG_PRINT(VERBOSE, "Got power %d", regs->power);
+      LOG_PRINT(VERBOSE, "Got power %u", regs->power);
       step = GET_STATUS;
   }
   
@@ -185,10 +185,10 @@ int batterySensorHalFetch(void)
     case BATTERY:
       if (ina226GetRegisters(BATTERY_DEVICE_ADDR, &batteryRegs) == HAL_OK) {
         step = CHARGER;
-        LOG_PRINT(DEBUG, "Charger: %d %d %d %d",
+        LOG_PRINT(DEBUG, "Charger: %d %d %d %u",
                   chargerRegs.vshunt, chargerRegs.vbus,
                   chargerRegs.current, chargerRegs.power);
-        LOG_PRINT(DEBUG, "Battery: %d %d %d %d",
+        LOG_PRINT(DEBUG, "Battery: %d %d %d %u",
                   batteryRegs.vshunt, batteryRegs.vbus,
                   batteryRegs.current, batteryRegs.power);  
         return HAL_OK;
@@ -217,7 +217,9 @@ int batterySensorHalGetValue(uint8_t* value, bool* isCharging)
   // deltaPower = power * 25 [mW] * dt
   //            = power * 25 [mW] * 1.1 [ms/sample] * 512 [sample] / 1000 [ms/sec]
   //            = power * 15482.5 / 1000 [mWs]
-  int32_t deltaPower = (((int32_t) batteryRegs.power) * 15483L) / 1000L;
+  int32_t currentSign = ((batteryRegs.current >> 15) << 1) + 1; // Get sign of current
+  int32_t power = ((int32_t) batteryRegs.power) * currentSign; // Convert power to proper sign
+  int32_t deltaPower = (power * 15483L) / 1000L;
   
   // energyInBattery [mWs] += deltaPower [mWs]
   energyInBattery = ((int32_t) energyInBattery + deltaPower);
