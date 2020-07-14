@@ -31,6 +31,9 @@
 // Battery capacity in [mWs]
 #define BATTERY_FULL         (120000UL * 3600UL)
 
+#define CHARGING_COUNTER_MAX      3
+#define CHARGING_CURRENT_MIN      0
+
 #define WRITE_REG 0x00
 #define READ_DATA 0x01
 
@@ -197,8 +200,18 @@ int batterySensorHalFetch(void)
 
 int batterySensorHalGetValue(uint8_t* value, bool* isCharging)
 {
+  static uint8_t chargingCount = CHARGING_COUNTER_MAX;
+  
   // Determine is the system is charging from the charge current
-  *isCharging = chargerRegs.current > 0;
+  if (chargerRegs.current <= CHARGING_CURRENT_MIN) {
+    if (chargingCount > 0) {
+      chargingCount--;
+    }
+  } else {
+    chargingCount = CHARGING_COUNTER_MAX;
+  }
+  
+  *isCharging = (chargingCount > 0);
   
   // Eastimate [mWs] from battery current
   // deltaPower = power * 25 [mW] * dt
