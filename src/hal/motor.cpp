@@ -15,7 +15,22 @@
 #define LOG_LEVEL  LOG_MOTOR_HAL
 #include "../util/log.h"
 
+#ifdef BLOWER
+#include "serial.h"
+#endif
 
+#ifdef BLOWER
+static uint16_t blowerLastSpeed=0;
+void blowerSetSpeed(uint16_t rpm)
+{
+  LOG_PRINT_EVERY(20, DEBUG,"Blower Set Speed: %i",rpm);
+  serialMotorHalSendPacket(0x10,sizeof(rpm),(uint8_t*)&rpm);
+  blowerLastSpeed=rpm;
+}
+
+#endif
+
+#ifndef BLOWER
 //******************************************************************************
 // Pin Definitions
 //******************************************************************************
@@ -70,7 +85,7 @@
 // STEPPERONLINE 23HS22-2804S-HG20
 // NEMA 23, 56 mm, Gear Ratio 20:1
 #define MOTOR_STEPS_PER_REVOLUTION (20*200) 
-#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING 4000
+#define MAX_MOTOR_ACC_CHANGE_PER_CYCLE_CLOSING 400
 #elif defined MOTOR_STEPPERONLINE__23HS22_2804S_HG50
 // STEPPERONLINE 23HS22-2804S-HG50
 // NEMA 23, 56 mm ,Gear Ratio 50:1
@@ -633,12 +648,14 @@ ISR(TIMER4_OVF_vect) {
     motor_position--;
   }
 }
+#endif
 
 //******************************************************************************
 // motorHal Interface Implementation
 //******************************************************************************
 int8_t motorHalInit(void)
 {
+#ifndef BLOWER
   // PWM Signal Setup
   // Configure the step pin as an input during timer initialization in order to
   // prevent glitches on the output PWM signal.
@@ -656,14 +673,14 @@ int8_t motorHalInit(void)
 
   // Initialize motor state to MOTOR_STATE_OFF.
   motor_state_set_OFF();
-
+#endif
   return HAL_OK;
 }
 
 int8_t motorHalCommand(uint8_t command, uint16_t speed)
 {
   int8_t motor_status = MOTOR_HAL_STATUS_ERROR;
-
+#ifndef BLOWER
   if (command == MOTOR_HAL_COMMAND_OFF) {
     motor_status = motor_state_transition(MOTOR_STATE_OFF);
   } else if (command == MOTOR_HAL_COMMAND_HOLD) {
@@ -677,8 +694,18 @@ int8_t motorHalCommand(uint8_t command, uint16_t speed)
   }
 
   return motor_status;
+  #else
+    if (command==MOTOR_HAL_COMMAND_OFF)
+      blowerSetSpeed(7000);
+    else 
+        if ((uint32_t)7000+(uint32_t)speed<UINT16_MAX)
+          blowerSetSpeed(7000+speed);
+        else
+          blowerSetSpeed(UINT16_MAX);
+    return MOTOR_HAL_STATUS_MOVING;
+  #endif
 }
-
+#ifndef BLOWER
 #if (MOTOR_HAL_DEGREE_MULTIPLIER > INT32_MAX)
 #error Overflow condition detected.
 #endif
@@ -750,3 +777,4 @@ int8_t motorHalGetStatus(void)
   return motor_state_transition(motor_state);
 }
 
+#endif

@@ -20,9 +20,11 @@
 
 #define BAUD_RATE 500000 //due to 16 Mhz crystal without fractional baudrate divider any of these baudrate has 0% bitrate error: 1000000 500000 250000 125000 62500
 #define BAUD_RATE_DEBUG 500000 //due to 16 Mhz crystal without fractional baudrate divider any of these baudrate has 0% bitrate error: 1000000 500000 250000 125000 62500
+#define BAUD_RATE_MOTOR 9600
 
 #define SERIAL_UI Serial1
 #define SERIAL_PORT_DEBUG Serial
+#define SERIAL_PORT_MOTOR Serial3
 
 typedef struct{
   uint32_t packetsCntReceivedOk;
@@ -46,6 +48,7 @@ extern SERIAL_STATISTICS serial_statistics;
 int serialHalInit(void);
 int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen, uint8_t* data));
 int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data);
+int serialMotorHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data);
 int serialHalSendData(void);
 int serialDebugWrite(uint8_t* buffer, uint16_t size);
 

@@ -20,6 +20,7 @@
 
 #define UI_TX_BUFFERSIZE 1024
 #define DEBUG_TX_BUFFERSIZE 512
+#define MOTOR_TX_BUFFERSIZE 64
 
 typedef struct 
 {
@@ -31,11 +32,15 @@ typedef struct
 
 uint8_t txBufferData[UI_TX_BUFFERSIZE];
 uint8_t debugTxBufferData[DEBUG_TX_BUFFERSIZE];
+uint8_t motorTxBufferData[MOTOR_TX_BUFFERSIZE];
+
 
 txbuffer uiTxBuffer;
 txbuffer debugTxBuffer;
+txbuffer motorTxBuffer;
 
 static uint8_t lastByte=0;
+
 
 inline int serialTxBufferBytesAvailable(txbuffer* buffer)
 {
@@ -90,6 +95,7 @@ int serialDebugWrite(uint8_t* buffer, uint16_t size)
 int serialHalInit(void)
 {
   SERIAL_UI.begin(BAUD_RATE);  
+  SERIAL_PORT_MOTOR.begin(BAUD_RATE_MOTOR);
   
   // this function does not return anything
   // not sure how we can do something like while (!serial)
@@ -104,6 +110,12 @@ int serialHalInit(void)
   debugTxBuffer.bufferSize=sizeof(debugTxBufferData);
   debugTxBuffer.head=0;
   debugTxBuffer.tail=0;
+
+
+  motorTxBuffer.buffer=&motorTxBufferData[0];
+  motorTxBuffer.bufferSize=sizeof(motorTxBufferData);
+  motorTxBuffer.head=0;
+  motorTxBuffer.tail=0;
 
   serial_statistics.handleMaxTxBufferCnt=10000;
 
@@ -273,6 +285,53 @@ int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen
   return HAL_IN_PROGRESS;
 }
 
+int serialMotorHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
+{
+    uint8_t cnt;
+    uint16_t crc=0xFFFF;
+    static uint16_t sequenceNumber=0;
+
+    //make sure that other packets are only accepted if buffer is <75%
+   
+      if (packetLength+SERIAL_HEADER_LENGTH>serialTxBufferBytesAvailable(&motorTxBuffer))
+      {
+        serial_statistics.packetsCntSentBufferOverFlow++;
+        return HAL_FAIL;
+      }
+   
+    if (packetLength>SERIAL_MAX_DATA_SIZE)
+    {
+      serial_statistics.packetsCntSentMaxDatasizeError++;
+      return HAL_FAIL;
+    }      
+
+    serialTxBufferAddByte(&motorTxBuffer,SERIAL_STARTBYTE_1);
+    serialTxBufferAddByte(&motorTxBuffer,SERIAL_STARTBYTE_2);
+    serialTxBufferAddByte(&motorTxBuffer,SERIAL_STARTBYTE_3);
+    serialTxBufferAddByte(&motorTxBuffer,sequenceNumber&0xff);
+    crc=_crc_xmodem_update(crc,sequenceNumber&0xff);
+    serialTxBufferAddByte(&motorTxBuffer,sequenceNumber>>8);
+    crc=_crc_xmodem_update(crc,sequenceNumber>>8);
+    serialTxBufferAddByte(&motorTxBuffer,SERIAL_PROTOCOL_VERSION);
+    crc=_crc_xmodem_update(crc,SERIAL_PROTOCOL_VERSION);
+    serialTxBufferAddByte(&motorTxBuffer,packetType);
+    crc=_crc_xmodem_update(crc,packetType);
+    serialTxBufferAddByte(&motorTxBuffer,packetLength);
+    crc=_crc_xmodem_update(crc,packetLength);
+    for (cnt=0;cnt<packetLength;cnt++)
+    {
+      serialTxBufferAddByte(&motorTxBuffer,data[cnt]);
+      crc=_crc_xmodem_update(crc,data[cnt]);
+    }
+    serialTxBufferAddByte(&motorTxBuffer,crc&0xff);
+    serialTxBufferAddByte(&motorTxBuffer,crc>>8);
+
+    serial_statistics.packetsCntSentOk++;
+    sequenceNumber++;
+
+    return HAL_OK;
+}
+
 int serialHalSendPacket(uint8_t packetType, uint8_t packetLength, uint8_t* data)
 {
     uint8_t cnt;
@@ -367,6 +426,23 @@ int serialHalSendData()
       }else
         availableForWrite=0;
     }
+
+
+    availableForWrite = SERIAL_PORT_MOTOR.availableForWrite();
+    
+    if (availableForWrite>SERIAL_TX_MAX_BYTES_PER_CYCLE)
+      availableForWrite=SERIAL_TX_MAX_BYTES_PER_CYCLE;
+
+    while (availableForWrite)
+    {
+      if (serialTxBufferGetByte(&motorTxBuffer,&byte)==HAL_OK)
+      {
+        SERIAL_PORT_MOTOR.write(byte);
+        availableForWrite--;
+      }else
+        availableForWrite=0;
+    }
+
 
     return HAL_OK;
 }

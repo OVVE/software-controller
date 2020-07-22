@@ -79,6 +79,12 @@ static uint32_t measuredExhalationTime;
 
 static bool controlComplete;
 
+
+#ifdef BLOWER
+#define PEEP_PRESSURE_SETPOINT 10.0f
+    static float peepSpeed=9000.0f;
+#endif
+
 // *****************
 // Control variables
 // *****************
@@ -169,7 +175,11 @@ float inhalationTrajectoryVolume()
 #define INHALATION_TRAJECTORY_MAX_ADJUSTMENT_PER_CYCLE_AT_MAX_PRESSURE 5.0f //in %
 #define INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE 0.5f //in %
 #define INHALATION_TRAJECTORY_MAX_START_END_SCALE 3.0f
+#ifdef BLOWER
 #define INHALATION_TRAJECTORY_MAX_SCALE 5.0f //max initial Flow to current flow scale
+#else
+#define INHALATION_TRAJECTORY_MAX_SCALE 3.0f //max initial Flow to current flow scale
+#endif
 
 void inhalationTrajectoryCalcStartEnd()
 {
@@ -434,6 +444,30 @@ static int generateFlowInhalationTrajectory(uint8_t init)
 
 }
 
+#ifdef BLOWER
+float calculatePeepSpeedValue(float peepTarget, uint8_t reset)
+{
+  static float lastPeepSpeed=0.0f;
+  if (reset)
+  {
+    lastPeepSpeed=7000.0f+peepTarget*1000.0f;
+    return lastPeepSpeed;
+  }
+   float diff=peepTarget-sensors.peepPressure;
+
+   diff*=0.15f;
+
+   lastPeepSpeed+=diff*1000.0f;
+
+   if (lastPeepSpeed>1.2f*(7000.0f+peepTarget*1000.0f))
+    lastPeepSpeed=1.2f*(7000.0f+peepTarget*1000.0f);
+
+   if (lastPeepSpeed<0.8f*(7000.0f+peepTarget*1000.0f))
+    lastPeepSpeed=0.8f*(7000.0f+peepTarget*1000.0f);
+   return lastPeepSpeed;
+}
+#endif
+
 #define CONTROL_INITIAL_BAG_POSITION_FLOW_TRIGGER 100
 // Update control commands and handle ISR/control flags
 static int updateControl(void)
@@ -466,6 +500,7 @@ static int updateControl(void)
     {
 	//deactivate controller for exhilation
         //goto a fixed movement and deactivate the controller
+#ifndef BLOWER
 	      
         if (motorHalGetPosition()-exhalationTargetPosition<2000)
         {
@@ -476,28 +511,40 @@ static int updateControl(void)
         
         if (targetAirFlow>-1000.0)
           targetAirFlow=-1000.0;
+#endif
         Kf=1.0f;
         Kp=.0f;
         Ki=.0f;
         Kd=.0f;
-     
+        checkForFirstFlow=1;
+#ifndef BLOWER
       if ((motorHalGetPosition()<=exhalationTargetPosition)  || (motorHalGetStatus()==MOTOR_HAL_STATUS_LIMIT_TOP))
       {
         motorHalCommand(MOTOR_HAL_COMMAND_HOLD,0);
         LOG_PRINT(INFO, "Target Reached %li of %li",motorHalGetPosition(),exhalationTargetPosition);
         return 1;
       }
-      checkForFirstFlow=1;
-    }else if (control.state == CONTROL_STATE_INHALATION)
+#else
+  motorHalCommand(MOTOR_HAL_COMMAND_HOLD,peepSpeed);
+  return 1;
+#endif
+
+    }else 
+
+    if (control.state == CONTROL_STATE_INHALATION)
     {
       if (generateFlowInhalationTrajectory(0)==STATE_INHALATION_TRAJECTORY_END)
       {
+        #ifndef BLOWER
         motorHalCommand(MOTOR_HAL_COMMAND_HOLD,0);
+        #else
+        motorHalCommand(MOTOR_HAL_COMMAND_HOLD,peepSpeed);
+        #endif
         LOG_PRINT(INFO, "Target Reached");
         return 1;
 
       }
-
+#ifndef BLOWER
       #define MAX_PHASE_SHIFT_COMPENSATION 400L //in ms
 
       if ((checkForFirstFlow)&& (sensors.currentFlow>CONTROL_INITIAL_BAG_POSITION_FLOW_TRIGGER))
@@ -515,7 +562,7 @@ static int updateControl(void)
         LOG_PRINT(INFO, "New phase shift: %li",inhalationTrajectoryPhaseShiftEstimate);
         checkForFirstFlow=0;
       }
-
+#endif
     }
     
 
@@ -563,6 +610,7 @@ static int updateControl(void)
 
     //final control output is feed forward + limited controlOut
     controlOutLimited=Kf*targetAirFlow+controlOut;
+#ifndef BLOWER
 
     if (control.state==CONTROL_STATE_INHALATION)
     {
@@ -579,7 +627,7 @@ static int updateControl(void)
 
       controlOutLimited*=(1.0f+currentScale);
     }
-
+#endif
     //IIR filter
     if (targetAirFlow!=0.0f)
        controlOutputFiltered=0.85f*controlOutputFiltered+0.15f*controlOutLimited; 
@@ -617,7 +665,12 @@ static int updateControl(void)
       if (controlOutputFiltered<-65535.0f)
         controlOutputFiltered=-65535.0f;
       // Send motor commands
+      #ifndef BLOWER
       status=motorHalCommand(MOTOR_HAL_COMMAND_OPEN, -controlOutputFiltered);
+      #else
+      status=motorHalCommand(MOTOR_HAL_COMMAND_OPEN, peepSpeed);
+      #endif
+      
 
       if ((status==MOTOR_HAL_STATUS_LIMIT_BOTTOM) || (status==MOTOR_HAL_STATUS_LIMIT_TOP))
         controlForceHome=1;
@@ -627,13 +680,21 @@ static int updateControl(void)
       if (controlOutputFiltered>65535.0f)
         controlOutputFiltered=65535.0f;
       // Send motor commands
+      #ifdef BLOWER
+      status=motorHalCommand(MOTOR_HAL_COMMAND_CLOSE, 5.0f*controlOutputFiltered+peepSpeed);
+      #else
       status=motorHalCommand(MOTOR_HAL_COMMAND_CLOSE, controlOutputFiltered);
+      #endif
       if ((status==MOTOR_HAL_STATUS_LIMIT_BOTTOM) || (status==MOTOR_HAL_STATUS_LIMIT_TOP))
         controlForceHome=1;
     }else
     {
       uint8_t status;
+#ifdef BLOWER
+      status=motorHalCommand(MOTOR_HAL_COMMAND_CLOSE, 5.0f*controlOutputFiltered+peepSpeed);
+#else
       status=motorHalCommand(MOTOR_HAL_COMMAND_HOLD, controlOutputFiltered);
+#endif
       if ((status==MOTOR_HAL_STATUS_LIMIT_BOTTOM) || (status==MOTOR_HAL_STATUS_LIMIT_TOP))
         controlForceHome=1;
     }
@@ -702,6 +763,8 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
   while (true) {
     if (control.state == CONTROL_STATE_HOME)
     {
+      #ifndef BLOWER
+      
       LOG_PRINT(INFO, "state: CONTROL_STATE_HOME");
 
        motorHalCommand(MOTOR_HAL_COMMAND_OPEN, 5000);
@@ -719,7 +782,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
        {
           controlForceHome=0;
        }
-       
+       #endif
        control.state=CONTROL_STATE_IDLE;
 
 
@@ -738,11 +801,15 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       controlOutputFiltered=0.0f;
       inhalationTrajectoryPhaseShiftEstimate=CONTROL_INITIAL_PHASESHIFT_MS*(int32_t)1000;
 
+#ifndef BLOWER
       motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U);
-
+      PT_WAIT_UNTIL(pt,parameters.startVentilation);
+#else
+      //peepSpeed=calculatePeepSpeedValue(PEEP_PRESSURE_SETPOINT,1);
       // Wait for the parameters to enter the run state before
-      PT_WAIT_UNTIL(pt, parameters.startVentilation && !estopHalAsserted());
-      
+      PT_WAIT_UNTIL(pt, motorHalCommand(MOTOR_HAL_COMMAND_OFF, 0U) && (parameters.startVentilation));
+#endif 
+
       //call with 1 here to start with the conservative initial guess based on user parameters
       generateFlowInhalationTrajectory(1);
 
@@ -801,9 +868,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       // Setup the hold timer
       timerHalBegin(&controlTimer, targetHoldTime, false);
-      
+#ifdef BLOWER
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, peepSpeed);
+#else
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
-      
+#endif    
       controlOutputFiltered=0.0f;
            
       control.state = CONTROL_STATE_HOLD_IN;
@@ -811,7 +880,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
     } else if (control.state == CONTROL_STATE_HOLD_IN) {
       LOG_PRINT(INFO, "state: CONTROL_STATE_HOLD_IN");
 
+#ifdef BLOWER
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, peepSpeed);
+#else
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
+#endif  
       controlOutputFiltered=0.0f;
 
       PT_WAIT_UNTIL(pt, timerHalRun(&controlTimer) != HAL_IN_PROGRESS);
@@ -825,8 +898,11 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       controlComplete = false;
       
       controlI=0.0f;
+#ifdef BLOWER
+      motorHalCommand(MOTOR_HAL_COMMAND_HOLD, peepSpeed);
+#else
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0U);
-
+#endif  
       control.state = CONTROL_STATE_EXHALATION;
 
     } else if (control.state == CONTROL_STATE_EXHALATION) {

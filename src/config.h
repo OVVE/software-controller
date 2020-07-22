@@ -14,6 +14,8 @@
 //  Hardware v1: Production candidate unit, fixed set of hardware
 //#define HARDWARE_V0
 #define HARDWARE_V1
+//set if output to motor should be serial and a blower is expected
+#define BLOWER
 
 //==============================================================================
 // Motor Settings
