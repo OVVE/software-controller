@@ -149,6 +149,7 @@ static int32_t inhalationTrajectoryPhaseShiftEstimate=CONTROL_INITIAL_PHASESHIFT
 static uint8_t inhalationTrajectoryInitialCycleCnt=0;
 static uint8_t controlForceHome=0;
 static uint8_t controlLimitHit=CONTROL_LIMIT_HIT_NONE;
+static int32_t patientSynchronyCorrectionTime;
 static float controlStartEndFlowScale=1.0f;
 static float controlVolumeScale=1.0f;
 
@@ -170,6 +171,9 @@ float inhalationTrajectoryVolume()
 #define INHALATION_TRAJECTORY_DOWN_ADJUSTMENT_PER_CYCLE 0.5f //in %
 #define INHALATION_TRAJECTORY_MAX_START_END_SCALE 3.0f
 #define INHALATION_TRAJECTORY_MAX_SCALE 5.0f //max initial Flow to current flow scale
+
+#define VIH_BREATH_THRESHOLD 20
+
 
 void inhalationTrajectoryCalcStartEnd()
 {
@@ -275,6 +279,12 @@ static int generateFlowInhalationTrajectory(uint8_t init)
     inhalationTrajectoryState=STATE_INHALATION_TRAJECTORY_INIT;
     // Collect all set points from parameters
     totalBreathTime = (60 SEC) / parameters.respirationRateRequested;
+    totalBreathTime-=patientSynchronyCorrectionTime;
+    
+    //reduce 20%
+    patientSynchronyCorrectionTime*=8;
+    patientSynchronyCorrectionTime/=10;
+
     targetInhalationTime = (parameters.ieRatioRequested * totalBreathTime) >> 8; // TODO: address fixed point math
     targetInhalationTime-= HOLD_TIME; //HOLD is part of inhalation
     targetInhalationTime+=inhalationTrajectoryPhaseShiftEstimate; //allow more time to compensate for initial flow buildup in the bag as measure by the control loop
@@ -662,7 +672,7 @@ static int updateControl(void)
       controlLogData.targetHoldTime=targetHoldTime;
       controlLogData.targetInhalationTime=targetInhalationTime;
       controlLogData.controlLimitHit=controlLimitHit;
-      controlLogData.controlI=controlI;
+      controlLogData.controlI=sensors.virtualInhalationSensor;
       controlLogData.currentFlow=sensors.currentFlow;
       controlLogData.currentPressure=sensors.currentPressure;
     
@@ -689,6 +699,32 @@ static bool checkExhalationTimeout(void)
 {
   return (timerHalRun(&breathTimer) != HAL_IN_PROGRESS);
 }
+
+static bool checkForPatientBreath(void)
+{
+  if (control.allowPatientSync==0)
+    return true;
+  //now is the time to potentially sync to a patients breath
+  if ((sensors.virtualInhalationSensor>VIH_BREATH_THRESHOLD) && (controlLimitHit==CONTROL_LIMIT_HIT_NONE)) //don't adapt in control limit hit cycles
+    {
+        //Patient is try to breathe, calculate a shift in time to sync
+        uint32_t patientBreathTime=timerHalCurrent(&breathTimer);
+        
+        LOG_PRINT(DEBUG,"Patient Breath detected at %li of time %li",patientBreathTime,breathTimer.duration);
+        
+        //reduce duration, but not fully to sync slowly to the patient and don't screw up on false readings
+        patientSynchronyCorrectionTime=(breathTimer.duration-patientBreathTime);
+        
+        if (patientSynchronyCorrectionTime<0)
+          patientSynchronyCorrectionTime=0;
+        breathTimer.duration-=patientSynchronyCorrectionTime;
+      
+        control.allowPatientSync=0;  
+        return true;
+    }
+    return false;
+}
+
 
 static PT_THREAD(controlThreadMain(struct pt* pt))
 {
@@ -834,7 +870,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       
       // Begin control loop timer when control starts
       timerHalBegin(&controlTimer, CONTROL_LOOP_PERIOD, true);
-      
+      control.allowPatientSync=1;
       while (1) {
         // TODO: Different modes?
         controlComplete = updateControl();
@@ -851,6 +887,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
         }
       }
       
+      
       motorHalCommand(MOTOR_HAL_COMMAND_HOLD, 0);
 
       // TODO: look into this
@@ -858,7 +895,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
       // At this point, either wait for the breath timer to expire or find a new
       // breath to sync with
       if (!estopHalAsserted()) {
-        PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS)));
+        PT_WAIT_UNTIL(pt, ((timerHalRun(&breathTimer) != HAL_IN_PROGRESS) || checkForPatientBreath()));
       }
       
       // Calculate and update the measured times
@@ -870,7 +907,7 @@ static PT_THREAD(controlThreadMain(struct pt* pt))
 
       LOG_PRINT(INFO, "Timing report [ms]: It: %li Ps: %li Et: %li I:E [1=1000]: %li RR:%li",(uint32_t)measuredInhalationTime/(uint32_t)1000, (uint32_t)inhalationTrajectoryPhaseShiftEstimate/(uint32_t)1000, (uint32_t)measuredExhalationTime/1000, (uint32_t)measuredInhalationTime*(uint32_t)1000/(uint32_t)measuredExhalationTime, (uint32_t)control.respirationRateMeasured);
       // Check if we need to continue onto another breath or if ventilation has stopped
-
+      control.allowPatientSync=0;
       if (estopHalAsserted()) {
         control.state = CONTROL_STATE_HALT;
       } else if (controlForceHome) {

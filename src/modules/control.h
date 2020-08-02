@@ -30,7 +30,10 @@ struct control {
   // Alarms
   int8_t   breathTimeoutAlarm;
   int8_t   unknownStateAlarm;
-};
+  
+  uint8_t allowPatientSync;
+  
+  };
 
 // Public Variables
 extern struct control control;
