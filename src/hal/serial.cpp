@@ -219,7 +219,7 @@ int serialHalHandleRx(int (*processPacket)(uint8_t packetType, uint8_t packetLen
     {
       crcCalculated=_crc_xmodem_update(crcCalculated,inByte);
       msgLen=inByte;
-      if (msgLen>SERIAL_MAX_DATA_SIZE)
+      if (msgLen>SERIAL_MAX_DATA_SIZE || msgLen==0)
       {
         rxState=SERIAL_RX_STATE_START1;
         serial_statistics.packetsCntWrongLength++;
