@@ -221,8 +221,9 @@ int batterySensorHalGetValue(uint8_t* value, bool* isCharging)
   int32_t power = ((int32_t) batteryRegs.power) * currentSign; // Convert power to proper sign
   int32_t deltaPower = (power * 15483L) / 1000L;
   
-  // energyInBattery [mWs] += deltaPower [mWs]
-  energyInBattery = ((int32_t) energyInBattery + deltaPower);
+  // energyInBattery [mWs] += deltaPower [mWs] (clamp between 0 and full)
+  int32_t newEnergy = ((int32_t) energyInBattery + deltaPower);
+  energyInBattery = (newEnergy < 0L) ? 0UL : ((newEnergy > BATTERY_FULL) ? BATTERY_FULL : (uint32_t) newEnergy);
   
   *value = (uint8_t) (((energyInBattery / 1000UL) * 100UL) /
                       (BATTERY_FULL / 1000UL));
