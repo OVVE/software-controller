@@ -22,7 +22,7 @@ uint32_t sysHalTime(void)
 
 void sysHalPowerOff(void)
 {
-  digitalWrite(POWEROFF_PIN, POWEROFF_DEASSERT);
+  digitalWrite(POWEROFF_PIN, POWEROFF_ASSERT);
   
   // Wait for either the system to power off, or the watchdog to fire...
   while(1);

@@ -20,6 +20,9 @@
 #include "util/alarm.h"
 #include "util/metrics.h"
 
+
+//#define ALARM_SILENCE
+
 #define LOG_MODULE "main"
 #define LOG_LEVEL  LOG_MAIN_LOOP
 #include "util/log.h"
@@ -178,10 +181,12 @@ void mainLoop(void)
   // Handle power on
   switch (powerOnStep) {
     case POWERON_STEP0:
+      LOG_PRINT(INFO, "POWERON_STEP0");
       alarmSet(&powerOnAlarm);
       timerHalBegin(&powerTimer, POWERON_BEEP_TIME, false);
       powerOnStep = POWERON_STEP1;
     case POWERON_STEP1:
+       LOG_PRINT(INFO, "POWERON_STEP1");
       if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
         alarmSuppress(&powerOnAlarm);
         powerOnStep = POWERON_STEP2;
@@ -200,15 +205,19 @@ void mainLoop(void)
     switch (powerOffStep) {
       case POWEROFF_STEP0:
         if (comm.powerOff) {
+	  LOG_PRINT(INFO, "POWEROFF_STEP0");
           powerOffStep = POWEROFF_STEP2;
         } if (sysHalPowerButtonAsserted()) {
           LOG_PRINT(INFO, "Power button pushed, preparing to power off...");
           timerHalBegin(&powerTimer, POWEROFF_TIMEOUT, false);
+	  alarmHalRing(ALARM_HAL_CONSTANT);
           powerOffStep = POWEROFF_STEP1;
         }
         break;
       case POWEROFF_STEP1:
+	 LOG_PRINT(INFO, "POWEROFF_STEP1");
         if (comm.powerOff || (timerHalRun(&powerTimer) == HAL_TIMEOUT)) {
+	  LOG_PRINT(INFO, "Changing to POWEROFF_STEP2");
           powerOffStep = POWEROFF_STEP2;
         }
         break;
@@ -245,21 +254,31 @@ void mainLoop(void)
     
     switch (properties.priority) {
       case ALARM_PRIORITY_SEVERE:
+ #ifndef ALARM_SILENCE
       alarmHalRing(ALARM_HAL_CONSTANT);
+ #endif
       break;
       case ALARM_PRIORITY_HIGH:
+ #ifndef ALARM_SILENCE
       alarmHalRing(ALARM_HAL_1HZ);
+ #endif
       break;
       case ALARM_PRIORITY_MODERATE:
+ #ifndef ALARM_SILENCE
       alarmHalRing(ALARM_HAL_0_25HZ);
+ #endif
       break;
       case ALARM_PRIORITY_LOW:
+  #ifndef ALARM_SILENCE
       alarmHalRing(ALARM_HAL_OFF);
+  #endif
       break;
     }
   } else {
     watchdogHalReset();
+ #ifndef ALARM_SILENCE
     alarmHalRing(ALARM_HAL_OFF);
+ #endif
   }
 
 #ifdef DEBUG_MAIN_LOOP_METRICS
