@@ -7,7 +7,7 @@
 
 #include "../hal/hal.h"
 
-#define POWERBTN_PIN         65
+#define POWERBTN_PIN         64
 #define POWEROFF_PIN         12
 
 #define POWERBTN_ASSERT_OFF   0
