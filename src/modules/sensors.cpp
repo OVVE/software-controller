@@ -325,7 +325,8 @@ static PT_THREAD(sensorsPressureThreadMain(struct pt* pt))
     }
     
     // Alarms
-    if ((control.state != CONTROL_STATE_HOME) && (control.state != CONTROL_STATE_IDLE)) {
+    if ((control.state != CONTROL_STATE_HOME) && (control.state != CONTROL_STATE_IDLE)
+	&& (sensors.calibrated == SENSORS_ALL_CALIBRATED)) {
       if (sensors.averagePressure > parameters.highPressureLimit) {
         LOG_PRINT_EVERY(100, INFO, "High Pressure Alarm! Measured: %i ; Limit: %i", (int16_t) sensors.averagePressure, parameters.highPressureLimit);
         alarmSet(&sensors.highPressureAlarm);
