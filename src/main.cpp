@@ -210,15 +210,21 @@ void mainLoop(void)
         } if (sysHalPowerButtonAsserted()) {
           LOG_PRINT(INFO, "Power button pushed, preparing to power off...");
           timerHalBegin(&powerTimer, POWEROFF_TIMEOUT, false);
-	  alarmHalRing(ALARM_HAL_CONSTANT);
+	  alarmSet(&powerOffAlarm);
           powerOffStep = POWEROFF_STEP1;
         }
         break;
       case POWEROFF_STEP1:
 	 LOG_PRINT(INFO, "POWEROFF_STEP1");
-        if (comm.powerOff || (timerHalRun(&powerTimer) == HAL_TIMEOUT)) {
-	  LOG_PRINT(INFO, "Changing to POWEROFF_STEP2");
-          powerOffStep = POWEROFF_STEP2;
+	 if (comm.powerOff) {
+	   if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
+	   LOG_PRINT(INFO, "Changing to POWEROFF_STEP2");
+	   powerOffStep = POWEROFF_STEP2;
+	   }
+	 } else if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
+	   LOG_PRINT(INFO, "Canceling  power off");
+	   alarmSuppress(&powerOffAlarm);
+	   powerOffStep = POWEROFF_STEP0;
         }
         break;
       case POWEROFF_STEP2:
