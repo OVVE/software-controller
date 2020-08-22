@@ -194,21 +194,11 @@ void mainLoop(void)
       break;
   }
   
-  // Handle power off
-  if (parameters.startVentilation) {
-    if (powerOffStep != POWEROFF_STEP0 || comm.powerOff) {
-      LOG_PRINT_EVERY(500, ERROR, "Continuing/starting to ventilate during power off!");
-    } else if (sysHalPowerButtonAsserted()) {
-      LOG_PRINT_EVERY(500, WARNING, "Power button hit when ventilating, ignoring...");
-    }
-  } else {
+
     switch (powerOffStep) {
       case POWEROFF_STEP0:
-        if (comm.powerOff) {
-	  LOG_PRINT(INFO, "POWEROFF_STEP0");
-          powerOffStep = POWEROFF_STEP2;
-        } if (sysHalPowerButtonAsserted()) {
-          LOG_PRINT(INFO, "Power button pushed, preparing to power off...");
+        if ((comm.powerOff) || (sysHalPowerButtonAsserted())) {
+          LOG_PRINT(INFO, "Power button pushed, turning on Alarm.");
           timerHalBegin(&powerTimer, POWEROFF_TIMEOUT, false);
 	  alarmSet(&powerOffAlarm);
           powerOffStep = POWEROFF_STEP1;
@@ -216,13 +206,14 @@ void mainLoop(void)
         break;
       case POWEROFF_STEP1:
 	 LOG_PRINT(INFO, "POWEROFF_STEP1");
-	 if (comm.powerOff) {
+	 if ((comm.powerOff) &&  (!parameters.startVentilation)) {
+	   //Move to next step only when ventilation is turned off
 	   if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
 	   LOG_PRINT(INFO, "Changing to POWEROFF_STEP2");
 	   powerOffStep = POWEROFF_STEP2;
 	   }
 	 } else if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
-	   LOG_PRINT(INFO, "Canceling  power off");
+	   LOG_PRINT(INFO, "Canceling  power off/alarm");
 	   alarmSuppress(&powerOffAlarm);
 	   powerOffStep = POWEROFF_STEP0;
         }
@@ -248,7 +239,6 @@ void mainLoop(void)
         }
         break;
     }
-  }
 
   // Scan through all alarms, looking for any set warning that need to be addressed
   struct alarmProperties properties = {0};
