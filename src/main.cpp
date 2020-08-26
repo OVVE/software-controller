@@ -205,34 +205,26 @@ void mainLoop(void)
         }
         break;
       case POWEROFF_STEP1:
-	 LOG_PRINT(INFO, "POWEROFF_STEP1");
-	 if ((comm.powerOff) &&  (!parameters.startVentilation)) {
-	   //Move to next step only when ventilation is turned off
-	   if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
-	   LOG_PRINT(INFO, "Changing to POWEROFF_STEP2");
-	   powerOffStep = POWEROFF_STEP2;
-	   }
-	 } else if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
-	   LOG_PRINT(INFO, "Canceling  power off/alarm");
-	   alarmSuppress(&powerOffAlarm);
-	   powerOffStep = POWEROFF_STEP0;
+	       LOG_PRINT(INFO, "POWEROFF_STEP1");
+	      if ((comm.powerOff) &&  (!parameters.startVentilation)) {
+	         //Move to next step only when ventilation is turned off
+	         if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
+	         LOG_PRINT(INFO, "Changing to POWEROFF_STEP2");
+	         powerOffStep = POWEROFF_STEP2;
+	         }
+	      } else if(timerHalRun(&powerTimer) == HAL_TIMEOUT) {
+	          LOG_PRINT(INFO, "Canceling  power off/alarm");
+	          alarmSuppress(&powerOffAlarm);
+	          powerOffStep = POWEROFF_STEP0;
         }
         break;
       case POWEROFF_STEP2:
-        alarmSet(&powerOffAlarm);
-        timerHalBegin(&powerTimer, POWEROFF_BEEP_TIME, false);
-        powerOff = true;
+        LOG_PRINT(INFO, "Waiting 5s before power off...");
+        alarmSuppress(&powerOffAlarm);
+        timerHalBegin(&powerTimer, POWEROFF_DELAY_TIME, false);
         powerOffStep = POWEROFF_STEP3;
         break;
       case POWEROFF_STEP3:
-        if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
-          LOG_PRINT(INFO, "Waiting 5s before power off...");
-          alarmSuppress(&powerOffAlarm);
-          timerHalBegin(&powerTimer, POWEROFF_DELAY_TIME, false);
-          powerOffStep = POWEROFF_STEP4;
-        }
-        break;
-      case POWEROFF_STEP4:
         if (timerHalRun(&powerTimer) != HAL_IN_PROGRESS) {
           LOG_PRINT(INFO, "Powering off...");
           sysHalPowerOff();
